@@ -1,0 +1,21 @@
+FROM mcr.microsoft.com/dotnet/aspnet:7.0 AS base
+WORKDIR /app
+EXPOSE 80
+
+FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
+WORKDIR /src
+COPY ["Services/Domovoy.DeviceService/Domovoy.DeviceService.csproj", "Services/Domovoy.DeviceService/"]
+COPY ["Common/Domovoy.Common/Domovoy.Common.csproj", "Common/Domovoy.Common/"]
+COPY ["Common/Domovoy.MessageBus/Domovoy.MessageBus.csproj", "Common/Domovoy.MessageBus/"]
+RUN dotnet restore "Services/Domovoy.DeviceService/Domovoy.DeviceService.csproj"
+COPY . .
+WORKDIR "/src/Services/Domovoy.DeviceService"
+RUN dotnet build "Domovoy.DeviceService.csproj" -c Release -o /app/build
+
+FROM build AS publish
+RUN dotnet publish "Domovoy.DeviceService.csproj" -c Release -o /app/publish
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "Domovoy.DeviceService.dll"] 

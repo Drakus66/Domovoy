@@ -1,0 +1,81 @@
+server:
+  http_listen_port: 9080
+  http_listen_address: 0.0.0.0
+  grpc_listen_port: 0
+
+positions:
+  filename: "/tmp/positions.yaml"
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Capture Docker container logs
+  - job_name: 'domovoy-container-logs'
+    static_configs:
+      - targets: ['localhost']
+        labels:
+          job: 'domovoy-containers'
+          __path__: '/var/lib/docker/containers/*/*-json.log'
+    pipeline_stages:
+      - json:
+          expressions:
+            stream: stream
+            attrs: attrs
+            tag: attrs.tag
+            log: log
+      - regex:
+          expression: (?P<image_name>(?:[^|]*[^|])).(?P<container_name>(?:[^|]*[^|])).(?P<image_id>(?:[^|]*[^|])).(?P<container_id>(?:[^|]*[^|]))
+          source: "tag"
+      - labels:
+          tag:
+          image_name:
+          container_name:
+      - timestamp:
+          source: time
+          format: RFC3339Nano
+      # Extract log level for .NET apps
+      - regex:
+          expression: '\\[(INFO|DEBUG|WARN|ERROR|FATAL)\\]'
+          source: log
+      - labels:
+          level:
+
+  # Capture API Gateway logs specifically
+  - job_name: 'api-gateway-logs'
+    static_configs:
+      - targets: ['localhost']
+        labels:
+          job: 'api-gateway'
+          app: 'domovoy-apigateway'
+          __path__: '/var/lib/docker/containers/*domovoy-apigateway*/*-json.log'
+    pipeline_stages:
+      - json:
+      - labels:
+          container_name: 'domovoy-apigateway'
+
+  # Capture DB Gateway logs specifically
+  - job_name: 'db-gateway-logs'
+    static_configs:
+      - targets: ['localhost']
+        labels:
+          job: 'db-gateway'
+          app: 'domovoy-dbgateway'
+          __path__: '/var/lib/docker/containers/*domovoy-dbgateway*/*-json.log'
+    pipeline_stages:
+      - json:
+      - labels:
+          container_name: 'domovoy-dbgateway'
+
+  # Capture RabbitMQ logs
+  - job_name: 'rabbitmq-logs'
+    static_configs:
+      - targets: ['localhost']
+        labels:
+          job: 'rabbitmq'
+          app: 'rabbitmq'
+          __path__: '/var/lib/docker/containers/*rabbitmq*/*-json.log'
+    pipeline_stages:
+      - json:
+      - labels:
+          container_name: 'rabbitmq'

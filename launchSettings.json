@@ -1,0 +1,15 @@
+{
+  "profiles": {
+    "Docker Compose": {
+      "commandName": "DockerCompose",
+      "commandVersion": "1.0",
+      "serviceActions": {
+        "domovoy.deviceservice": "StartDebugging",
+        "domovoy.lightservice": "StartDebugging",
+        "domovoy.sensorservice": "StartDebugging",
+        "domovoy.dbgateway": "StartDebugging",
+        "domovoy.apigateway": "StartDebugging"
+      }
+    }
+  }
+}

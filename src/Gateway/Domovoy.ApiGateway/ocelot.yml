@@ -1,0 +1,132 @@
+Routes:
+  # DbGateway routes
+  - DownstreamPathTemplate: /api/devices/{everything}
+    DownstreamScheme: http
+    DownstreamHostAndPorts:
+      - Host: domovoy-dbgateway
+        Port: 80
+    UpstreamPathTemplate: /api/devices/{everything}
+    UpstreamHttpMethod: [ "GET", "POST", "PUT", "DELETE" ]
+    AuthenticationOptions:
+      AuthenticationProviderKey: "Bearer"
+    RouteClaimsRequirement:
+      Role: "User,Admin"
+    RateLimitOptions:
+      ClientWhitelist: []
+      EnableRateLimiting: true
+      Period: "1m"
+      PeriodTimespan: 60
+      Limit: 100
+    FileCacheOptions:
+      TtlSeconds: 15
+
+  - DownstreamPathTemplate: /api/locations/{everything}
+    DownstreamScheme: http
+    DownstreamHostAndPorts:
+      - Host: domovoy-dbgateway
+        Port: 80
+    UpstreamPathTemplate: /api/locations/{everything}
+    UpstreamHttpMethod: [ "GET", "POST", "PUT", "DELETE" ]
+    AuthenticationOptions:
+      AuthenticationProviderKey: "Bearer"
+    RouteClaimsRequirement:
+      Role: "User,Admin"
+
+  - DownstreamPathTemplate: /api/sensors/{everything}
+    DownstreamScheme: http
+    DownstreamHostAndPorts:
+      - Host: domovoy-dbgateway
+        Port: 80
+    UpstreamPathTemplate: /api/sensors/{everything}
+    UpstreamHttpMethod: [ "GET", "POST", "PUT", "DELETE" ]
+    AuthenticationOptions:
+      AuthenticationProviderKey: "Bearer"
+    RouteClaimsRequirement:
+      Role: "User,Admin"
+
+  # Authentication service routes
+  - DownstreamPathTemplate: /api/auth/{everything}
+    DownstreamScheme: http
+    DownstreamHostAndPorts:
+      - Host: domovoy-authservice
+        Port: 80
+    UpstreamPathTemplate: /api/auth/{everything}
+    UpstreamHttpMethod: [ "GET", "POST" ]
+    RateLimitOptions:
+      ClientWhitelist: []
+      EnableRateLimiting: true
+      Period: "1s"
+      PeriodTimespan: 1
+      Limit: 5
+
+  # Device service routes
+  - DownstreamPathTemplate: /api/device-control/{everything}
+    DownstreamScheme: http
+    DownstreamHostAndPorts:
+      - Host: domovoy-deviceservice
+        Port: 80
+    UpstreamPathTemplate: /api/device-control/{everything}
+    UpstreamHttpMethod: [ "GET", "POST", "PUT" ]
+    AuthenticationOptions:
+      AuthenticationProviderKey: "Bearer"
+    RouteClaimsRequirement:
+      Role: "User,Admin"
+
+  # MQTT routes
+  - DownstreamPathTemplate: /api/mqtt/{everything}
+    DownstreamScheme: http
+    DownstreamHostAndPorts:
+      - Host: domovoy-mqttservice
+        Port: 80
+    UpstreamPathTemplate: /api/mqtt/{everything}
+    UpstreamHttpMethod: [ "GET", "POST", "PUT", "DELETE" ]
+    AuthenticationOptions:
+      AuthenticationProviderKey: "Bearer"
+    RouteClaimsRequirement:
+      Role: "Admin"
+
+  # User management routes
+  - DownstreamPathTemplate: /api/users/{everything}
+    DownstreamScheme: http
+    DownstreamHostAndPorts:
+      - Host: domovoy-userservice
+        Port: 80
+    UpstreamPathTemplate: /api/users/{everything}
+    UpstreamHttpMethod: [ "GET", "POST", "PUT", "DELETE" ]
+    AuthenticationOptions:
+      AuthenticationProviderKey: "Bearer"
+    RouteClaimsRequirement:
+      Role: "Admin"
+
+  # Automation service routes
+  - DownstreamPathTemplate: /api/automations/{everything}
+    DownstreamScheme: http
+    DownstreamHostAndPorts:
+      - Host: domovoy-automationservice
+        Port: 80
+    UpstreamPathTemplate: /api/automations/{everything}
+    UpstreamHttpMethod: [ "GET", "POST", "PUT", "DELETE" ]
+    AuthenticationOptions:
+      AuthenticationProviderKey: "Bearer"
+    RouteClaimsRequirement:
+      Role: "User,Admin"
+
+GlobalConfiguration:
+  BaseUrl: http://localhost:5000
+  RequestIdKey: "X-Request-ID"
+  ServiceDiscoveryProvider:
+    Type: "Docker"
+    Host: "localhost"
+    Port: 8500
+  RateLimitOptions:
+    DisableRateLimitHeaders: false
+    QuotaExceededMessage: "Rate limit exceeded. Try again in {0} second(s)."
+    HttpStatusCode: 429
+  LoadBalancerOptions:
+    Type: "LeastConnection"
+    Key: null
+    Expiry: 0
+  QoSOptions:
+    ExceptionsAllowedBeforeBreaking: 3
+    DurationOfBreak: 5000
+    TimeoutValue: 5000

@@ -1,0 +1,54 @@
+services:
+  device-service:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      - "5002:80"
+      - "8081"
+    volumes:
+      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
+      - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro
+
+  #  light-service:
+  #    environment:
+  #      - ASPNETCORE_ENVIRONMENT=Development
+  #    ports:
+  #      - "5003:80"
+  #      - "8081"
+  #    volumes:
+  #      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
+  #      - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro
+  #
+  #  sensor-service:
+  #    environment:
+  #      - ASPNETCORE_ENVIRONMENT=Development
+  #    ports:
+  #      - "5004:80"
+  #    volumes:
+  #      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
+  #      - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro
+  #
+  #  db-gateway:
+  #    environment:
+  #      - ASPNETCORE_ENVIRONMENT=Development
+  #    ports:
+  #      - "5001:80"
+  #    volumes:
+  #      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
+  #      - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro
+  #
+  #  api-gateway:
+  #    environment:
+  #      - ASPNETCORE_ENVIRONMENT=Development
+  #    ports:
+  #      - "5000:80"
+  #    volumes:
+  #      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
+  #      - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro
+
+  rabbitmq:
+    environment:
+      RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS}
+      RABBITMQ_MANAGEMENT_ALLOW_WEB_ACCESS: "true"
+      BITNAMI_DEBUG: "true"

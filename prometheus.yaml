@@ -1,0 +1,65 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  - job_name: "rabbitmq_metrics"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+      
+  - job_name: "api_gateway"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["domovoy-apigateway:80"]
+    
+  - job_name: "db_gateway"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["domovoy-dbgateway:80"]
+      
+  - job_name: "device_service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["domovoy-deviceservice:80"]
+    
+  - job_name: "light_service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["domovoy-lightservice:80"]
+      
+  - job_name: "sensor_service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["domovoy-sensorservice:80"]
+      
+  - job_name: "mqtt_service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["domovoy-mqttservice:80"]
+      
+  - job_name: "auth_service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["domovoy-authservice:80"]
+      
+  - job_name: "user_service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["domovoy-userservice:80"]
+      
+  - job_name: "automation_service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["domovoy-automationservice:80"]
+      
+  - job_name: "prometheus"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["localhost:9090"]
+      
+  - job_name: "mongodb"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["mongodb-exporter:9216"]
