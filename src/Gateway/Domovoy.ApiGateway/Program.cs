@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Configuration.Yaml;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
@@ -10,7 +9,7 @@ using Ocelot.Cache.CacheManager;
 using Ocelot.Provider.Polly;
 
 using Prometheus; // prometheus-net - используется для метрик
-using Microsoft.Extensions.Diagnostics.HealthChecks; // для health checks
+// для health checks
 
 using System.Text;
 
@@ -91,6 +90,15 @@ builder.Services
     })
     .AddPolly(); // Adds circuit breaker and retry policies
 
+// Add SignalR for real-time updates
+builder.Services.AddSignalR();
+
+// Add Message Bus for EventRelayService
+builder.Services.AddSingleton<Domovoy.MessageBus.IMessageBus, Domovoy.MessageBus.RabbitMqConnection>();
+
+// Add EventRelayService as hosted service
+builder.Services.AddHostedService<Domovoy.ApiGateway.Services.EventRelayService>();
+
 // Configure CORS
 builder.Services.AddCors(options =>
 {
@@ -153,5 +161,8 @@ app.MapHealthChecks("/health");
 await app.UseOcelot();
 
 app.MapControllers();
+
+// Map SignalR DeviceHub for real-time updates
+app.MapHub<Domovoy.ApiGateway.Hubs.DeviceHub>("/hub/devices");
 
 app.Run();

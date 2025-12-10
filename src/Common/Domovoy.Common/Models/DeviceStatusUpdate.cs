@@ -1,6 +1,3 @@
-using Domovoy.Common.Models;
-using System;
-
 namespace Domovoy.Common.Models
 {
     /// <summary>

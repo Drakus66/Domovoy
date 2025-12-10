@@ -11,7 +11,8 @@ namespace Domovoy.Common.Models
         /// <summary>
         /// Gets the unique identifier for the entity.
         /// </summary>
-        [JsonPropertyName("id")] public readonly Guid Id = Guid.NewGuid();
+        [JsonPropertyName("id")]
+        public Guid Id { get; init; } = Guid.NewGuid();
 
         public Guid LocationId { get; set; }
 

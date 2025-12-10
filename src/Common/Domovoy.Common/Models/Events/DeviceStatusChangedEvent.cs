@@ -1,6 +1,3 @@
-using Domovoy.Common.Models.Events;
-using System;
-
 namespace Domovoy.Common.Models.Events
 {
     /// <summary>

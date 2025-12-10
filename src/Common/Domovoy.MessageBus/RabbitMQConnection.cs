@@ -221,7 +221,7 @@ public class RabbitMqConnection : IMessageBus
     public async Task SubscribeAsync<T>(string queue, string exchange, string routingKey, Func<T, Task> handler, CancellationToken cancellationToken = default)
     {
         // Default QoS for subscriptions
-        int qos = _useMqtt ? _mqttDefaultQoS : 0;
+        var qos = _useMqtt ? _mqttDefaultQoS : 0;
         await SubscribeAsync(queue, exchange, routingKey, handler, qos, cancellationToken);
     }
     

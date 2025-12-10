@@ -5,8 +5,6 @@ using Domovoy.Common.Models.Devices;
 using Domovoy.Common.Models.Enums;
 using Domovoy.MessageBus;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 /// <summary>
 /// Adapter for sending commands to MQTT devices.
@@ -55,7 +53,7 @@ public class MqttDeviceAdapter : IMqttDeviceAdapter
         try
         {
             // Determine the appropriate topic for the command
-            string topic = GetCommandTopic(device, command.CommandTypes);
+            var topic = GetCommandTopic(device, command.CommandTypes);
             
             // Create the payload for the command
             var payload = CreateCommandPayload(device, command);
@@ -83,7 +81,7 @@ public class MqttDeviceAdapter : IMqttDeviceAdapter
     /// <summary>
     /// Gets the appropriate command topic for the device and command type
     /// </summary>
-    private string GetCommandTopic(MqttDevice device, DeviceCommandTypes commandType)
+    private static string GetCommandTopic(MqttDevice device, DeviceCommandTypes commandType)
     {
         // Use the device's command topic if available
         if (!string.IsNullOrEmpty(device.CommandTopic))
@@ -164,7 +162,7 @@ public class MqttDeviceAdapter : IMqttDeviceAdapter
         
         try
         {
-            string topic = device.AvailabilityTopic;
+            var topic = device.AvailabilityTopic;
             
             if (string.IsNullOrEmpty(topic))
             {
@@ -172,7 +170,7 @@ public class MqttDeviceAdapter : IMqttDeviceAdapter
             }
             
             // Add /ping suffix to the availability topic for heartbeat requests
-            string pingTopic = $"{topic}/ping";
+            var pingTopic = $"{topic}/ping";
             
             var payload = new
             {

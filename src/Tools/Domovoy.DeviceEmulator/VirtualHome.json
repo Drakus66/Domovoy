@@ -1,0 +1,41 @@
+{
+  "home_name": "Domovoy Test Home",
+  "mqtt_broker": "localhost:1883",
+  "devices": [
+    {
+      "id": "living_room_light",
+      "type": "light",
+      "name": "Living Room Main Light",
+      "capabilities": ["brightness", "color"]
+    },
+    {
+        "id": "bedroom_light",
+        "type": "light",
+        "name": "Bedroom Nightstand",
+        "capabilities": ["brightness"]
+    },
+    {
+      "id": "kitchen_sensor",
+      "type": "sensor",
+      "name": "Kitchen Environment",
+      "sensor_type": "multiset",
+      "update_interval_seconds": 15
+    },
+    {
+        "id": "motion_sensor_hall",
+        "type": "sensor",
+        "name": "Hallway Motion",
+        "sensor_type": "motion" 
+    },
+    {
+      "id": "hallway_switch",
+      "type": "switch",
+      "name": "Hallway Light Switch"
+    },
+    {
+        "id": "garage_opener",
+        "type": "switch",
+        "name": "Garage Door Opener"
+    }
+  ]
+}

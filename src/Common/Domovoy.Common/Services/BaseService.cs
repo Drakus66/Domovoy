@@ -4,7 +4,6 @@ using System.Text.Json.Serialization;
 using Domovoy.Common.Models;
 using Domovoy.Common.Models.Events;
 using Domovoy.Common.Models.Commands;
-using Domovoy.Common.Models.Enums;
 using Domovoy.MessageBus;
 
 using Microsoft.Extensions.Logging;
@@ -21,17 +20,17 @@ namespace Domovoy.Common.Services
     /// This abstract class implements common device operations and message bus handling
     /// following the Gateway Pattern architecture where DB access is centralized through DbGateway.
     /// </summary>
-    public abstract class BaseService : BackgroundService, IDeviceService, IMessageBusHandler, IAsyncDisposable
+    /// <summary>
+    /// Provides base functionality for device services in the Domovoy system.
+    /// This abstract class implements common device operations and message bus handling
+    /// following the Gateway Pattern architecture where DB access is centralized through DbGateway.
+    /// </summary>
+    public abstract class BaseService : BackgroundService, IDeviceService, IMessageBusHandler
     {
         protected readonly IMessageBus MessageBus;
         protected readonly IHttpClientFactory HttpClientFactory;
         protected readonly ILogger Logger;
-        protected readonly Timer StateUpdateTimer;
         protected readonly BaseServiceOptions Options;
-        
-        // Dictionary to track device states between updates
-        protected readonly Dictionary<string, Dictionary<string, object>> DeviceStates = new();
-        protected readonly Dictionary<string, bool> DeviceOnlineStatuses = new();
 
         /// <summary>
         /// Initializes a new instance of the BaseService class.
@@ -51,9 +50,6 @@ namespace Domovoy.Common.Services
             HttpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
             Options = options?.Value ?? throw new ArgumentNullException(nameof(options));
-
-            var updateInterval = TimeSpan.FromSeconds(Options.StateUpdateIntervalSeconds);
-            StateUpdateTimer = new Timer(SaveStates, null, TimeSpan.Zero, updateInterval);
         }
 
         /// <summary>
@@ -63,7 +59,43 @@ namespace Domovoy.Common.Services
         {
             Logger.LogInformation("{ServiceName} starting", GetType().Name);
             SetupMessageBusSubscriptions();
+            SetupOrchestrationSubscription();
             return Task.CompletedTask;
+        }
+
+        private void SetupOrchestrationSubscription()
+        {
+            // Subscribe to orchestration commands targeting this service
+            MessageBus.SubscribeAsync<OrchestrationCommand>(
+                $"domovoy.orchestration.{GetType().Name}",
+                "domovoy.commands",
+                "command.orchestration.*",
+                HandleOrchestrationCommand);
+
+            Logger.LogInformation("Subscribed to orchestration commands");
+        }
+
+        private async Task HandleOrchestrationCommand(OrchestrationCommand cmd)
+        {
+            // Filter: only handle commands for this service or "all"
+            if (!string.Equals(cmd.ServiceName, GetType().Name, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(cmd.ServiceName, "all", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            Logger.LogInformation("Received orchestration command: {Action} for {ServiceName}", cmd.Action, cmd.ServiceName);
+
+            if (cmd.Action == OrchestrationAction.Restart)
+            {
+                Logger.LogWarning("Service restart requested via orchestration. Exiting process...");
+
+                // Allow some time for logs to flush
+                await Task.Delay(1000);
+
+                // Exit process to trigger Docker restart
+                Environment.Exit(1);
+            }
         }
 
         /// <inheritdoc/>
@@ -72,93 +104,14 @@ namespace Domovoy.Common.Services
         /// <inheritdoc/>
         public abstract Task HandleDeviceEvent(BaseEvent @event);
 
-        /// <summary>
-        /// Updates the state of a device and publishes a state update event to the message bus
-        /// </summary>
-        /// <param name="deviceId">The ID of the device to update</param>
-        /// <param name="state">The new state of the device</param>
-        public virtual async Task UpdateDeviceState(string deviceId, Dictionary<string, object> state)
-        {
-            if (string.IsNullOrEmpty(deviceId))
-                throw new ArgumentNullException(nameof(deviceId));
-                
-            if (state == null)
-                throw new ArgumentNullException(nameof(state));
-                
-            try
-            {
-                // Store state locally for batched updates
-                DeviceStates[deviceId] = state;
-                
-                // Publish state update event
-                var stateEvent = new DeviceStateUpdatedEvent
-                {
-                    DeviceId = deviceId,
-                    State = state,
-                    Timestamp = DateTime.UtcNow,
-                    CorrelationId = Guid.NewGuid(), // Добавляем обязательное свойство
-                    Success = true // Устанавливаем Success по умолчанию
-                };
-                
-                // Добавляем источник события в Data вместо использования несуществующего свойства Source
-                stateEvent.Data["Source"] = GetType().Name;
-                
-                await PublishEvent(
-                    Options.EventExchange,
-                    stateEvent,
-                    "event.device.state.updated"
-                );
-                
-                Logger.LogDebug("Updated state for device {DeviceId}", deviceId);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Error updating state for device {DeviceId}", deviceId);
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Updates the online status of a device and publishes a status update event to the message bus
-        /// </summary>
-        /// <param name="deviceId">The ID of the device to update</param>
-        /// <param name="isOnline">Whether the device is online</param>
-        public virtual async Task UpdateDeviceOnlineStatus(string deviceId, bool isOnline)
-        {
-            if (string.IsNullOrEmpty(deviceId))
-                throw new ArgumentNullException(nameof(deviceId));
-                
-            try
-            {
-                // Store status locally for batched updates
-                DeviceOnlineStatuses[deviceId] = isOnline;
-                
-                // Publish status update event
-                var statusEvent = new DeviceStatusChangedEvent
-                {
-                    DeviceId = deviceId,
-                    IsOnline = isOnline,
-                    Timestamp = DateTime.UtcNow,
-                    Source = GetType().Name
-                };
-                
-                await PublishEvent(
-                    Options.EventExchange,
-                    statusEvent,
-                    "event.device.status.changed"
-                );
-                
-                Logger.LogDebug("Updated online status for device {DeviceId} to {IsOnline}", deviceId, isOnline);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Error updating online status for device {DeviceId}", deviceId);
-                throw;
-            }
-        }
-
         /// <inheritdoc/>
         public abstract void SetupMessageBusSubscriptions();
+
+        /// <inheritdoc/>
+        public abstract Task UpdateDeviceState(string deviceId, Dictionary<string, object> state);
+
+        /// <inheritdoc/>
+        public abstract Task UpdateDeviceOnlineStatus(string deviceId, bool isOnline);
 
         /// <inheritdoc/>
         public virtual async Task PublishCommand<T>(string exchange, T command, string routingKey) where T : BaseCommand
@@ -174,10 +127,10 @@ namespace Domovoy.Common.Services
                 {
                     command.Source = GetType().Name;
                 }
-                
+
                 await MessageBus.PublishAsync(exchange, routingKey, command);
                 Logger.LogInformation("Published command {CommandType} to {Exchange} with routing key {RoutingKey}",
-                    typeof(T).Name, exchange, routingKey);
+    typeof(T).Name, exchange, routingKey);
             }
             catch (Exception ex)
             {
@@ -196,8 +149,8 @@ namespace Domovoy.Common.Services
                 var timestampProperty = typeof(T).GetProperty("Timestamp");
                 if (timestampProperty != null && timestampProperty.PropertyType == typeof(DateTime))
                 {
-                    var currentValue = (DateTime)timestampProperty.GetValue(@event);
-                    if (currentValue == default)
+                    var currentValue = timestampProperty!.GetValue(@event) as DateTime?;
+                    if (currentValue == null || currentValue == default(DateTime))
                     {
                         timestampProperty.SetValue(@event, DateTime.UtcNow);
                     }
@@ -213,10 +166,10 @@ namespace Domovoy.Common.Services
                         sourceProperty.SetValue(@event, GetType().Name);
                     }
                 }
-                
+
                 await MessageBus.PublishAsync(exchange, routingKey, @event);
                 Logger.LogInformation("Published event {EventType} to {Exchange} with routing key {RoutingKey}",
-                    typeof(T).Name, exchange, routingKey);
+                                    typeof(T).Name, exchange, routingKey);
             }
             catch (Exception ex)
             {
@@ -228,15 +181,14 @@ namespace Domovoy.Common.Services
         /// <inheritdoc/>
         public virtual void SubscribeToCommands<T>(string queueName, Func<T, Task> handler) where T : BaseCommand
         {
-            MessageBus.SubscribeAsync(queueName, Options.CommandExchange, "command.*", handler);
-            Logger.LogInformation("Subscribed to commands of type {CommandType} on queue {QueueName}", 
-typeof(T).Name, queueName);
+            MessageBus.SubscribeAsync<T>(queueName, Options.CommandExchange, "command.*", handler);
+            Logger.LogInformation("Subscribed to commands of type {CommandType} on queue {QueueName}", typeof(T).Name, queueName);
         }
 
         /// <inheritdoc/>
         public virtual void SubscribeToEvents<T>(string queueName, Func<T, Task> handler) where T : BaseEvent
         {
-            MessageBus.SubscribeAsync(queueName, Options.EventExchange, "event.*", handler);
+            MessageBus.SubscribeAsync<T>(queueName, Options.EventExchange, "event.*", handler);
             Logger.LogInformation("Subscribed to events of type {EventType} on queue {QueueName}", typeof(T).Name, queueName);
         }
 
@@ -251,10 +203,10 @@ typeof(T).Name, queueName);
         {
             if (string.IsNullOrEmpty(id))
                 throw new ArgumentNullException(nameof(id));
-                
+
             if (string.IsNullOrEmpty(endpoint))
                 throw new ArgumentNullException(nameof(endpoint));
-                
+
             try
             {
                 var httpClient = HttpClientFactory.CreateClient("DbGateway");
@@ -263,7 +215,7 @@ typeof(T).Name, queueName);
                 if (!response.IsSuccessStatusCode)
                 {
                     Logger.LogWarning("Failed to load {Type} with ID {Id} from database. Status code: {StatusCode}",
-                        typeof(T).Name, id, response.StatusCode);
+                                        typeof(T).Name, id, response.StatusCode);
                     return null;
                 }
 
@@ -291,10 +243,10 @@ typeof(T).Name, queueName);
         {
             if (entity == null)
                 throw new ArgumentNullException(nameof(entity));
-                
+
             if (string.IsNullOrEmpty(endpoint))
                 throw new ArgumentNullException(nameof(endpoint));
-                
+
             try
             {
                 var httpClient = HttpClientFactory.CreateClient("DbGateway");
@@ -324,96 +276,18 @@ typeof(T).Name, queueName);
         }
 
         /// <summary>
-        /// Saves the current state of all managed devices to the database through the DbGateway.
-        /// This method is called periodically by the state update timer to batch updates and reduce load.
-        /// </summary>
-        /// <param name="state">State object passed by the Timer.</param>
-        protected virtual async void SaveStates(object? state)
-        {
-            try
-            {
-                // Process device states that need to be saved
-                var statesToSave = new Dictionary<string, Dictionary<string, object>>(DeviceStates);
-                DeviceStates.Clear();
-                
-                foreach (var (deviceId, deviceState) in statesToSave)
-                {
-                    var stateUpdate = new DeviceStateUpdate
-                    {
-                        DeviceId = deviceId,
-                        State = deviceState,
-                        Timestamp = DateTime.UtcNow,
-                        Name = $"State_{deviceId}_{DateTime.UtcNow.ToString("yyyyMMddHHmmss")}"
-                    };
-                    
-                    await SaveToDb(stateUpdate, "devices/state");
-                }
-                
-                // Process device online statuses that need to be saved
-                var statusesToSave = new Dictionary<string, bool>(DeviceOnlineStatuses);
-                DeviceOnlineStatuses.Clear();
-                
-                foreach (var (deviceId, isOnline) in statusesToSave)
-                {
-                    var statusUpdate = new DeviceStatusUpdate
-                    {
-                        DeviceId = deviceId,
-                        IsOnline = isOnline,
-                        Timestamp = DateTime.UtcNow,
-                        Name = $"Status_{deviceId}_{DateTime.UtcNow.ToString("yyyyMMddHHmmss")}"
-                    };
-                    
-                    await SaveToDb(statusUpdate, "devices/status");
-                }
-                
-                if (statesToSave.Count > 0 || statusesToSave.Count > 0)
-                {
-                    Logger.LogInformation("Saved {StateCount} device states and {StatusCount} device statuses",
-                        statesToSave.Count, statusesToSave.Count);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Error saving device states and statuses");
-            }
-        }
-
-        /// <summary>
         /// Configures the HttpClientFactory with the DbGateway base URL.
         /// This should be called in the service registration.
         /// </summary>
         public static void ConfigureHttpClient(IServiceCollection services, IConfiguration configuration)
         {
             var options = configuration.GetSection("BaseService").Get<BaseServiceOptions>() ?? new BaseServiceOptions();
-            
+
             services.AddHttpClient("DbGateway", client =>
             {
                 client.BaseAddress = new Uri(options.DbGatewayBaseUrl);
                 client.DefaultRequestHeaders.Add("Accept", "application/json");
             });
-        }
-
-        /// <summary>
-        /// Asynchronously releases resources used by the service.
-        /// </summary>
-        protected virtual async ValueTask DisposeAsyncCore()
-        {
-            // Save any pending states before shutting down
-            await Task.Run(() => SaveStates(null));
-            await StateUpdateTimer.DisposeAsync();
-            
-            // Unsubscribe from message bus
-            // This would depend on how MessageBus interface is implemented
-            // MessageBus.Dispose();
-        }
-
-        /// <summary>
-        /// Asynchronously releases resources used by the service.
-        /// </summary>
-        public async ValueTask DisposeAsync()
-        {
-            await DisposeAsyncCore();
-            GC.SuppressFinalize(this);
         }
     }
 }

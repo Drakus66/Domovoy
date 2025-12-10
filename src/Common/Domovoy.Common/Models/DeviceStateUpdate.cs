@@ -1,7 +1,3 @@
-using Domovoy.Common.Models;
-using System;
-using System.Collections.Generic;
-
 namespace Domovoy.Common.Models
 {
     /// <summary>

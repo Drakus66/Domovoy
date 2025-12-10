@@ -1,4 +1,3 @@
-using Domovoy.Common.Models;
 using Domovoy.Common.Models.Commands;
 using Domovoy.Common.Models.Events;
 

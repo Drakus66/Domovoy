@@ -3,7 +3,6 @@ namespace Domovoy.DeviceService;
 using Services;
 using MessageBus;
 using Common.Configuration;
-using Domovoy.Common.Configuration;
 using Domovoy.Common.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
@@ -26,7 +25,6 @@ internal class Program
             services.Configure<BaseServiceOptions>(context.Configuration.GetSection("BaseService"));
             services.AddSingleton<IMessageBus, RabbitMqConnection>();
             services.AddSingleton<IMqttDeviceAdapter, MqttDeviceAdapter>();
-            services.AddSingleton<DeviceDiscoveryService>();
             services.AddHostedService<DeviceManager>();
         });
 

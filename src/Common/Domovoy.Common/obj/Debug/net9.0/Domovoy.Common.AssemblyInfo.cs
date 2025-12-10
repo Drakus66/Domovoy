@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Domovoy.Common")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+00bb5c078cc01cda7fbeef86c255ffc558bf0c5a")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d2448d63d292c101f7ffe5720519fc855fc9e5d1")]
 [assembly: System.Reflection.AssemblyProductAttribute("Domovoy.Common")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Domovoy.Common")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

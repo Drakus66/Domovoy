@@ -4,5 +4,6 @@ public enum GlobalEntityTypes
 {
     Generic,
     Light,
-    Sensor
+    Sensor,
+    Switch
 }

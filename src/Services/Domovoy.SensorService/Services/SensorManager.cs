@@ -1,13 +1,11 @@
-using System.Text.Json;
-
 using Domovoy.Common.Models.Devices;
 using Domovoy.Common.Models.Commands;
-using Domovoy.Common.Models.Enums;
 using Domovoy.Common.Models.Enums.EntityTypes;
 using Domovoy.Common.Models.Events;
 using Domovoy.Common.Services;
 using Domovoy.MessageBus;
 
+using Domovoy.Common.Configuration;
 using Microsoft.Extensions.Options;
 
 namespace Domovoy.SensorService.Services
@@ -41,19 +39,94 @@ namespace Domovoy.SensorService.Services
         {
         }
 
-        public override Task HandleDeviceCommand(BaseCommand command)
+        public override async Task HandleDeviceCommand(BaseCommand command)
         {
-            throw new NotImplementedException();
+            if (command is not DeviceCommand deviceCommand) return;
+            // Sensors usually don't accept commands, but might accept configuration commands
+            await Task.CompletedTask;
         }
 
-        public override Task HandleDeviceEvent(BaseEvent @event)
+        public override async Task HandleDeviceEvent(BaseEvent @event)
         {
-            throw new NotImplementedException();
+            // TODO: Implement sensor specific event handling
+            await Task.CompletedTask;
         }
 
         public override void SetupMessageBusSubscriptions()
         {
-            throw new NotImplementedException();
+            // Subscribe to device discovery events
+            SubscribeToEvents<DeviceDiscoveredEvent>(
+                MessageBusConfiguration.DeviceDiscoveryEventsQueue,
+                HandleDeviceDiscovered);
+        }
+
+        private async Task HandleDeviceDiscovered(DeviceDiscoveredEvent discoveryEvent)
+        {
+            // Filter: Only handle Sensor devices
+            if (discoveryEvent.DeviceType != GlobalEntityTypes.Sensor)
+            {
+                return;
+            }
+
+            Logger.LogInformation("Received sensor discovery: {DeviceName} ({DeviceId})",
+                discoveryEvent.Name, discoveryEvent.DeviceId);
+
+            // Check if device already exists
+            if (_sensors.ContainsKey(discoveryEvent.DeviceId.ToString()))
+            {
+                Logger.LogInformation("Sensor already registered: {DeviceId}", discoveryEvent.DeviceId);
+                return;
+            }
+
+            // Create new sensor device
+            var newSensor = new Sensor
+            {
+                Id = discoveryEvent.DeviceId,
+                Name = discoveryEvent.Name,
+                Type = SensorTypes.MultiSensor, // Default to MultiSensor as Generic is not available
+                LastUpdated = DateTime.UtcNow,
+                State = new SensorState()
+            };
+
+            // Convert metadata
+            if (discoveryEvent.Metadata != null)
+            {
+                foreach (var kvp in discoveryEvent.Metadata)
+                {
+                    newSensor.Metadata[kvp.Key] = kvp.Value?.ToString() ?? "";
+                }
+            }
+
+            // Save to DB
+            _sensors[newSensor.Id.ToString()] = newSensor;
+            _sensorLastModified[newSensor.Id.ToString()] = DateTime.UtcNow;
+
+            Logger.LogInformation("Registered new Sensor: {DeviceName} ({DeviceId})",
+                newSensor.Name, newSensor.Id);
+
+            await Task.CompletedTask;
+        }
+
+        public override Task UpdateDeviceState(string deviceId, Dictionary<string, object> state)
+        {
+            if (_sensors.TryGetValue(deviceId, out var sensor))
+            {
+                // Update sensor state logic here
+                sensor.LastUpdated = DateTime.UtcNow;
+            }
+            return Task.CompletedTask;
+        }
+
+        public override Task UpdateDeviceOnlineStatus(string deviceId, bool isOnline)
+        {
+            if (_sensors.TryGetValue(deviceId, out var sensor))
+            {
+                if (isOnline)
+                {
+                    sensor.LastUpdated = DateTime.UtcNow;
+                }
+            }
+            return Task.CompletedTask;
         }
     }
 }

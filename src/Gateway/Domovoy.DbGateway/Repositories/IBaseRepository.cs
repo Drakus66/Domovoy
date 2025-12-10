@@ -1,7 +1,5 @@
 using System.Linq.Expressions;
 
-using MongoDB.Driver;
-
 namespace Domovoy.DbGateway.Repositories;
 
 public interface IBaseRepository<T> where T : class

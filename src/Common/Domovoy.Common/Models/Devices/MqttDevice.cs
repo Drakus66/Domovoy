@@ -147,7 +147,7 @@ public class MqttDevice : Device
     /// </summary>
     public MqttDevice()
     {
-        Type = Domovoy.Common.Models.Enums.EntityTypes.GlobalEntityTypes.Generic; // Используем Generic для MQTT устройства
+        Type = Enums.EntityTypes.GlobalEntityTypes.Generic; // Используем Generic для MQTT устройства
     }
     
     /// <summary>

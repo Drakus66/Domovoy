@@ -19,6 +19,9 @@ builder.Services.AddSingleton<IMongoDatabase>(sp =>
 // Configure RabbitMQ
 builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
 
+// Add EventInterceptor as a hosted service
+builder.Services.AddHostedService<Domovoy.DbGateway.Services.EventInterceptor>();
+
 // Add services to the container
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();

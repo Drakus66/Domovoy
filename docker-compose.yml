@@ -1,6 +1,12 @@
 name: domovoy
 
+networks:
+  domovoy-network:
+    driver: bridge
+
 services:
+  # ============ Application Services ============
+
   device-service:
     container_name: device-service
     image: ${DOCKER_REGISTRY-}device-service
@@ -10,64 +16,138 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-    links:
-      - rabbitmq
+      mongodb:
+        condition: service_healthy
+    networks:
+      - domovoy-network
+    environment:
+      - RABBITMQ__HOSTNAME=rabbitmq
+      - RABBITMQ__PORT=5672
+      - MQTT__BROKER=rabbitmq
+      - MQTT__PORT=1883
+    restart: unless-stopped
 
-  #  light-service:
-  #    container_name: light-service
-  #    image: ${DOCKER_REGISTRY-}light-service
-  #    build:
-  #      context: .
-  #      dockerfile: src/Services/Domovoy.LightService/Dockerfile
-  #    depends_on:
-  #      - rabbitmq
+  connectivity-service:
+    container_name: connectivity-service
+    image: ${DOCKER_REGISTRY-}connectivity-service
+    build:
+      context: .
+      dockerfile: src/Services/Domovoy.Connectivity/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - domovoy-network
+    environment:
+      - RABBITMQ__HOSTNAME=rabbitmq
+      - RABBITMQ__PORT=5672
+      - MQTT__BROKER=rabbitmq
+      - MQTT__PORT=1883
+    restart: unless-stopped
+
+  db-gateway:
+    container_name: db-gateway
+    image: ${DOCKER_REGISTRY-}db-gateway
+    build:
+      context: .
+      dockerfile: src/Gateway/Domovoy.DbGateway/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    networks:
+      - domovoy-network
+    ports:
+      - "5001:8080"
+    environment:
+      - RABBITMQ__HOSTNAME=rabbitmq
+      - RABBITMQ__PORT=5672
+      - MONGODB__CONNECTIONSTRING=mongodb://mongodb:27017
+      - MONGODB__DATABASENAME=domovoy
+    restart: unless-stopped
+
+  api-gateway:
+    container_name: api-gateway
+    image: ${DOCKER_REGISTRY-}api-gateway
+    build:
+      context: .
+      dockerfile: src/Gateway/Domovoy.ApiGateway/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      db-gateway:
+        condition: service_started
+    networks:
+      - domovoy-network
+    ports:
+      - "5000:8080"
+    environment:
+      - RABBITMQ__HOSTNAME=rabbitmq
+      - RABBITMQ__PORT=5672
+      - DBGATEWAY__BASEURL=http://db-gateway:8080
+    restart: unless-stopped
+
+  # ============ Commented Services (Not yet implemented) ============
+
+  # light-service:
+  #   container_name: light-service
+  #   image: ${DOCKER_REGISTRY-}light-service
+  #   build:
+  #     context: .
+  #     dockerfile: src/Services/Domovoy.LightService/Dockerfile
+  #   depends_on:
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   networks:
+  #     - domovoy-network
+  #   environment:
+  #     - RABBITMQ__HOSTNAME=rabbitmq
+  #     - RABBITMQ__PORT=5672
+  #   restart: unless-stopped
   #
-  #  sensor-service:
-  #    container_name: sensor-service
-  #    image: ${DOCKER_REGISTRY-}sensor-service
-  #    build:
-  #      context: .
-  #      dockerfile: src/Services/Domovoy.SensorService/Dockerfile
-  #    depends_on:
-  #      - rabbitmq
-  #
-  #  db-gateway:
-  #    container_name: db-gateway
-  #    image: ${DOCKER_REGISTRY-}db-gateway
-  #    build:
-  #      context: .
-  #      dockerfile: src/Gateway/Domovoy.DbGateway/Dockerfile
-  #    ports:
-  #      - "5001:80"
-  #
-  #  api-gateway:
-  #    container_name: api-gateway
-  #    image: ${DOCKER_REGISTRY-}api-gateway
-  #    build:
-  #      context: .
-  #      dockerfile: src/Gateway/Domovoy.ApiGateway/Dockerfile
-  #    ports:
-  #      - "5000:80"
+  # sensor-service:
+  #   container_name: sensor-service
+  #   image: ${DOCKER_REGISTRY-}sensor-service
+  #   build:
+  #     context: .
+  #     dockerfile: src/Services/Domovoy.SensorService/Dockerfile
+  #   depends_on:
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   networks:
+  #     - domovoy-network
+  #   environment:
+  #     - RABBITMQ__HOSTNAME=rabbitmq
+  #     - RABBITMQ__PORT=5672
+  #   restart: unless-stopped
+
+  # ============ Infrastructure Services ============
 
   mongodb:
     container_name: mongodb
     image: mongo:latest
+    networks:
+      - domovoy-network
     ports:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
-    # Add healthcheck for MongoDB
+    environment:
+      - MONGO_INITDB_DATABASE=domovoy
     healthcheck:
-      test: echo 'db.runCommand(\"{\\\"ping\\\":1}\")\".ok' | mongo localhost:27017/admin --quiet
+      test: echo 'db.runCommand("{\"ping\":1}").ok' | mongosh localhost:27017/admin --quiet
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 20s
+    restart: unless-stopped
 
-  # MongoDB exporter for Prometheus metrics
   mongodb-exporter:
     image: percona/mongodb_exporter:latest
     container_name: mongodb-exporter
+    networks:
+      - domovoy-network
     ports:
       - "9216:9216"
     command:
@@ -75,30 +155,37 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+    restart: unless-stopped
 
   rabbitmq:
-    image: bitnami/rabbitmq
+    image: bitnami/rabbitmq:latest
     container_name: rabbitmq
-    restart: unless-stopped
+    networks:
+      - domovoy-network
+    ports:
+      - "1883:1883" # MQTT
+      - "5672:5672" # AMQP
+      - "15672:15672" # Management UI
+      - "15675:15675" # MQTT over WebSocket
+    environment:
+      - RABBITMQ_PLUGINS=rabbitmq_mqtt,rabbitmq_management,rabbitmq_prometheus
+    volumes:
+      - rabbitmq_data:/bitnami/rabbitmq/mnesia
     healthcheck:
       test: rabbitmq-diagnostics -q status
       interval: 30s
       timeout: 30s
       retries: 3
-    environment:
-      - RABBITMQ_ENABLED_PLUGINS=rabbitmq_mqtt
-      - RABBITMQ_ENABLED_PLUGINS=rabbitmq_management
-      - RABBITMQ_ENABLED_PLUGINS=rabbitmq_prometheus
-    ports:
-      - "1883:1883"
-      - "5672:5672"
-      - "15672:15672"
-      - "15675:15675"
+      start_period: 40s
+    restart: unless-stopped
 
+  # ============ Monitoring & Logging ============
 
   promtail:
     image: grafana/promtail:latest
     container_name: promtail
+    networks:
+      - domovoy-network
     ports:
       - "9080:9080"
     volumes:
@@ -107,18 +194,25 @@ services:
       - ./promtail-config.yaml:/etc/promtail/config.yml
     command: -config.file=/etc/promtail/config.yml
     privileged: true
+    restart: unless-stopped
 
   loki:
     image: grafana/loki:latest
     container_name: loki
+    networks:
+      - domovoy-network
     ports:
       - "3100:3100"
     volumes:
       - ./loki-config.yaml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
+    networks:
+      - domovoy-network
     ports:
       - "9090:9090"
     volumes:
@@ -127,10 +221,13 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
+    networks:
+      - domovoy-network
     ports:
       - "3000:3000"
     environment:
@@ -139,12 +236,31 @@ services:
     volumes:
       - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
       - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+    restart: unless-stopped
 
-configs:
-  rabbitmq-plugins:
-    content: "[rabbitmq_mqtt, rabbitmq_management]."
+  zigbee2mqtt:
+    container_name: zigbee2mqtt
+    image: koenkk/zigbee2mqtt
+    volumes:
+      - ./data/zigbee2mqtt:/app/data
+      - /run/udev:/run/udev:ro
+    ports:
+      - 8080:8080
+    environment:
+      - TZ=UTC
+    networks:
+      - domovoy-network
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
 volumes:
   mongodb_data:
+  rabbitmq_data:
   grafana_data:
   prometheus_data:
+  loki_data:

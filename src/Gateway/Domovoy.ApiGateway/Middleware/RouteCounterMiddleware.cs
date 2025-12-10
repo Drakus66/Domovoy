@@ -38,7 +38,7 @@ namespace Domovoy.ApiGateway.Middleware
         {
             // Extract service name from path
             var path = context.Request.Path.Value ?? "";
-            string serviceName = "unknown";
+            var serviceName = "unknown";
             
             // Parse the path to identify the service
             if (path.StartsWith("/api/"))

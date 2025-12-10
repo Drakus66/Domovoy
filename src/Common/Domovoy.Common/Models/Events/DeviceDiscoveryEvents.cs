@@ -1,6 +1,5 @@
 namespace Domovoy.Common.Models.Events;
 
-using Domovoy.Common.Models.Enums;
 using Domovoy.Common.Models.Enums.EntityTypes;
 
 /// <summary>
