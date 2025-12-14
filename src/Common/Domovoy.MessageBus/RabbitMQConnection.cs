@@ -27,7 +27,7 @@ public class RabbitMqConnection : IMessageBus
     private readonly bool _mqttDefaultRetain;
 
     public IChannel Channel => _channel;
-    
+
     /// <summary>
     /// Returns true if MQTT mode is enabled
     /// </summary>
@@ -52,21 +52,13 @@ public class RabbitMqConnection : IMessageBus
                 Password = config.Value.Password,
                 VirtualHost = config.Value.VirtualHost,
             };
-            
-            // Use MQTT port if MQTT is enabled, otherwise use AMQP port
-            if (_useMqtt && config.Value.MqttPort > 0)
+
+            // Always use AMQP port for the actual connection, even if MQTT mode is enabled
+            factory.Port = config.Value.Port;
+
+            if (_useMqtt)
             {
-                factory.Port = config.Value.MqttPort;
-            }
-            else
-            {
-                factory.Port = config.Value.Port;
-                
-                // If MQTT was requested but no MQTT port specified, log warning
-                if (_useMqtt)
-                {
-                    _logger.LogWarning("MQTT mode requested but no MQTT port configured. Falling back to AMQP port.");
-                }
+                _logger.LogInformation("MQTT mode enabled. Configuration will be set up for MQTT compatibility (using AMQP port {Port})", factory.Port);
             }
 
             _connection = factory.CreateConnectionAsync().Result;
@@ -75,7 +67,7 @@ public class RabbitMqConnection : IMessageBus
             if (_useMqtt)
             {
                 ConfigureMqttExchanges().Wait();
-                _logger.LogInformation("Successfully connected to RabbitMQ using MQTT protocol on port {Port}", factory.Port);
+                _logger.LogInformation("Successfully connected to RabbitMQ (MQTT-compatible mode) on port {Port}", factory.Port);
             }
             else
             {
@@ -85,14 +77,14 @@ public class RabbitMqConnection : IMessageBus
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to connect to RabbitMQ. Will attempt to connect using fallback configuration.");
-            
+
             // Try to connect with fallback settings if MQTT connection fails
             if (_useMqtt)
             {
                 try
                 {
                     _logger.LogInformation("Attempting fallback connection using AMQP...");
-                    
+
                     var factory = new ConnectionFactory
                     {
                         HostName = config.Value.HostName,
@@ -101,10 +93,10 @@ public class RabbitMqConnection : IMessageBus
                         VirtualHost = config.Value.VirtualHost,
                         Port = config.Value.Port,
                     };
-                    
+
                     _connection = factory.CreateConnectionAsync().Result;
                     _channel = _connection.CreateChannelAsync().Result;
-                    
+
                     // Switch to AMQP mode since MQTT failed
                     _useMqtt = false;
                     _logger.LogInformation("Successfully connected to RabbitMQ using AMQP fallback on port {Port}", config.Value.Port);
@@ -126,19 +118,19 @@ public class RabbitMqConnection : IMessageBus
     {
         // Configure the discovery exchange
         await _channel.ExchangeDeclareAsync(
-            MessageBusConfiguration.DeviceDiscoveryExchange, 
-            "topic", 
+            MessageBusConfiguration.DeviceDiscoveryExchange,
+            "topic",
             durable: true,
             arguments: new Dictionary<string, object>
             {
                 { "mqtt-subscription-qos", 1 },
                 { "mqtt-subscription-retain", true }
             }!);
-            
+
         // Configure the device commands exchange
         await _channel.ExchangeDeclareAsync(
-            MessageBusConfiguration.DeviceCommandsExchange, 
-            "topic", 
+            MessageBusConfiguration.DeviceCommandsExchange,
+            "topic",
             durable: true,
             arguments: new Dictionary<string, object>
             {
@@ -148,8 +140,8 @@ public class RabbitMqConnection : IMessageBus
 
         // Configure the device events exchange
         await _channel.ExchangeDeclareAsync(
-            MessageBusConfiguration.DeviceEventsExchange, 
-            "topic", 
+            MessageBusConfiguration.DeviceEventsExchange,
+            "topic",
             durable: true,
             arguments: new Dictionary<string, object>
             {
@@ -159,19 +151,19 @@ public class RabbitMqConnection : IMessageBus
 
         // Configure the device data exchange
         await _channel.ExchangeDeclareAsync(
-            MessageBusConfiguration.DeviceDataExchange, 
-            "topic", 
+            MessageBusConfiguration.DeviceDataExchange,
+            "topic",
             durable: true,
             arguments: new Dictionary<string, object>
             {
                 { "mqtt-subscription-qos", 0 },
                 { "mqtt-subscription-retain", false }
             }!);
-            
+
         // Configure the device availability exchange
         await _channel.ExchangeDeclareAsync(
-            MessageBusConfiguration.DeviceAvailabilityExchange, 
-            "topic", 
+            MessageBusConfiguration.DeviceAvailabilityExchange,
+            "topic",
             durable: true,
             arguments: new Dictionary<string, object>
             {
@@ -184,7 +176,7 @@ public class RabbitMqConnection : IMessageBus
     {
         await PublishAsync(exchange, routingKey, message, _mqttDefaultQoS, _mqttDefaultRetain, cancellationToken);
     }
-    
+
     /// <summary>
     /// Publishes a message with specified MQTT QoS and retain settings
     /// </summary>
@@ -207,12 +199,12 @@ public class RabbitMqConnection : IMessageBus
             await _channel.ExchangeDeclareAsync(exchange, "topic", durable: true, cancellationToken: cancellationToken);
             await _channel.BasicPublishAsync(exchange, routingKey, mandatory: true, basicProperties: properties, body, cancellationToken: cancellationToken);
 
-            _logger.LogInformation("Message published to {Exchange} with routing key {RoutingKey}, QoS: {QoS}, Retain: {Retain}", 
+            _logger.LogInformation("Message published to {Exchange} with routing key {RoutingKey}, QoS: {QoS}, Retain: {Retain}",
                 exchange, routingKey, qos, retain);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish message to {Exchange} with routing key {RoutingKey}", 
+            _logger.LogError(ex, "Failed to publish message to {Exchange} with routing key {RoutingKey}",
                 exchange, routingKey);
             throw;
         }
@@ -224,7 +216,7 @@ public class RabbitMqConnection : IMessageBus
         var qos = _useMqtt ? _mqttDefaultQoS : 0;
         await SubscribeAsync(queue, exchange, routingKey, handler, qos, cancellationToken);
     }
-    
+
     /// <summary>
     /// Subscribes to a topic with specified MQTT QoS
     /// </summary>
@@ -233,14 +225,14 @@ public class RabbitMqConnection : IMessageBus
         try
         {
             Dictionary<string, object> arguments = null;
-            
+
             if (_useMqtt)
             {
                 arguments = new Dictionary<string, object>
                 {
                     { "mqtt-subscription-qos", (byte)qos }
                 };
-                
+
                 // Use wildcards if routingKey ends with #
                 // Convert MQTT wildcards to AMQP wildcards if needed
                 if (routingKey.EndsWith("#"))
@@ -248,7 +240,7 @@ public class RabbitMqConnection : IMessageBus
                     routingKey = routingKey.Replace("#", "*");
                 }
             }
-            
+
             await _channel.ExchangeDeclareAsync(exchange, ExchangeType.Topic, durable: true, cancellationToken: cancellationToken);
             await _channel.QueueDeclareAsync(queue, durable: true, arguments: arguments, cancellationToken: cancellationToken);
             await _channel.QueueBindAsync(queue, exchange, routingKey, cancellationToken: cancellationToken);
@@ -275,7 +267,7 @@ public class RabbitMqConnection : IMessageBus
 
             await _channel.BasicConsumeAsync(queue, false, consumer, cancellationToken: cancellationToken);
             _consumers[queue] = consumer;
-            
+
             _logger.LogInformation("Subscribed to {Queue} with routing key {RoutingKey}, QoS: {QoS}", queue, routingKey, qos);
         }
         catch (Exception ex)
@@ -299,11 +291,11 @@ public class RabbitMqConnection : IMessageBus
     public void Dispose()
     {
         if (_disposed) return;
-        
+
         _channel.DisposeAsync().AsTask().Wait();
         _connection.DisposeAsync().AsTask().Wait();
         _disposed = true;
-        
+
         GC.SuppressFinalize(this);
     }
 }

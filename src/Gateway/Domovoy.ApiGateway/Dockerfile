@@ -27,4 +27,5 @@ RUN dotnet publish "./Domovoy.ApiGateway.csproj" -c $BUILD_CONFIGURATION -o /app
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+COPY src/Gateway/Domovoy.ApiGateway/ocelot.yml .
 ENTRYPOINT ["dotnet", "Domovoy.ApiGateway.dll"]

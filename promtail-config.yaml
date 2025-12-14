@@ -51,6 +51,10 @@ scrape_configs:
           __path__: '/var/lib/docker/containers/*domovoy-apigateway*/*-json.log'
     pipeline_stages:
       - json:
+          expressions:
+            log: log
+            stream: stream
+            time: time
       - labels:
           container_name: 'domovoy-apigateway'
 
@@ -64,6 +68,10 @@ scrape_configs:
           __path__: '/var/lib/docker/containers/*domovoy-dbgateway*/*-json.log'
     pipeline_stages:
       - json:
+          expressions:
+            log: log
+            stream: stream
+            time: time
       - labels:
           container_name: 'domovoy-dbgateway'
 
@@ -77,5 +85,9 @@ scrape_configs:
           __path__: '/var/lib/docker/containers/*rabbitmq*/*-json.log'
     pipeline_stages:
       - json:
+          expressions:
+            log: log
+            stream: stream
+            time: time
       - labels:
           container_name: 'rabbitmq'

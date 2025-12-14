@@ -1,0 +1,11 @@
+  Определение проектов для восстановления...
+  Все проекты обновлены для восстановления.
+C:\Program Files\dotnet\sdk\10.0.101\Sdks\Microsoft.NET.Sdk\targets\Microsoft.NET.Sdk.DefaultItems.Shared.targets(213,5): error NETSDK1022: были включены повторяющиеся элементы "Content". Пакет SDK для .NET по умолчанию включает элементы "Content" из каталога проекта. Вы можете удалить из файла проекта эти элементы или присвоить свойству "EnableDefaultContentItems" значение "false", если нужно включить их в файл проекта в явном виде. Дополнительные сведения: https://aka.ms/sdkimplicititems. Повторяющиеся элементы: 'ocelot.yml' [D:\NetDev\Domovoy\src\Gateway\Domovoy.ApiGateway\Domovoy.ApiGateway.csproj]
+
+Ошибка сборки.
+
+C:\Program Files\dotnet\sdk\10.0.101\Sdks\Microsoft.NET.Sdk\targets\Microsoft.NET.Sdk.DefaultItems.Shared.targets(213,5): error NETSDK1022: были включены повторяющиеся элементы "Content". Пакет SDK для .NET по умолчанию включает элементы "Content" из каталога проекта. Вы можете удалить из файла проекта эти элементы или присвоить свойству "EnableDefaultContentItems" значение "false", если нужно включить их в файл проекта в явном виде. Дополнительные сведения: https://aka.ms/sdkimplicititems. Повторяющиеся элементы: 'ocelot.yml' [D:\NetDev\Domovoy\src\Gateway\Domovoy.ApiGateway\Domovoy.ApiGateway.csproj]
+    Предупреждений: 0
+    Ошибок: 1
+
+Прошло времени 00:00:01.13

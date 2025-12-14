@@ -23,6 +23,8 @@ services:
     environment:
       - RABBITMQ__HOSTNAME=rabbitmq
       - RABBITMQ__PORT=5672
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - MQTT__BROKER=rabbitmq
       - MQTT__PORT=1883
     restart: unless-stopped
@@ -41,6 +43,8 @@ services:
     environment:
       - RABBITMQ__HOSTNAME=rabbitmq
       - RABBITMQ__PORT=5672
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - MQTT__BROKER=rabbitmq
       - MQTT__PORT=1883
     restart: unless-stopped
@@ -63,6 +67,8 @@ services:
     environment:
       - RABBITMQ__HOSTNAME=rabbitmq
       - RABBITMQ__PORT=5672
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - MONGODB__CONNECTIONSTRING=mongodb://mongodb:27017
       - MONGODB__DATABASENAME=domovoy
     restart: unless-stopped
@@ -85,42 +91,48 @@ services:
     environment:
       - RABBITMQ__HOSTNAME=rabbitmq
       - RABBITMQ__PORT=5672
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - DBGATEWAY__BASEURL=http://db-gateway:8080
     restart: unless-stopped
 
   # ============ Commented Services (Not yet implemented) ============
 
-  # light-service:
-  #   container_name: light-service
-  #   image: ${DOCKER_REGISTRY-}light-service
-  #   build:
-  #     context: .
-  #     dockerfile: src/Services/Domovoy.LightService/Dockerfile
-  #   depends_on:
-  #     rabbitmq:
-  #       condition: service_healthy
-  #   networks:
-  #     - domovoy-network
-  #   environment:
-  #     - RABBITMQ__HOSTNAME=rabbitmq
-  #     - RABBITMQ__PORT=5672
-  #   restart: unless-stopped
-  #
-  # sensor-service:
-  #   container_name: sensor-service
-  #   image: ${DOCKER_REGISTRY-}sensor-service
-  #   build:
-  #     context: .
-  #     dockerfile: src/Services/Domovoy.SensorService/Dockerfile
-  #   depends_on:
-  #     rabbitmq:
-  #       condition: service_healthy
-  #   networks:
-  #     - domovoy-network
-  #   environment:
-  #     - RABBITMQ__HOSTNAME=rabbitmq
-  #     - RABBITMQ__PORT=5672
-  #   restart: unless-stopped
+  light-service:
+    container_name: light-service
+    image: ${DOCKER_REGISTRY-}light-service
+    build:
+      context: .
+      dockerfile: src/Services/Domovoy.LightService/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - domovoy-network
+    environment:
+      - RABBITMQ__HOSTNAME=rabbitmq
+      - RABBITMQ__PORT=5672
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+    restart: unless-stopped
+
+  sensor-service:
+    container_name: sensor-service
+    image: ${DOCKER_REGISTRY-}sensor-service
+    build:
+      context: .
+      dockerfile: src/Services/Domovoy.SensorService/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - domovoy-network
+    environment:
+      - RABBITMQ__HOSTNAME=rabbitmq
+      - RABBITMQ__PORT=5672
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+    restart: unless-stopped
 
   # ============ Infrastructure Services ============
 
@@ -144,7 +156,7 @@ services:
     restart: unless-stopped
 
   mongodb-exporter:
-    image: percona/mongodb_exporter:latest
+    image: percona/mongodb_exporter:0.40.0
     container_name: mongodb-exporter
     networks:
       - domovoy-network
@@ -168,21 +180,24 @@ services:
       - "15672:15672" # Management UI
       - "15675:15675" # MQTT over WebSocket
     environment:
+      - RABBITMQ_USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - RABBITMQ_PLUGINS=rabbitmq_mqtt,rabbitmq_management,rabbitmq_prometheus
     volumes:
       - rabbitmq_data:/bitnami/rabbitmq/mnesia
+
     healthcheck:
-      test: rabbitmq-diagnostics -q status
-      interval: 30s
-      timeout: 30s
-      retries: 3
-      start_period: 40s
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     restart: unless-stopped
 
   # ============ Monitoring & Logging ============
 
   promtail:
-    image: grafana/promtail:latest
+    image: grafana/promtail:3.5.1
     container_name: promtail
     networks:
       - domovoy-network
@@ -197,7 +212,7 @@ services:
     restart: unless-stopped
 
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.5.1
     container_name: loki
     networks:
       - domovoy-network

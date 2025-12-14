@@ -114,10 +114,6 @@ Routes:
 GlobalConfiguration:
   BaseUrl: http://localhost:5000
   RequestIdKey: "X-Request-ID"
-  ServiceDiscoveryProvider:
-    Type: "Docker"
-    Host: "localhost"
-    Port: 8500
   RateLimitOptions:
     DisableRateLimitHeaders: false
     QuotaExceededMessage: "Rate limit exceeded. Try again in {0} second(s)."

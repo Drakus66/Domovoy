@@ -7,7 +7,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddHttpClient();
-builder.Services.AddSingleton<RabbitMqConnection>();
+builder.Services.Configure<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMQ"));
+builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
 builder.Services.AddSingleton<LightManager>();
 
 var app = builder.Build();

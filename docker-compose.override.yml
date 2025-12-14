@@ -2,6 +2,8 @@ services:
   device-service:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - RabbitMq__UserName=${RABBITMQ_DEFAULT_USER}
+      - RabbitMq__Password=${RABBITMQ_DEFAULT_PASS}
     ports:
       - "5002:80"
       - "8081"
@@ -9,9 +11,11 @@ services:
       - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
       - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro
 
-  #  light-service:
-  #    environment:
-  #      - ASPNETCORE_ENVIRONMENT=Development
+  light-service:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - RabbitMq__UserName=${RABBITMQ_DEFAULT_USER}
+      - RabbitMq__Password=${RABBITMQ_DEFAULT_PASS}
   #    ports:
   #      - "5003:80"
   #      - "8081"
@@ -19,27 +23,33 @@ services:
   #      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
   #      - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro
   #
-  #  sensor-service:
-  #    environment:
-  #      - ASPNETCORE_ENVIRONMENT=Development
+  sensor-service:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - RabbitMq__UserName=${RABBITMQ_DEFAULT_USER}
+      - RabbitMq__Password=${RABBITMQ_DEFAULT_PASS}
   #    ports:
   #      - "5004:80"
   #    volumes:
   #      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
   #      - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro
   #
-  #  db-gateway:
-  #    environment:
-  #      - ASPNETCORE_ENVIRONMENT=Development
+  db-gateway:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - RabbitMq__UserName=${RABBITMQ_DEFAULT_USER}
+      - RabbitMq__Password=${RABBITMQ_DEFAULT_PASS}
   #    ports:
   #      - "5001:80"
   #    volumes:
   #      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
   #      - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro
   #
-  #  api-gateway:
-  #    environment:
-  #      - ASPNETCORE_ENVIRONMENT=Development
+  api-gateway:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - RabbitMq__UserName=${RABBITMQ_DEFAULT_USER}
+      - RabbitMq__Password=${RABBITMQ_DEFAULT_PASS}
   #    ports:
   #      - "5000:80"
   #    volumes:

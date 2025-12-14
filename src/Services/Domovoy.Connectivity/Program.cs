@@ -5,6 +5,7 @@ using Domovoy.Connectivity.Adapters;
 var builder = Host.CreateApplicationBuilder(args);
 
 // Configure Message Bus (RabbitMQ)
+builder.Services.Configure<Domovoy.MessageBus.RabbitMqConfig>(builder.Configuration.GetSection("RabbitMq"));
 builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
 
 // Register Adapters

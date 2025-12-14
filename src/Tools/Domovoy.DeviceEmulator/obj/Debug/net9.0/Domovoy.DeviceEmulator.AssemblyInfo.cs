@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Domovoy.DeviceEmulator")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d2448d63d292c101f7ffe5720519fc855fc9e5d1")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2a9bc99af7f9cf685c46768c4340f5a8639ee587")]
 [assembly: System.Reflection.AssemblyProductAttribute("Domovoy.DeviceEmulator")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Domovoy.DeviceEmulator")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

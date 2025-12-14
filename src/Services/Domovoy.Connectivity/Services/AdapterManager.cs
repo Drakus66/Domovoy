@@ -5,6 +5,7 @@ using Domovoy.Connectivity.Adapters;
 using Domovoy.MessageBus;
 using MQTTnet;
 using MQTTnet.Client;
+using Microsoft.Extensions.Options;
 
 
 namespace Domovoy.Connectivity.Services;
@@ -14,15 +15,18 @@ public class AdapterManager : BackgroundService
     private readonly IEnumerable<IProtocolAdapter> _adapters;
     private readonly IMessageBus _messageBus;
     private readonly ILogger<AdapterManager> _logger;
+    private readonly IOptions<RabbitMqConfig> _config;
     private IMqttClient? _mqttClient;
 
     public AdapterManager(
         IEnumerable<IProtocolAdapter> adapters,
         IMessageBus messageBus,
+        IOptions<RabbitMqConfig> config,
         ILogger<AdapterManager> logger)
     {
         _adapters = adapters;
         _messageBus = messageBus;
+        _config = config;
         _logger = logger;
     }
 
@@ -67,19 +71,20 @@ public class AdapterManager : BackgroundService
         _mqttClient = factory.CreateMqttClient();
 
         // Configuration should come from appsettings/env, hardcoded 'rabbitmq'/localhost logic is temporary
-        var brokerHost = Environment.GetEnvironmentVariable("MQTT__BROKER") ?? "localhost";
-        var brokerPort = int.TryParse(Environment.GetEnvironmentVariable("MQTT__PORT"), out var p) ? p : 1883;
+        var brokerHost = Environment.GetEnvironmentVariable("MQTT__BROKER") ?? _config.Value.HostName ?? "localhost";
+        var brokerPort = int.TryParse(Environment.GetEnvironmentVariable("MQTT__PORT"), out var p) ? p : _config.Value.MqttPort;
 
         var options = new MqttClientOptionsBuilder()
             .WithTcpServer(brokerHost, brokerPort)
             .WithClientId("Domovoy.Connectivity")
+            .WithCredentials(_config.Value.UserName, _config.Value.Password)
             .WithCleanSession()
             .Build();
 
         _mqttClient.ApplicationMessageReceivedAsync += HandleMqttMessage;
 
         await _mqttClient.ConnectAsync(options, token);
-        _logger.LogInformation("Connected to MQTT Broker at {Host}:{Port}", brokerHost, brokerPort);
+        _logger.LogInformation("Connected to MQTT Broker at {Host}:{Port} as user {User}", brokerHost, brokerPort, _config.Value.UserName);
     }
 
     private async Task HandleMqttMessage(MqttApplicationMessageReceivedEventArgs args)
