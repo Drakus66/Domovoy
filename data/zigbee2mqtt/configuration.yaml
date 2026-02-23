@@ -1,17 +1,50 @@
 version: 4
 mqtt:
   base_topic: zigbee2mqtt
-  server: mqtt://localhost:1883
-serial: {}
+  server: mqtt://rabbitmq:1883
+  user: user
+  password: user
+serial:
+  port: /dev/ttyUSB0
+  adapter: ember
+  baudrate: 115200
+  rtscts: false
 advanced:
   log_level: info
-  channel: 11
-  network_key: GENERATE
-  pan_id: GENERATE
-  ext_pan_id: GENERATE
+  channel: 20
+  network_key:
+    - 27
+    - 200
+    - 27
+    - 223
+    - 61
+    - 113
+    - 154
+    - 241
+    - 73
+    - 94
+    - 172
+    - 66
+    - 147
+    - 255
+    - 108
+    - 94
+  pan_id: 6754
+  ext_pan_id:
+    - 220
+    - 235
+    - 164
+    - 26
+    - 96
+    - 91
+    - 65
+    - 215
 frontend:
-  enabled: false
+  enabled: true
   port: 8080
 homeassistant:
   enabled: false
-onboarding: true
+onboarding: false
+devices:
+  '0xa4c1383e04dbda65':
+    friendly_name: TemperatureSensor

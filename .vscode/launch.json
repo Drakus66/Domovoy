@@ -1,0 +1,138 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "ApiGateway",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/Gateway/Domovoy.ApiGateway/bin/Debug/net9.0/Domovoy.ApiGateway.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Gateway/Domovoy.ApiGateway",
+            "stopAtEntry": false,
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+            },
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            },
+            "sourceFileMap": {
+                "/Views": "${workspaceFolder}/Views"
+            }
+        },
+        {
+            "name": "DbGateway",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/Gateway/Domovoy.DbGateway/bin/Debug/net9.0/Domovoy.DbGateway.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Gateway/Domovoy.DbGateway",
+            "stopAtEntry": false,
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+            },
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            }
+        },
+        {
+            "name": "ConnectivityService",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/Services/Domovoy.Connectivity/bin/Debug/net9.0/Domovoy.Connectivity.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Services/Domovoy.Connectivity",
+            "stopAtEntry": false,
+            "env": {
+                "DOTNET_ENVIRONMENT": "Development"
+            }
+        },
+        {
+            "name": "DeviceService",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/Services/Domovoy.DeviceService/bin/Debug/net9.0/Domovoy.DeviceService.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Services/Domovoy.DeviceService",
+            "stopAtEntry": false,
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+            },
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            }
+        },
+        {
+            "name": "LightService",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/Services/Domovoy.LightService/bin/Debug/net9.0/Domovoy.LightService.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Services/Domovoy.LightService",
+            "stopAtEntry": false,
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+            },
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            }
+        },
+        {
+            "name": "SensorService",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/Services/Domovoy.SensorService/bin/Debug/net9.0/Domovoy.SensorService.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Services/Domovoy.SensorService",
+            "stopAtEntry": false,
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+            },
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            }
+        },
+        {
+            "name": "DeviceEmulator",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/Tools/Domovoy.DeviceEmulator/bin/Debug/net9.0/Domovoy.DeviceEmulator.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Tools/Domovoy.DeviceEmulator",
+            "stopAtEntry": false,
+            "console": "internalConsole"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "All Services",
+            "configurations": [
+                "ApiGateway",
+                "DbGateway",
+                "ConnectivityService",
+                "DeviceService",
+                "LightService",
+                "SensorService"
+            ]
+        },
+        {
+            "name": "Core Platform (Gateways + Device)",
+            "configurations": [
+                "ApiGateway",
+                "DbGateway",
+                "DeviceService"
+            ]
+        }
+    ]
+}
