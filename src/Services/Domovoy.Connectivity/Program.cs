@@ -1,19 +1,45 @@
-using Domovoy.Connectivity.Services;
-using Domovoy.MessageBus;
-using Domovoy.Connectivity.Adapters;
+namespace Domovoy.Connectivity;
 
-var builder = Host.CreateApplicationBuilder(args);
+using Services;
+using MessageBus;
+using Adapters;
+using Serilog;
 
-// Configure Message Bus (RabbitMQ)
-builder.Services.Configure<Domovoy.MessageBus.RabbitMqConfig>(builder.Configuration.GetSection("RabbitMq"));
-builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
+using Domovoy.Common.Logging;
 
-// Register Adapters
-builder.Services.AddSingleton<IProtocolAdapter, DomovoyNativeAdapter>();
-builder.Services.AddSingleton<IProtocolAdapter, Zigbee2MqttAdapter>();
+internal static class Program
+{
+    static void Main(string[] args)
+    {
+        SerilogBootstrap.Initialize("ConnectivityService");
 
-// Add Adapter Manager (Connectivity Service)
-builder.Services.AddHostedService<AdapterManager>();
+        try
+        {
+            var builder = Host.CreateApplicationBuilder(args);
 
-var host = builder.Build();
-host.Run();
+            builder.Services.ConfigureSerilog();
+
+            // Configure Message Bus (RabbitMQ)
+            builder.Services.Configure<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMq"));
+            builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
+
+            // Register Adapters
+            builder.Services.AddSingleton<IProtocolAdapter, DomovoyNativeAdapter>();
+            builder.Services.AddSingleton<IProtocolAdapter, Zigbee2MqttAdapter>();
+
+            // Add Adapter Manager (Connectivity Service)
+            builder.Services.AddHostedService<AdapterManager>();
+
+            var host = builder.Build();
+            host.Run();
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Host terminated unexpectedly");
+        }
+        finally
+        {
+            Log.CloseAndFlush();
+        }
+    }
+}

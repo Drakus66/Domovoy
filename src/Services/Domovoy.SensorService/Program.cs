@@ -1,27 +1,50 @@
-using Domovoy.SensorService.Services;
-using Domovoy.MessageBus;
+namespace Domovoy.SensorService;
 
-var builder = WebApplication.CreateBuilder(args);
+using Services;
+using MessageBus;
+using Serilog;
+using Serilog.Sinks.SystemConsole.Themes;
+using Domovoy.Common.Logging;
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
-builder.Services.AddHttpClient();
-builder.Services.Configure<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMQ"));
-builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
-builder.Services.AddSingleton<SensorManager>();
-
-var app = builder.Build();
-
-// Resolve SensorManager to start it
-app.Services.GetRequiredService<SensorManager>();
-
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+internal static class Program
 {
-    app.MapOpenApi();
+    static void Main(string[] args)
+    {
+        SerilogBootstrap.Initialize("SensorService");
+
+        try
+        {
+            var builder = WebApplication.CreateBuilder(args);
+            builder.Host.ConfigureSerilog();
+
+            // Add services to the container
+            builder.Services.AddOpenApi();
+            builder.Services.AddHttpClient();
+            builder.Services.Configure<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMQ"));
+            builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
+            builder.Services.AddSingleton<SensorManager>();
+
+            var app = builder.Build();
+
+            // Resolve SensorManager to start it
+            app.Services.GetRequiredService<SensorManager>();
+
+            // Configure the HTTP request pipeline
+            if (app.Environment.IsDevelopment())
+            {
+                app.MapOpenApi();
+            }
+
+            app.UseHttpsRedirection();
+            app.Run();
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Host terminated unexpectedly");
+        }
+        finally
+        {
+            Log.CloseAndFlush();
+        }
+    }
 }
-
-app.UseHttpsRedirection();
-
-app.Run();

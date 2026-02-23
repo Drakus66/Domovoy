@@ -224,25 +224,25 @@ public class RabbitMqConnection : IMessageBus
     {
         try
         {
-            Dictionary<string, object> arguments = null;
+            Dictionary<string, object?> arguments = [];
 
             if (_useMqtt)
             {
-                arguments = new Dictionary<string, object>
+                arguments = new()
                 {
                     { "mqtt-subscription-qos", (byte)qos }
                 };
 
                 // Use wildcards if routingKey ends with #
                 // Convert MQTT wildcards to AMQP wildcards if needed
-                if (routingKey.EndsWith("#"))
+                if (routingKey.EndsWith('#'))
                 {
                     routingKey = routingKey.Replace("#", "*");
                 }
             }
 
             await _channel.ExchangeDeclareAsync(exchange, ExchangeType.Topic, durable: true, cancellationToken: cancellationToken);
-            await _channel.QueueDeclareAsync(queue, durable: true, arguments: arguments, cancellationToken: cancellationToken);
+            await _channel.QueueDeclareAsync(queue, durable: true, exclusive: false, arguments: arguments, cancellationToken: cancellationToken);
             await _channel.QueueBindAsync(queue, exchange, routingKey, cancellationToken: cancellationToken);
 
             var consumer = new AsyncEventingBasicConsumer(_channel);
@@ -252,7 +252,7 @@ public class RabbitMqConnection : IMessageBus
                 {
                     var body = ea.Body.ToArray();
                     var message = JsonSerializer.Deserialize<T>(body);
-                    if (message != null)
+                    if (!Equals(message, default(T)))
                     {
                         await handler(message);
                         await _channel.BasicAckAsync(ea.DeliveryTag, false, cancellationToken);
@@ -282,7 +282,7 @@ public class RabbitMqConnection : IMessageBus
         if (_consumers.TryGetValue(queue, out var consumer))
         {
             var asyncConsumer = (AsyncEventingBasicConsumer)consumer;
-            await _channel.BasicCancelAsync(asyncConsumer.ConsumerTags.First(), cancellationToken: cancellationToken);
+            await _channel.BasicCancelAsync(asyncConsumer.ConsumerTags[0], cancellationToken: cancellationToken);
             _consumers.Remove(queue);
             _logger.LogInformation("Unsubscribed from {Queue}", queue);
         }

@@ -1,27 +1,45 @@
-using Domovoy.LightService.Services;
-using Domovoy.MessageBus;
+namespace Domovoy.LightService;
 
-var builder = WebApplication.CreateBuilder(args);
+using Services;
+using MessageBus;
+using Common.Configuration;
+using Domovoy.Common.Services;
+using Microsoft.Extensions.DependencyInjection;
+using Serilog;
+using Serilog.Sinks.SystemConsole.Themes;
+using Domovoy.Common.Logging;
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
-builder.Services.AddHttpClient();
-builder.Services.Configure<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMQ"));
-builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
-builder.Services.AddSingleton<LightManager>();
-
-var app = builder.Build();
-
-// Resolve LightManager to start it
-app.Services.GetRequiredService<LightManager>();
-
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+internal static class Program
 {
-    app.MapOpenApi();
+    static void Main(string[] args)
+    {
+        SerilogBootstrap.Initialize("LightService");
+
+        try
+        {
+            var hostBuilder = Host.CreateDefaultBuilder(args);
+            hostBuilder.ConfigureSerilog();
+            hostBuilder.ConfigureServices((context, services) =>
+            {
+                services.AddHttpClient();
+                services.Configure<ServiceEndpoints>(context.Configuration.GetSection("ServiceEndpoints"));
+                services.Configure<BaseServiceOptions>(context.Configuration.GetSection("BaseService"));
+                services.Configure<RabbitMqConfig>(context.Configuration.GetSection("RabbitMQ"));
+                services.AddSingleton<IMessageBus, RabbitMqConnection>();
+                services.AddSingleton<LightManager>();
+                services.AddHostedService<LightManager>();
+            });
+
+            var host = hostBuilder.Build();
+            host.Run();
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Host terminated unexpectedly");
+        }
+        finally
+        {
+            Log.CloseAndFlush();
+        }
+    }
 }
-
-app.UseHttpsRedirection();
-
-app.Run();
