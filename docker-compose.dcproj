@@ -20,4 +20,7 @@
         <Content Include="prometheus.yaml" />
         <Content Include="promtail-config.yaml" />
     </ItemGroup>
+    <Target Name="PreBuild" BeforeTargets="Build">
+        <Exec Command="powershell -Command &quot;usbipd attach --wsl --busid 2-3&quot;" ContinueOnError="true" />
+    </Target>
 </Project>

@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Domovoy.DeviceService")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2a9bc99af7f9cf685c46768c4340f5a8639ee587")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+26df0552d9c972dd692aacbe3d9dda4ce1a1f3d2")]
 [assembly: System.Reflection.AssemblyProductAttribute("Domovoy.DeviceService")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Domovoy.DeviceService")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
