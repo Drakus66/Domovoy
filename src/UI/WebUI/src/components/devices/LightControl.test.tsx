@@ -69,7 +69,7 @@ describe('LightControl Touch-Friendly Controls', () => {
 
     // Slider should be rendered
     expect(screen.getByText('Brightness')).toBeInTheDocument();
-    expect(screen.getByText('75%')).toBeInTheDocument();
+    expect(screen.getAllByText('75%')).toHaveLength(2);
     
     const slider = screen.getByRole('slider');
     expect(slider).toBeInTheDocument();

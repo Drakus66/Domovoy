@@ -108,8 +108,6 @@ describe('Navigation Responsive Behavior', () => {
 
     const menuButton = screen.getByLabelText('open drawer');
     
-    // Check that button has minimum touch target size
-    const styles = window.getComputedStyle(menuButton);
     // MUI IconButton should have minimum 44x44 size from theme
     expect(menuButton).toBeInTheDocument();
   });

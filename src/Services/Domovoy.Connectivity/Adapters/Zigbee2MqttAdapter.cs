@@ -16,7 +16,7 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
     public string Name => "Zigbee2Mqtt";
 
     public event Func<DeviceDiscoveredEvent, Task>? OnDeviceDiscovered;
-    public event Func<DeviceStateUpdatedEvent, Task>? OnDeviceStateChanged;
+    public event Func<AdapterStateReportedEvent, Task>? OnAdapterStateReported;
 
     public Zigbee2MqttAdapter(ILogger<Zigbee2MqttAdapter> logger)
     {
@@ -58,11 +58,16 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
             else
             {
                 // Likely a state update: zigbee2mqtt/{friendly_name}
-                // Need to filter out bridge/ logging/ etc if not caught by specific filters.
-                // Assuming friendly_name doesn't contain slashes usually, but it might.
-                // Z2M defaults: zigbee2mqtt/my_bulb
-
-                // TODO: Implement state parsing
+                // Just emit a generic adapter reported event instead of trying to parse it here.
+                if (OnAdapterStateReported != null)
+                {
+                    await OnAdapterStateReported.Invoke(new AdapterStateReportedEvent
+                    {
+                        AdapterSource = Name,
+                        Topic = topic,
+                        Payload = payload
+                    });
+                }
             }
         }
         catch (Exception ex)
@@ -119,19 +124,17 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
         }
     }
 
-    private GlobalEntityTypes DetermineDeviceType(JsonElement device)
+    private static GlobalEntityTypes DetermineDeviceType(JsonElement device)
     {
         // Inspect 'definition' -> 'exposes'
-        if (device.TryGetProperty("definition", out var def))
+        if (device.TryGetProperty("definition", out var def) && 
+            def.TryGetProperty("description", out var desc))
         {
             // Simplistic mapping
-            if (def.TryGetProperty("description", out var desc))
-            {
-                var d = desc.GetString()?.ToLower() ?? "";
-                if (d.Contains("light") || d.Contains("bulb")) return GlobalEntityTypes.Light;
-                if (d.Contains("sensor")) return GlobalEntityTypes.Sensor;
-                if (d.Contains("switch") || d.Contains("plug")) return GlobalEntityTypes.Switch;
-            }
+            var d = desc.GetString()?.ToLower() ?? "";
+            if (d.Contains("light") || d.Contains("bulb")) return GlobalEntityTypes.Light;
+            if (d.Contains("sensor")) return GlobalEntityTypes.Sensor;
+            if (d.Contains("switch") || d.Contains("plug")) return GlobalEntityTypes.Switch;
         }
         return GlobalEntityTypes.Generic;
     }
@@ -140,39 +143,62 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
     {
         if (_mqttClient == null) return;
 
-        // Ensure this command is for a Z2M device (check source or metadata)
-        // Since AdapterManager broadcasts, we must check applicability.
-        // We lack context here unless provided.
-        // Assuming ConnectivityService resolves "Logic Device -> Adapter" via mapping?
-        // OR Command contains Metadata with "Source": "Zigbee2Mqtt"?
-        // Or "command_topic" is key.
+        var topic = GetCommandTopic(command);
+        if (topic == null) return;
 
-        if (command.Parameters.TryGetValue("command_topic", out var topicObj) && topicObj is string topic
-            && topic.StartsWith("zigbee2mqtt/"))
+        if (!IsValidZigbee2MqttTopic(topic)) return;
+
+        var payload = BuildPayload(command);
+        if (payload.Count == 0) return;
+
+        await PublishCommandAsync(topic, payload);
+    }
+
+    private string? GetCommandTopic(DeviceCommand command)
+    {
+        if (command.Parameters.TryGetValue("command_topic", out var topicObj) && topicObj is string t)
         {
-            var payloadObj = new Dictionary<string, object>();
-
-            if (command.CommandTypes == DeviceCommandTypes.SetState)
-            {
-                if (command.Parameters.TryGetValue("state", out var state))
-                {
-                    payloadObj["state"] = state;
-                }
-                if (command.Parameters.TryGetValue("brightness", out var brightness))
-                {
-                    payloadObj["brightness"] = brightness;
-                }
-                // Add color if needed
-            }
-
-            if (payloadObj.Count > 0)
-            {
-                var json = JsonSerializer.Serialize(payloadObj);
-                await _mqttClient.PublishAsync(new MqttApplicationMessageBuilder()
-                    .WithTopic(topic)
-                    .WithPayload(json)
-                    .Build());
-            }
+            return t;
         }
+
+        _logger.LogWarning("Z2M Adapter received command for {DeviceId} without 'command_topic' in parameters. Cannot determine target topic.", command.DeviceId);
+        return null;
+    }
+
+    private static bool IsValidZigbee2MqttTopic(string topic)
+    {
+        return topic.StartsWith("zigbee2mqtt/");
+    }
+
+    private static Dictionary<string, object> BuildPayload(DeviceCommand command)
+    {
+        var payload = new Dictionary<string, object>();
+
+        if (command.CommandTypes != DeviceCommandTypes.SetState)
+            return payload;
+
+        AddParameterIfExists(payload, command.Parameters, "state");
+        AddParameterIfExists(payload, command.Parameters, "brightness");
+        
+        return payload;
+    }
+
+    private static void AddParameterIfExists(Dictionary<string, object> payload, Dictionary<string, object> parameters, string key)
+    {
+        if (parameters.TryGetValue(key, out var value))
+        {
+            payload[key] = value;
+        }
+    }
+
+    private async Task PublishCommandAsync(string topic, Dictionary<string, object> payload)
+    {
+        var json = JsonSerializer.Serialize(payload);
+        await _mqttClient.PublishAsync(new MqttApplicationMessageBuilder()
+            .WithTopic(topic)
+            .WithPayload(json)
+            .Build());
+        
+        _logger.LogInformation("Z2M Published command to {Topic}: {Payload}", topic, json);
     }
 }

@@ -14,7 +14,7 @@ public class DomovoyNativeAdapter : IProtocolAdapter
     public string Name => "DomovoyNative";
 
     public event Func<DeviceDiscoveredEvent, Task>? OnDeviceDiscovered;
-    public event Func<DeviceStateUpdatedEvent, Task>? OnDeviceStateChanged;
+    public event Func<AdapterStateReportedEvent, Task>? OnAdapterStateReported;
 
     public DomovoyNativeAdapter(ILogger<DomovoyNativeAdapter> logger)
     {

@@ -17,6 +17,9 @@ public class AdapterManager : BackgroundService
     private readonly ILogger<AdapterManager> _logger;
     private readonly IOptions<RabbitMqConfig> _config;
     private IMqttClient? _mqttClient;
+    
+    // In-Memory routing map: DeviceId -> Adapter instance
+    private readonly Dictionary<Guid, IProtocolAdapter> _deviceToAdapterMap = new();
 
     public AdapterManager(
         IEnumerable<IProtocolAdapter> adapters,
@@ -43,7 +46,7 @@ public class AdapterManager : BackgroundService
             try
             {
                 adapter.OnDeviceDiscovered += OnDeviceDiscovered;
-                adapter.OnDeviceStateChanged += OnDeviceStateChanged;
+                adapter.OnAdapterStateReported += OnAdapterStateReported;
                 await adapter.StartAsync(_mqttClient!, stoppingToken);
                 _logger.LogInformation("Started adapter: {Adapter}", adapter.Name);
             }
@@ -105,19 +108,34 @@ public class AdapterManager : BackgroundService
 
     private async Task OnDeviceDiscovered(DeviceDiscoveredEvent ev)
     {
+        // 1. Find which adapter sent this (by looking at event Source or matching adapters)
+        var sourceAdapter = _adapters.FirstOrDefault(a => a.Name == ev.Source);
+        
+        if (sourceAdapter != null)
+        {
+            // Cache the routing in memory
+            _deviceToAdapterMap[ev.DeviceId] = sourceAdapter;
+            _logger.LogInformation("Cached route: Device {DeviceId} -> Adapter {AdapterName}", ev.DeviceId, sourceAdapter.Name);
+        }
+
+        // 2. Publish to the bus so UnifiedDeviceManager can save it
         await _messageBus.PublishAsync(
             MessageBusConfiguration.DeviceDiscoveryExchange,
             MessageBusConfiguration.DeviceDiscoveredRoutingKey,
             ev);
+            
         _logger.LogInformation("Published processed discovery: {DeviceId} ({Source})", ev.DeviceId, ev.Source);
     }
 
-    private async Task OnDeviceStateChanged(DeviceStateUpdatedEvent ev)
+    private async Task OnAdapterStateReported(AdapterStateReportedEvent ev)
     {
-        // Assuming we have an exchange for State updates.
-        // await _messageBus.PublishAsync("domovoy.state", "device.state.changed", ev);
-        // For now, logging until exact routing key is confirmed.
-        _logger.LogDebug("Device state changed (not published): {DeviceId}", ev.DeviceId);
+        // Publish to RMQ so the UnifiedDeviceManager can resolve it to a physical device
+        await _messageBus.PublishAsync(
+            "domovoy.state", // Standard state exchange or new one? Let's use generic event bus or state bus. Let's use the standard "domovoy.events" Exchange with specific routing key
+            "event.adapter.reported",
+            ev);
+        
+        _logger.LogDebug("Adapter state reported: {Source} -> {Topic}", ev.AdapterSource, ev.Topic);
     }
 
     private async Task SubscribeToCommands(CancellationToken token)
@@ -135,11 +153,36 @@ public class AdapterManager : BackgroundService
 
     private async Task HandleDeviceCommand(DeviceCommand command)
     {
-        foreach (var adapter in _adapters)
+        IProtocolAdapter? targetAdapter = null;
+
+        // 1. Check in-memory cache
+        if (_deviceToAdapterMap.TryGetValue(command.DeviceId, out var cachedAdapter))
         {
-            // Ideally we know which adapter owns the device.
-            // For now, broadcast.
-            await adapter.HandleCommandAsync(command);
+            targetAdapter = cachedAdapter;
+        }
+        // 2. Fallback to enriched metadata from UnifiedDeviceManager
+        else if (command.Parameters.TryGetValue("AdapterSource", out var sourceObj) && sourceObj is string sourceName)
+        {
+            targetAdapter = _adapters.FirstOrDefault(a => a.Name == sourceName);
+            if (targetAdapter != null)
+            {
+                // Self-healing: Restore cache from DB-enriched parameters
+                _deviceToAdapterMap[command.DeviceId] = targetAdapter;
+                _logger.LogInformation("Restored route from metadata: Device {DeviceId} -> Adapter {AdapterName}", 
+                    command.DeviceId, targetAdapter.Name);
+            }
+        }
+
+        // 3. Execute
+        if (targetAdapter != null)
+        {
+            _logger.LogInformation("Routing command {CommandType} for {DeviceId} to adapter {AdapterName}", 
+                command.CommandTypes, command.DeviceId, targetAdapter.Name);
+            await targetAdapter.HandleCommandAsync(command);
+        }
+        else
+        {
+            _logger.LogWarning("No route found for device {DeviceId} (no cache, no AdapterSource in parameters). Dropping command.", command.DeviceId);
         }
     }
 }

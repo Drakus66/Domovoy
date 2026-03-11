@@ -77,10 +77,11 @@ docker-compose ps
 ```
 
 ### Service Endpoints
-- **API Gateway**: http://localhost:5000
-- **Grafana**: http://localhost:3000
-- **Prometheus**: http://localhost:9090
-- **RabbitMQ Management**: http://localhost:15672
+- **Web UI**: <http://localhost>
+- **API Gateway**: <http://localhost:5000>
+- **Grafana**: <http://localhost:3000>
+- **Prometheus**: <http://localhost:9090>
+- **RabbitMQ Management**: <http://localhost:15672>
 
 ## 📁 Project Structure
 
@@ -107,11 +108,29 @@ Domovoy/
 
 ## 📚 Documentation
 
+### Wiki & Guides
+- **🌐 Project Wiki**: [`.qoder/repowiki/en/`](.qoder/repowiki/en/) - Comprehensive documentation
+  - [Wiki Index](.qoder/repowiki/en/Wiki_Index.md) - Navigation and quick links
+  - [Domovoy Wiki](.qoder/repowiki/en/Domovoy_Wiki.md) - Complete project overview
+  - [Getting Started](.qoder/repowiki/en/Getting_Started.md) - Setup and installation guide
+  - [Development Standards](.qoder/repowiki/en/Development_Standards.md) - Coding guidelines
+  - [Architecture Decisions](.qoder/repowiki/en/Architecture_Decisions.md) - Design rationale
+
+### Technical Documentation
 - **Architecture**: [docs/architecture/](docs/architecture/)
-- **Current State**: [memory-bank/currentState.md](memory-bank/currentState.md)
-- **System Overview**: [memory-bank/systemOverview.md](memory-bank/systemOverview.md)
-- **Task Plans**: [tasks_plan.txt](tasks_plan.txt)
-- **Arduino Tasks**: [arduino_tasks_plan.txt](arduino_tasks_plan.txt)
+  - [Architecture Diagrams](docs/architecture/architecture_diagrams.md)
+  - [Layered Architecture](docs/architecture/layered_architecture.md)
+  - [Database Schema](docs/architecture/database_schema.md)
+  - [Coding Standards](docs/architecture/coding_standards.md)
+- **Memory Bank**: [memory-bank/](memory-bank/)
+  - [System Overview](memory-bank/systemOverview.md)
+  - [Current State](memory-bank/currentState.md)
+  - [Product Context](memory-bank/productContext.md)
+  - [Progress Tracking](memory-bank/progress.md)
+
+### Task Planning
+- **Development Tasks**: [tasks_plan.txt](tasks_plan.txt)
+- **Arduino Development**: [arduino_tasks_plan.txt](arduino_tasks_plan.txt)
 
 ## 🔧 Development
 
@@ -174,4 +193,14 @@ Contributions are welcome! Please read our contributing guidelines before submit
 
 ---
 
-**Status**: Active Development | **Last Updated**: December 3, 2025
+**Status**: Active Development | **Last Updated**: March 3, 2026
+
+---
+
+## 🔗 Quick Links
+
+- **🌐 Start Here**: [Wiki Index](.qoder/repowiki/en/Wiki_Index.md)
+- **📖 Full Documentation**: [Domovoy Wiki](.qoder/repowiki/en/Domovoy_Wiki.md)
+- **⚙️ Setup Guide**: [Getting Started](.qoder/repowiki/en/Getting_Started.md)
+- **💻 Development**: [Development Standards](.qoder/repowiki/en/Development_Standards.md)
+- **🏛️ Architecture**: [Architecture Decisions](.qoder/repowiki/en/Architecture_Decisions.md)

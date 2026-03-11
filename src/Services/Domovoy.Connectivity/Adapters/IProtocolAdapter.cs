@@ -18,7 +18,6 @@ public interface IProtocolAdapter
     // Outbound (Bus -> MQTT)
     Task HandleCommandAsync(DeviceCommand command);
 
-    // Events
     event Func<DeviceDiscoveredEvent, Task> OnDeviceDiscovered;
-    event Func<DeviceStateUpdatedEvent, Task> OnDeviceStateChanged;
+    event Func<AdapterStateReportedEvent, Task> OnAdapterStateReported;
 }
