@@ -2,6 +2,7 @@ namespace Domovoy.DbGateway;
 
 using Config;
 using Domovoy.DbGateway.Serializers;
+using Domovoy.DbGateway.Repositories;
 using Endpoints;
 using MessageBus;
 using MongoDB.Bson.Serialization;
@@ -10,6 +11,7 @@ using MongoDB.Driver;
 using Serilog;
 
 using Domovoy.Common.Logging;
+using Domovoy.DbGateway.Models;
 
 internal static class Program
 {
@@ -44,6 +46,10 @@ internal static class Program
 
             // Add EventInterceptor as a hosted service
             builder.Services.AddHostedService<Services.EventInterceptor>();
+
+            // Register repositories
+            builder.Services.AddSingleton<IBaseRepository<Device>, DeviceRepository>();
+            builder.Services.AddSingleton<IDeviceRepository, DeviceRepository>();
 
             // Add services to the container
             builder.Services.AddEndpointsApiExplorer();

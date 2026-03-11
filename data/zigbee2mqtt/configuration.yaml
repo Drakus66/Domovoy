@@ -5,10 +5,11 @@ mqtt:
   user: user
   password: user
 serial:
-  port: /dev/ttyUSB0
+  port: ${ZIGBEE_DEVICE_PATH:-/dev/ttyUSB0}
   adapter: ember
   baudrate: 115200
   rtscts: false
+  disable_led: false
 advanced:
   log_level: info
   channel: 20

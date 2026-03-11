@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Domovoy.DbGateway")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+feba9748eec05cdff757ae65f9077ee5d02bf1c7")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7498d3e8251d3aa58d117e0463d0335bc560d2fa")]
 [assembly: System.Reflection.AssemblyProductAttribute("Domovoy.DbGateway")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Domovoy.DbGateway")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

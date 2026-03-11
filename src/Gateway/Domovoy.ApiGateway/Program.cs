@@ -21,7 +21,10 @@ internal static class Program
 
         try
         {
-            var builder = WebApplication.CreateBuilder(args);
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+            {
+                Args = args,
+            });
             builder.Host.ConfigureSerilog();
 
             // Add configuration
@@ -136,9 +139,7 @@ internal static class Program
             app.UseHttpsRedirection();
             app.UseCors("CorsPolicy");
 
-            // Serve Web UI static files from wwwroot/
-            app.UseDefaultFiles();
-            app.UseStaticFiles();
+            // Static files middleware removed - wwwroot not required
 
             app.UseMiddleware<Middleware.RequestLoggingMiddleware>();
             app.UseMiddleware<Middleware.RequestCounterMiddleware>();

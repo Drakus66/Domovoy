@@ -1,12 +1,50 @@
 Routes:
-  # DbGateway routes
+  # WebUI Dashboard routes
+  - DownstreamPathTemplate: /{everything}
+    DownstreamScheme: http
+    DownstreamHostAndPorts:
+      - Host: webui
+        Port: 80
+    UpstreamPathTemplate: /{everything}
+    UpstreamHttpMethod: [ "GET", "POST", "PUT", "DELETE" ]
+    Priority: 1
+
+  # DbGateway GET routes (no auth required for read operations)
   - DownstreamPathTemplate: /api/devices/{everything}
     DownstreamScheme: http
     DownstreamHostAndPorts:
-      - Host: domovoy-dbgateway
-        Port: 80
+      - Host: db-gateway
+        Port: 8080
     UpstreamPathTemplate: /api/devices/{everything}
-    UpstreamHttpMethod: [ "GET", "POST", "PUT", "DELETE" ]
+    UpstreamHttpMethod: [ "GET" ]
+    Priority: 2
+
+  - DownstreamPathTemplate: /api/locations/{everything}
+    DownstreamScheme: http
+    DownstreamHostAndPorts:
+      - Host: db-gateway
+        Port: 8080
+    UpstreamPathTemplate: /api/locations/{everything}
+    UpstreamHttpMethod: [ "GET" ]
+    Priority: 2
+
+  - DownstreamPathTemplate: /api/sensors/{everything}
+    DownstreamScheme: http
+    DownstreamHostAndPorts:
+      - Host: db-gateway
+        Port: 8080
+    UpstreamPathTemplate: /api/sensors/{everything}
+    UpstreamHttpMethod: [ "GET" ]
+    Priority: 2
+
+  # DbGateway routes with authentication (for write operations)
+  - DownstreamPathTemplate: /api/devices/{everything}
+    DownstreamScheme: http
+    DownstreamHostAndPorts:
+      - Host: db-gateway
+        Port: 8080
+    UpstreamPathTemplate: /api/devices/{everything}
+    UpstreamHttpMethod: [ "POST", "PUT", "DELETE" ]
     AuthenticationOptions:
       AuthenticationProviderKey: "Bearer"
     RouteClaimsRequirement:
@@ -23,10 +61,10 @@ Routes:
   - DownstreamPathTemplate: /api/locations/{everything}
     DownstreamScheme: http
     DownstreamHostAndPorts:
-      - Host: domovoy-dbgateway
-        Port: 80
+      - Host: db-gateway
+        Port: 8080
     UpstreamPathTemplate: /api/locations/{everything}
-    UpstreamHttpMethod: [ "GET", "POST", "PUT", "DELETE" ]
+    UpstreamHttpMethod: [ "POST", "PUT", "DELETE" ]
     AuthenticationOptions:
       AuthenticationProviderKey: "Bearer"
     RouteClaimsRequirement:
@@ -35,10 +73,10 @@ Routes:
   - DownstreamPathTemplate: /api/sensors/{everything}
     DownstreamScheme: http
     DownstreamHostAndPorts:
-      - Host: domovoy-dbgateway
-        Port: 80
+      - Host: db-gateway
+        Port: 8080
     UpstreamPathTemplate: /api/sensors/{everything}
-    UpstreamHttpMethod: [ "GET", "POST", "PUT", "DELETE" ]
+    UpstreamHttpMethod: [ "POST", "PUT", "DELETE" ]
     AuthenticationOptions:
       AuthenticationProviderKey: "Bearer"
     RouteClaimsRequirement:

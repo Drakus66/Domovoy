@@ -8,6 +8,7 @@ using Domovoy.Common.Services.Handlers;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Domovoy.Common.Logging;
+using Microsoft.Extensions.Options;
 
 using Domovoy.UnifiedDeviceService.Services.Identity;
 
@@ -26,6 +27,12 @@ internal static class Program
                 services.AddHttpClient();
                 services.Configure<ServiceEndpoints>(context.Configuration.GetSection("ServiceEndpoints"));
                 services.Configure<BaseServiceOptions>(context.Configuration.GetSection("BaseService"));
+                
+                // Configure RabbitMQ
+                services.Configure<RabbitMqConfig>(context.Configuration.GetSection("RabbitMQ"));
+                
+                // Register message bus
+                services.AddSingleton<IMessageBus, RabbitMqConnection>();
 
                 // Register device type handlers
                 services.AddSingleton<IDeviceTypeHandler, GenericDeviceHandler>();

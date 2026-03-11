@@ -298,12 +298,15 @@ services:
     volumes:
       - ./data/zigbee2mqtt:/app/data
       - /run/udev:/run/udev:ro
+      - ./data/zigbee2mqtt/start.sh:/app/start.sh:ro
     ports:
       - 8080:8080
-    devices:
-        - /dev/serial/by-id/usb-Itead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_V2_6678079391c2ef11acf3c9138148b910-if00-port0:/dev/ttyUSB0
     environment:
       - TZ=UTC
+      - ZIGBEE_DEVICE_PATH=${ZIGBEE_DEVICE_PATH:-}
+    privileged: true
+    entrypoint: ["/bin/sh"]
+    command: ["-c", "chmod +x /app/start.sh && /app/start.sh"]
     networks:
       - domovoy-network
     restart: unless-stopped
