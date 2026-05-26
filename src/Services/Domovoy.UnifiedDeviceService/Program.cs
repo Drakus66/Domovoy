@@ -14,7 +14,7 @@ using Domovoy.UnifiedDeviceService.Services.Identity;
 
 internal static class Program
 {
-    static void Main(string[] args)
+    static void  Main(string[] args)
     {
         SerilogBootstrap.Initialize("UnifiedDeviceService");
 
@@ -24,6 +24,9 @@ internal static class Program
             hostBuilder.ConfigureSerilog();
             hostBuilder.ConfigureServices((context, services) =>
             {
+                // Configure HttpClient for DbGateway
+                BaseService.ConfigureHttpClient(services, context.Configuration);
+                
                 services.AddHttpClient();
                 services.Configure<ServiceEndpoints>(context.Configuration.GetSection("ServiceEndpoints"));
                 services.Configure<BaseServiceOptions>(context.Configuration.GetSection("BaseService"));

@@ -6,14 +6,12 @@ namespace Domovoy.DbGateway.Models;
 public class Device
 {
     [BsonId]
-    [BsonRepresentation(BsonType.ObjectId)]
     public string DeviceId { get; set; } = null!;
 
     public string Name { get; set; } = null!;
 
     public string Type { get; set; } = null!;
 
-    [BsonRepresentation(BsonType.ObjectId)]
     public string LocationId { get; set; } = null!;
 
     public string Status { get; set; } = "Offline";

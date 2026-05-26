@@ -5,7 +5,7 @@ mqtt:
   user: user
   password: user
 serial:
-  port: ${ZIGBEE_DEVICE_PATH:-/dev/ttyUSB0}
+  port: /dev/ttyUSB0
   adapter: ember
   baudrate: 115200
   rtscts: false
@@ -48,4 +48,4 @@ homeassistant:
 onboarding: false
 devices:
   '0xa4c1383e04dbda65':
-    friendly_name: TemperatureSensor
+    friendly_name: '0xa4c1383e04dbda65'

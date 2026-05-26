@@ -102,6 +102,8 @@ internal static class Program
             builder.Services.AddSignalR();
             builder.Services.AddSingleton<MessageBus.IMessageBus, MessageBus.RabbitMqConnection>();
             builder.Services.AddHostedService<Services.EventRelayService>();
+            builder.Services.AddSingleton<Services.ZigbeeBridgeStateCache>();
+            builder.Services.AddHostedService<Services.ZigbeeBridgeCacheUpdater>();
 
             builder.Services.AddCors(options =>
             {
@@ -115,6 +117,13 @@ internal static class Program
 
             builder.Services.AddHealthChecks();
             builder.Services.AddSingleton<MetricServer>(sp => new MetricServer(port: 9090));
+
+            var prometheusUrl = builder.Configuration["Prometheus:BaseUrl"] ?? "http://prometheus:9090";
+            builder.Services.AddHttpClient("prometheus", client =>
+            {
+                client.BaseAddress = new Uri(prometheusUrl);
+                client.Timeout = TimeSpan.FromSeconds(5);
+            });
 
             if (!string.IsNullOrEmpty(builder.Configuration["ApplicationInsights:ConnectionString"]))
             {

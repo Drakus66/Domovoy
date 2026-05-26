@@ -23,6 +23,9 @@ internal static class Program
             builder.Services.Configure<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMq"));
             builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
 
+            // Zigbee bridge state cache (shared between adapter and HTTP endpoint)
+            builder.Services.AddSingleton<ZigbeeBridgeCache>();
+
             // Register Adapters
             builder.Services.AddSingleton<IProtocolAdapter, DomovoyNativeAdapter>();
             builder.Services.AddSingleton<IProtocolAdapter, Zigbee2MqttAdapter>();

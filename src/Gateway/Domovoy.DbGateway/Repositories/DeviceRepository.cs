@@ -53,7 +53,7 @@ public class DeviceRepository(IMongoDatabase database, ILogger<DeviceRepository>
     {
         try
         {
-            var filter = Builders<Device>.Filter.Eq("_id", ObjectId.Parse(id));
+            var filter = Builders<Device>.Filter.Eq("_id", id);
             var update = Builders<Device>.Update
                 .Set(d => d.Status, state)
                 .Set(d => d.LastSeen, DateTime.UtcNow);
@@ -71,7 +71,7 @@ public class DeviceRepository(IMongoDatabase database, ILogger<DeviceRepository>
     {
         try
         {
-            var filter = Builders<Device>.Filter.Eq("_id", ObjectId.Parse(id));
+            var filter = Builders<Device>.Filter.Eq("_id", id);
             var update = Builders<Device>.Update
                 .Set(d => d.IsOnline, isOnline)
                 .Set(d => d.LastSeen, DateTime.UtcNow);

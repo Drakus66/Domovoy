@@ -129,12 +129,13 @@ public class AdapterManager : BackgroundService
 
     private async Task OnAdapterStateReported(AdapterStateReportedEvent ev)
     {
-        // Publish to RMQ so the UnifiedDeviceManager can resolve it to a physical device
+        // Publish to RMQ so the UnifiedDeviceManager can resolve it to a physical device.
+        // Exchange/routing key come from shared constants so they always match the subscriber.
         await _messageBus.PublishAsync(
-            "domovoy.state", // Standard state exchange or new one? Let's use generic event bus or state bus. Let's use the standard "domovoy.events" Exchange with specific routing key
-            "event.adapter.reported",
+            MessageBusConfiguration.AdapterStateExchange,
+            MessageBusConfiguration.AdapterStateReportedRoutingKey,
             ev);
-        
+
         _logger.LogDebug("Adapter state reported: {Source} -> {Topic}", ev.AdapterSource, ev.Topic);
     }
 

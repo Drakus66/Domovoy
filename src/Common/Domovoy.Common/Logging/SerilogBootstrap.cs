@@ -2,7 +2,6 @@ using Microsoft.Extensions.Hosting;
 using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
-using Serilog.Sinks.Grafana.Loki;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Domovoy.Common.Logging;
@@ -19,9 +18,7 @@ public static class SerilogBootstrap
             .Enrich.WithProperty("Service", serviceName)
             .WriteTo.Console(
                 theme: AnsiConsoleTheme.Code,
-                outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .WriteTo.GrafanaLoki(
-                Environment.GetEnvironmentVariable("LOKI_URL") ?? "http://loki:3100")
+                outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{Service}] {Message:lj}{NewLine}{Exception}")
             .CreateLogger();
     }
 

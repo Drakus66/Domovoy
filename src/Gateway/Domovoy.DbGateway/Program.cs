@@ -9,6 +9,7 @@ using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
 using MongoDB.Driver;
 using Serilog;
+using System.Text.Json;
 
 using Domovoy.Common.Logging;
 using Domovoy.DbGateway.Models;
@@ -24,6 +25,12 @@ internal static class Program
             var builder = WebApplication.CreateBuilder(args);
             builder.Host.ConfigureSerilog();
 
+            // Explicitly configure URLs to listen on port 8080
+            builder.WebHost.ConfigureKestrel(options =>
+            {
+                options.ListenAnyIP(8080);
+            });
+
             // Configure MongoDB
             var mongoDbSettings = builder.Configuration.GetSection("MongoDb").Get<MongoDbSettings>()
                                   ?? throw new InvalidOperationException("MongoDB settings are not configured");
@@ -34,6 +41,9 @@ internal static class Program
             
             // Allow JsonElement serialization with custom serializer
             BsonSerializer.RegisterSerializer(new JsonElementSerializer());
+            
+            // Register custom dictionary serializer that can handle JsonElement values
+            BsonSerializer.RegisterSerializer(new JsonObjectDictionarySerializer());
 
             builder.Services.AddSingleton<IMongoClient>(sp =>
                 new MongoClient(mongoDbSettings.ConnectionString));
@@ -62,8 +72,6 @@ internal static class Program
             {
                 app.MapOpenApi();
             }
-
-            app.UseHttpsRedirection();
 
             // Map endpoints
             app.MapDeviceEndpoints();

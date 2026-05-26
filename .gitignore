@@ -1,6 +1,7 @@
 ﻿/memory-bank/
 /.idea/
 /.vs/
+.claude/settings.local.json
 **/bin/
 **/obj/
 *.log

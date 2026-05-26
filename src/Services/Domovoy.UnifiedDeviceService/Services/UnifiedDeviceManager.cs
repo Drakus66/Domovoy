@@ -91,21 +91,27 @@ public class UnifiedDeviceManager : BaseService
             HandleDeviceEvent);
 
         // Subscribe to device discovery events from DiscoveryService
-        SubscribeToEvents<DeviceDiscoveredEvent>(
-            MessageBusConfiguration.DeviceDiscoveryEventsQueue,
-            HandleDeviceDiscovered);
+        MessageBus.SubscribeAsync<DeviceDiscoveredEvent>(
+            MessageBusConfiguration.DeviceDiscoveryEventsQueue, // Queue name
+            MessageBusConfiguration.DeviceDiscoveryExchange, // Exchange
+            MessageBusConfiguration.DeviceDiscoveredRoutingKey, // Routing key
+            HandleDeviceDiscovered, 
+            default); // CancellationToken
 
         // Subscribe to light-specific commands queue (backward compatibility)
         SubscribeToCommands<DeviceCommand>(
             "domovoy.light.commands",
             HandleDeviceCommand);
 
-        // Subscribe to raw adapter state reports from Connectivity Service
+        // Subscribe to raw adapter state reports from Connectivity Service.
+        // Exchange/routing key come from shared constants so they always match the publisher
+        // (AdapterManager). Previously this was bound to "domovoy.events" while the publisher
+        // sent to "domovoy.state", so device state never arrived.
         MessageBus.SubscribeAsync<AdapterStateReportedEvent>(
-            "domovoy-adapter-reports", // Queue name
-            "domovoy.events", // Exchange 
-            "event.adapter.reported", // Routing key
-            HandleAdapterStateReported, 
+            MessageBusConfiguration.AdapterStateReportsQueue,
+            MessageBusConfiguration.AdapterStateExchange,
+            MessageBusConfiguration.AdapterStateReportedRoutingKey,
+            HandleAdapterStateReported,
             default); // CancellationToken
             
         Logger.LogInformation("UnifiedDeviceManager subscribed to all device queues");
@@ -171,7 +177,16 @@ public class UnifiedDeviceManager : BaseService
                     existingDevice.Metadata[meta.Key] = meta.Value?.ToString() ?? "";
                 }
             }
-            
+
+            // Persist/refresh the adapter source so commands can be routed back to the right
+            // adapter even on a cold AdapterManager cache (mirrors IDeviceTypeHandler.CreateFromDiscovery).
+            // Without this, existing devices loaded from the DB had no AdapterSource and their
+            // commands were dropped by the Connectivity service.
+            if (!string.IsNullOrEmpty(discoveryEvent.Source))
+            {
+                existingDevice.Metadata["AdapterSource"] = discoveryEvent.Source;
+            }
+
             existingDevice.LastUpdated = DateTime.UtcNow;
             await SaveToDb(existingDevice, DevicesCollection);
 
@@ -393,10 +408,14 @@ public class UnifiedDeviceManager : BaseService
 
             stateEvent.Data["Source"] = GetType().Name;
 
+            // Routing key uses the shared constant so DbGateway.EventInterceptor (persistence)
+            // and ApiGateway.EventRelayService (SignalR) — which bind this same constant — actually
+            // receive the event. Previously the literal "event.device.state.updated" never matched
+            // their "device.state.updated" binding on the topic exchange.
             await PublishEvent(
                 Options.EventExchange,
                 stateEvent,
-                "event.device.state.updated"
+                MessageBusConfiguration.DeviceStateUpdatedRoutingKey
             );
 
             Logger.LogDebug("Updated state for device {DeviceId}", deviceId);

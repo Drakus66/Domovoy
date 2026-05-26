@@ -6,10 +6,8 @@ namespace Domovoy.DbGateway.Models;
 public class Sensor
 {
     [BsonId]
-    [BsonRepresentation(BsonType.ObjectId)]
     public string SensorId { get; set; } = null!;
 
-    [BsonRepresentation(BsonType.ObjectId)]
     public string DeviceId { get; set; } = null!;
     
     public string Type { get; set; } = null!;

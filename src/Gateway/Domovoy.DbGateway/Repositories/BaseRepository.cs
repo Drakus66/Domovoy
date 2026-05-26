@@ -34,7 +34,7 @@ public abstract class BaseRepository<T> : IBaseRepository<T> where T : class
     {
         try
         {
-            var filter = Builders<T>.Filter.Eq("_id", ObjectId.Parse(id));
+            var filter = Builders<T>.Filter.Eq("_id", id);
             return await _collection.Find(filter).FirstOrDefaultAsync();
         }
         catch (Exception ex)
@@ -75,7 +75,7 @@ public abstract class BaseRepository<T> : IBaseRepository<T> where T : class
     {
         try
         {
-            var filter = Builders<T>.Filter.Eq("_id", ObjectId.Parse(id));
+            var filter = Builders<T>.Filter.Eq("_id", id);
             await _collection.ReplaceOneAsync(filter, entity);
         }
         catch (Exception ex)
@@ -90,7 +90,7 @@ public abstract class BaseRepository<T> : IBaseRepository<T> where T : class
     {
         try
         {
-            var filter = Builders<T>.Filter.Eq("_id", ObjectId.Parse(id));
+            var filter = Builders<T>.Filter.Eq("_id", id);
             await _collection.DeleteOneAsync(filter);
         }
         catch (Exception ex)

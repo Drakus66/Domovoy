@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Domovoy.Connectivity")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7498d3e8251d3aa58d117e0463d0335bc560d2fa")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3cde697f1441859dddad6046ac41944e655990fb")]
 [assembly: System.Reflection.AssemblyProductAttribute("Domovoy.Connectivity")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Domovoy.Connectivity")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

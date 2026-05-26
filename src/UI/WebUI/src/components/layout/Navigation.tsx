@@ -3,10 +3,14 @@ import { Link, useLocation } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import ArticleIcon from '@mui/icons-material/Article';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import BluetoothSearchingIcon from '@mui/icons-material/BluetoothSearching';
 import { useState } from 'react';
 
 const navItems = [
   { label: 'Dashboard', path: '/', icon: <DashboardIcon /> },
+  { label: 'System Status', path: '/status', icon: <MonitorHeartIcon /> },
+  { label: 'Zigbee', path: '/zigbee', icon: <BluetoothSearchingIcon /> },
   { label: 'Logs', path: '/logs', icon: <ArticleIcon /> },
 ];
 

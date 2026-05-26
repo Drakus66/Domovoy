@@ -112,6 +112,25 @@ public class MessageBusConfiguration
     public const string DeviceHeartbeatRoutingKey = "device.heartbeat";
     public const string DeviceConfigurationRoutingKey = "device.configure";
     
+    // Zigbee bridge events & commands
+    public const string ZigbeeBridgeExchange = "zigbee.bridge";
+    public const string ZigbeeBridgeStateRoutingKey = "zigbee.bridge.state";
+    public const string ZigbeeBridgeInfoRoutingKey = "zigbee.bridge.info";
+    public const string ZigbeeNetworkEventRoutingKey = "zigbee.network.event";
+    public const string ZigbeeBridgeCommandsQueue = "zigbee.bridge.commands.queue";
+    public const string ZigbeeBridgeCommandRoutingKey = "zigbee.bridge.command";
+
+    // Raw adapter state reports (Connectivity -> UnifiedDeviceService)
+    // Publisher (AdapterManager) and subscriber (UnifiedDeviceManager) MUST reference these
+    // same constants so the exchange/routing key always match.
+    public const string AdapterStateExchange = "domovoy.state";
+    public const string AdapterStateReportsQueue = "domovoy-adapter-reports";
+    public const string AdapterStateReportedRoutingKey = "event.adapter.reported";
+
+    // Generic device control commands (ApiGateway -> UnifiedDeviceService).
+    // Must match the "command.*" binding used by BaseService.SubscribeToCommands.
+    public const string DeviceControlCommandRoutingKey = "command.device";
+
     // MQTT шаблоны топиков
     public const string MqttDeviceCommandPattern = "domovoy/{0}/command";
     public const string MqttDeviceStatePattern = "domovoy/{0}/state";
