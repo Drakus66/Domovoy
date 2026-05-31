@@ -34,3 +34,18 @@ public sealed record DeviceCommandV1(
 public sealed record DeviceOnlineChangedV1(
     Guid DeviceId,
     bool IsOnline);
+
+/// <summary>
+/// An automation rule fired (roadmap Epic 1A). Emitted by the AutomationService after evaluating a
+/// rule so the DbGateway can persist run history (AutoHistory) and the UI can show "why" (Epic 1F).
+/// </summary>
+/// <remarks>Envelope type: <see cref="MessageTypes.AutomationTriggered"/>.</remarks>
+public sealed record AutomationTriggeredV1(
+    string RuleId,
+    string RuleName,
+    DateTimeOffset FiredAt,
+    bool ConditionsMet,
+    bool Success,
+    string TriggerSummary,
+    int ActionsExecuted,
+    string? Detail = null);

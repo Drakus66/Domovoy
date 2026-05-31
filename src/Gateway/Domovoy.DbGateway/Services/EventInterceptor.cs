@@ -4,6 +4,7 @@ using System.Text.Json;
 
 using Domovoy.Contracts.Capabilities;
 using Domovoy.Contracts.Messaging;
+using Domovoy.DbGateway.Endpoints;
 using Domovoy.DbGateway.Models;
 using Domovoy.MessageBus;
 using MongoDB.Driver;
@@ -78,6 +79,13 @@ public class EventInterceptor : BackgroundService
             BusTopology.CommandsExchange,
             BusTopology.DeviceCommandKey,
             HandleDeviceCommand);
+
+        // Automation run history (Epic 1A) — persisted from AutomationTriggeredV1.
+        await _messageBus.SubscribeAsync<Envelope<AutomationTriggeredV1>>(
+            "dbgateway-automation-history",
+            BusTopology.EventsExchange,
+            BusTopology.AutomationTriggeredKey,
+            HandleAutomationTriggered);
 
         _logger.LogInformation("EventInterceptor subscriptions complete");
     }
@@ -256,6 +264,31 @@ public class EventInterceptor : BackgroundService
 
         if (logs.Count > 0) await EventLog.InsertManyAsync(logs);
         if (readings.Count > 0) await Telemetry.InsertManyAsync(readings);
+    }
+
+    private async Task HandleAutomationTriggered(Envelope<AutomationTriggeredV1> envelope)
+    {
+        var e = envelope.Data;
+        if (e is null) return;
+
+        try
+        {
+            await _database.GetCollection<AutoHistory>(AutomationEndpoints.HistoryCollection).InsertOneAsync(new AutoHistory
+            {
+                Timestamp = e.FiredAt.UtcDateTime,
+                RuleId = e.RuleId,
+                RuleName = e.RuleName,
+                ConditionsMet = e.ConditionsMet,
+                Success = e.Success,
+                TriggerSummary = e.TriggerSummary,
+                ActionsExecuted = e.ActionsExecuted,
+                Detail = e.Detail,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error persisting automation history for rule {RuleId}", e.RuleId);
+        }
     }
 
     private IMongoCollection<DeviceEventLog> EventLog =>

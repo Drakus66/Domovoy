@@ -101,6 +101,29 @@ services:
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
     restart: unless-stopped
 
+  # Deterministic automation engine (Epic 1A): subscribes to device state, fires trigger→condition→action
+  # rules, runs cron/sun schedules, and the non-disableable safety floor. Loads rules from db-gateway.
+  automation-service:
+    container_name: automation-service
+    image: ${DOCKER_REGISTRY-}automation-service
+    build:
+      context: .
+      dockerfile: src/Services/Domovoy.AutomationService/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      db-gateway:
+        condition: service_started
+    networks:
+      - domovoy-network
+    environment:
+      - RABBITMQ__HOSTNAME=rabbitmq
+      - RABBITMQ__PORT=5672
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      - AUTOMATION__DBGATEWAYBASEURL=http://db-gateway:8080
+    restart: unless-stopped
+
   webui:
     container_name: webui
     image: ${DOCKER_REGISTRY-}webui
