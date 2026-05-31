@@ -7,16 +7,16 @@ networks:
 services:
   # ============ Application Services ============
 
-  device-service:
-    container_name: device-service
-    image: ${DOCKER_REGISTRY-}device-service
+  # Subscribes to the capability contract on the bus and re-emits normalized state for SignalR/persist.
+  # No HTTP/MQTT — RabbitMQ AMQP only.
+  unified-device-service:
+    container_name: unified-device-service
+    image: ${DOCKER_REGISTRY-}unified-device-service
     build:
       context: .
-      dockerfile: src/Services/Domovoy.DeviceService/Dockerfile
+      dockerfile: src/Services/Domovoy.UnifiedDeviceService/Dockerfile
     depends_on:
       rabbitmq:
-        condition: service_healthy
-      mongodb:
         condition: service_healthy
     networks:
       - domovoy-network
@@ -25,10 +25,10 @@ services:
       - RABBITMQ__PORT=5672
       - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
-      - MQTT__BROKER=rabbitmq
-      - MQTT__PORT=1883
     restart: unless-stopped
 
+  # Owns the MQTT client; runs Zigbee2MQTT + Domovoy Native adapters and publishes the capability
+  # contract. Needs RabbitMQ (AMQP + MQTT broker), nothing else.
   connectivity-service:
     container_name: connectivity-service
     image: ${DOCKER_REGISTRY-}connectivity-service
@@ -71,6 +71,12 @@ services:
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - MONGODB__CONNECTIONSTRING=mongodb://mongodb:27017
       - MONGODB__DATABASENAME=domovoy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'dotnet Domovoy.DbGateway.dll' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
     restart: unless-stopped
 
   api-gateway:
@@ -93,45 +99,21 @@ services:
       - RABBITMQ__PORT=5672
       - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
-      - DBGATEWAY__BASEURL=http://db-gateway:8080
     restart: unless-stopped
 
-  # ============ Commented Services (Not yet implemented) ============
-
-  light-service:
-    container_name: light-service
-    image: ${DOCKER_REGISTRY-}light-service
+  webui:
+    container_name: webui
+    image: ${DOCKER_REGISTRY-}webui
     build:
-      context: .
-      dockerfile: src/Services/Domovoy.LightService/Dockerfile
+      context: src/UI/WebUI
+      dockerfile: Dockerfile
     depends_on:
-      rabbitmq:
-        condition: service_healthy
+      api-gateway:
+        condition: service_started
     networks:
       - domovoy-network
-    environment:
-      - RABBITMQ__HOSTNAME=rabbitmq
-      - RABBITMQ__PORT=5672
-      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
-      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
-    restart: unless-stopped
-
-  sensor-service:
-    container_name: sensor-service
-    image: ${DOCKER_REGISTRY-}sensor-service
-    build:
-      context: .
-      dockerfile: src/Services/Domovoy.SensorService/Dockerfile
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - domovoy-network
-    environment:
-      - RABBITMQ__HOSTNAME=rabbitmq
-      - RABBITMQ__PORT=5672
-      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
-      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+    ports:
+      - "80:80"
     restart: unless-stopped
 
   # ============ Infrastructure Services ============
@@ -194,34 +176,7 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # ============ Monitoring & Logging ============
-
-  promtail:
-    image: grafana/promtail:3.5.1
-    container_name: promtail
-    networks:
-      - domovoy-network
-    ports:
-      - "9080:9080"
-    volumes:
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./promtail-config.yaml:/etc/promtail/config.yml
-    command: -config.file=/etc/promtail/config.yml
-    privileged: true
-    restart: unless-stopped
-
-  loki:
-    image: grafana/loki:3.5.1
-    container_name: loki
-    networks:
-      - domovoy-network
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./loki-config.yaml:/etc/loki/local-config.yaml
-      - loki_data:/loki
-    restart: unless-stopped
+  # ============ Monitoring (Prometheus-only) ============
 
   prometheus:
     image: prom/prometheus:latest
@@ -233,27 +188,14 @@ services:
     volumes:
       - ./prometheus.yaml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=7d'
+      - '--storage.tsdb.retention.size=2GB'
+      - '--web.enable-lifecycle'
     depends_on:
       rabbitmq:
         condition: service_healthy
-    restart: unless-stopped
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    networks:
-      - domovoy-network
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      - prometheus
-      - loki
     restart: unless-stopped
 
   zigbee2mqtt:
@@ -263,9 +205,10 @@ services:
       - ./data/zigbee2mqtt:/app/data
       - /run/udev:/run/udev:ro
     ports:
-      - 8080:8080
+      - 8081:8080
     environment:
       - TZ=UTC
+    privileged: true
     networks:
       - domovoy-network
     restart: unless-stopped
@@ -276,6 +219,4 @@ services:
 volumes:
   mongodb_data:
   rabbitmq_data:
-  grafana_data:
   prometheus_data:
-  loki_data:

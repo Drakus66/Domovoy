@@ -1,0 +1,26 @@
+namespace Domovoy.Contracts.Native;
+
+using Domovoy.Contracts.Capabilities;
+
+/// <summary>
+/// Discovery announcement published by a native device to <see cref="NativeProtocol.AnnounceTopic"/>.
+/// The device declares its capabilities directly (capability-native), so the adapter maps it onto a
+/// <c>DeviceDescriptor</c> without any value translation.
+/// </summary>
+public sealed record NativeAnnounceV1
+{
+    /// <summary>Stable hardware id (MAC / chip id). Combined with the adapter source to derive the logical device id.</summary>
+    public required string DeviceId { get; init; }
+
+    /// <summary>Human-friendly device name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Optional model string.</summary>
+    public string? Model { get; init; }
+
+    /// <summary>Optional firmware version.</summary>
+    public string? Firmware { get; init; }
+
+    /// <summary>Capabilities the device exposes (on_off, brightness, temperature, …).</summary>
+    public IReadOnlyList<Capability> Capabilities { get; init; } = [];
+}

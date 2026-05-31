@@ -5,44 +5,93 @@
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
 
+// One physical board / shield fronts MANY logical devices over a single MQTT connection
+// (like a Zigbee2MQTT bridge). Each DomovoyDevice has its own deviceId, capabilities and topics:
+//   domovoy/native/<deviceId>/{announce,state,set,availability}
+// The board's MQTT client id is just the connection identifier — NOT a logical device.
 
-enum DeviceType {
-  generic,
-  light,
-  sensor,
-  switch_device // 'switch' is a keyword
+#ifndef DOMOVOY_MAX_CAPS
+#define DOMOVOY_MAX_CAPS 8       // max capabilities per device
+#endif
+#ifndef DOMOVOY_MAX_DEVICES
+#define DOMOVOY_MAX_DEVICES 16   // max devices per board
+#endif
+#ifndef DOMOVOY_ANNOUNCE_DOC_SIZE
+#define DOMOVOY_ANNOUNCE_DOC_SIZE 768  // per-device announce JSON document
+#endif
+
+// Receives the capability set { "<capabilityId>": <value>, ... } the server sent to this device.
+typedef void (*DeviceCommandCallback)(JsonObject set);
+
+/// <summary>One logical device: a stable id, a name and a set of capabilities.</summary>
+class DomovoyDevice {
+public:
+  DomovoyDevice(const char *deviceId, const char *name,
+                const char *model = nullptr, const char *firmware = nullptr);
+
+  void addCapability(const char *id, const char *kind, bool writable = false,
+                     const char *unit = nullptr, float minValue = NAN, float maxValue = NAN);
+  void addBoolean(const char *id, bool writable = false);
+  void addNumber(const char *id, const char *unit = nullptr,
+                 float minValue = NAN, float maxValue = NAN, bool writable = false);
+
+  void onCommand(DeviceCommandCallback cb) { _cb = cb; }
+  const char *id() const { return _id; }
+
+private:
+  friend class DomovoyHub;
+
+  struct Cap {
+    const char *id;
+    const char *kind;
+    bool writable;
+    const char *unit;
+    float minV;
+    float maxV;
+  };
+
+  const char *_id;
+  const char *_name;
+  const char *_model;
+  const char *_firmware;
+  Cap _caps[DOMOVOY_MAX_CAPS];
+  uint8_t _capCount = 0;
+  DeviceCommandCallback _cb = nullptr;
+
+  void writeAnnounce(JsonDocument &doc) const;
 };
 
-typedef void (*CommandCallback)(String deviceName, String action,
-                                JsonObject params);
-
-class DomovoyClient {
+/// <summary>Owns the MQTT connection for one board and routes to/from its devices.</summary>
+class DomovoyHub {
 public:
-  DomovoyClient(Client &client);
+  DomovoyHub(Client &net);
+
   void setServer(const char *server, uint16_t port);
-  void setCallback(CommandCallback callback);
   void setCredentials(const char *user, const char *password);
 
-  bool connect(const char *clientId);
+  bool addDevice(DomovoyDevice &device);
+
+  bool connect(const char *hubId); // hubId = MQTT client id of the board (not a logical device)
   void loop();
 
-  // Discovery
-  void announce(DeviceType type, const char *friendlyName, const char *uniqueId,
-                JsonObject metadata = JsonObject());
-
-  // State publishing
-  void publishState(const char *friendlyName, const char *payload);
-  void publishState(const char *friendlyName, JsonDocument &doc);
+  void announceAll();
+  void publishState(DomovoyDevice &device, JsonDocument &state);
+  void setAvailable(DomovoyDevice &device, bool online);
 
 private:
   PubSubClient _mqtt;
-  const char *_server;
-  uint16_t _port;
-  const char *_user;
-  const char *_password;
-  CommandCallback _callback;
+  const char *_user = nullptr;
+  const char *_password = nullptr;
+  const char *_hubId = "domovoy-hub";
+  DomovoyDevice *_devices[DOMOVOY_MAX_DEVICES];
+  uint8_t _deviceCount = 0;
 
-  void _mqttCallback(char *topic, byte *payload, unsigned int length);
+  static DomovoyHub *_active;
+  static void _bridge(char *topic, byte *payload, unsigned int length);
+  void handleMessage(char *topic, byte *payload, unsigned int length);
+  DomovoyDevice *findDevice(const char *deviceId);
+
+  static String topicFor(const char *deviceId, const char *suffix);
 };
 
 #endif

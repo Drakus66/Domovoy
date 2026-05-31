@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+        <DockerfileContext>..\..\..
+        </DockerfileContext>
+        <DockerComposeProjectPath>..\..\..\docker-compose.dcproj</DockerComposeProjectPath>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi"/>
+        <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets"/>
+        <PackageReference Include="RabbitMQ.Client"/>
+        <PackageReference Include="Microsoft.Extensions.Http"/>
+        <PackageReference Include="prometheus-net"/>
+        <PackageReference Include="Serilog"/>
+        <PackageReference Include="Serilog.Extensions.Hosting"/>
+        <PackageReference Include="Serilog.Sinks.Console"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\Common\Domovoy.Common\Domovoy.Common.csproj"/>
+        <ProjectReference Include="..\..\Common\Domovoy.MessageBus\Domovoy.MessageBus.csproj"/>
+        <ProjectReference Include="..\..\Common\Domovoy.Contracts\Domovoy.Contracts.csproj"/>
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,21 @@
+import { Box, Toolbar } from '@mui/material';
+import { Outlet } from 'react-router-dom';
+import Navigation from './Navigation';
+import ErrorBoundary from '../common/ErrorBoundary';
+
+function Layout() {
+  return (
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+      <Navigation />
+      <Box component="main" sx={{ flexGrow: 1, minWidth: 0 }}>
+        {/* Spacer to clear the fixed mobile AppBar (no-op on desktop sidebar layout). */}
+        <Toolbar sx={{ display: { xs: 'block', md: 'none' } }} />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
+      </Box>
+    </Box>
+  );
+}
+
+export default Layout;

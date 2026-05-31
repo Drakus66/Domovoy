@@ -11,6 +11,8 @@ EXPOSE 8081
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
+# Central package versions live here — must be present before restore so versions stay pinned.
+COPY ["Directory.Packages.props", "./"]
 COPY ["src/Services/Domovoy.Connectivity/Domovoy.Connectivity.csproj", "src/Services/Domovoy.Connectivity/"]
 COPY ["src/Common/Domovoy.Common/Domovoy.Common.csproj", "src/Common/Domovoy.Common/"]
 COPY ["src/Common/Domovoy.MessageBus/Domovoy.MessageBus.csproj", "src/Common/Domovoy.MessageBus/"]

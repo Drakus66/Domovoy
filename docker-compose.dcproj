@@ -5,6 +5,8 @@
         <DockerTargetOS>Linux</DockerTargetOS>
         <DockerPublishLocally>False</DockerPublishLocally>
         <ProjectGuid>958addfd-372e-4b7a-82fe-2ddf58e4acf9</ProjectGuid>
+        <Configurations>Debug;Release</Configurations>
+        <Platforms>AnyCPU;x64;x86</Platforms>
     </PropertyGroup>
     <ItemGroup>
         <None Include="docker-compose.override.yml">
@@ -20,4 +22,4 @@
         <Content Include="prometheus.yaml" />
         <Content Include="promtail-config.yaml" />
     </ItemGroup>
-</Project>
+    </Project>

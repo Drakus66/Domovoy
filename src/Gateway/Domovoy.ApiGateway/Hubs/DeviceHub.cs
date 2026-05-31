@@ -41,4 +41,28 @@ public class DeviceHub : Hub
     {
         await Clients.All.SendAsync("DeviceDiscovered", deviceId, deviceType, name);
     }
+
+    /// <summary>
+    /// Sends Zigbee bridge online/offline state to all connected clients
+    /// </summary>
+    public async Task SendZigbeeBridgeStateChanged(bool isOnline)
+    {
+        await Clients.All.SendAsync("ZigbeeBridgeStateChanged", isOnline);
+    }
+
+    /// <summary>
+    /// Sends Zigbee permit-join status update (active flag + remaining seconds)
+    /// </summary>
+    public async Task SendZigbeePermitJoinChanged(bool active, int remainingSeconds)
+    {
+        await Clients.All.SendAsync("ZigbeePermitJoinChanged", active, remainingSeconds);
+    }
+
+    /// <summary>
+    /// Sends a Zigbee network event (device_joined, device_leave, etc.)
+    /// </summary>
+    public async Task SendZigbeeNetworkEvent(string eventType, string friendlyName, string ieeeAddress)
+    {
+        await Clients.All.SendAsync("ZigbeeNetworkEvent", eventType, friendlyName, ieeeAddress);
+    }
 }

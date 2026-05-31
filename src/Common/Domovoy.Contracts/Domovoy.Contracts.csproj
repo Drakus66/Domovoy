@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Domovoy.Contracts — the single, versioned contract shared by services, plugins and ML.
+      Roadmap P0-1/P0-2. Pure POCO/record types only: NO external package references and
+      NO dependency on Domovoy.Common, so any process (incl. polyglot plugins) can bind to it.
+      System.Text.Json is available via the shared framework (no PackageReference needed).
+    -->
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!-- Constant vocabularies carry inline comments; don't require XML docs on every member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+
+</Project>
