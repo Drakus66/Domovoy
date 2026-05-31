@@ -10,6 +10,7 @@ import ArticleRoundedIcon from '@mui/icons-material/ArticleRounded';
 import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
 import BluetoothSearchingRoundedIcon from '@mui/icons-material/BluetoothSearchingRounded';
 import RoomRoundedIcon from '@mui/icons-material/RoomRounded';
+import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import ColorModeToggle from '../theme/ColorModeToggle';
 
 const DRAWER_WIDTH = 248;
@@ -17,6 +18,7 @@ const DRAWER_WIDTH = 248;
 const navItems = [
   { label: 'Dashboard', path: '/', icon: <SpaceDashboardRoundedIcon /> },
   { label: 'Zones', path: '/zones', icon: <RoomRoundedIcon /> },
+  { label: 'Automations', path: '/automations', icon: <BoltRoundedIcon /> },
   { label: 'Zigbee', path: '/zigbee', icon: <BluetoothSearchingRoundedIcon /> },
   { label: 'System Status', path: '/status', icon: <MonitorHeartRoundedIcon /> },
   { label: 'Logs', path: '/logs', icon: <ArticleRoundedIcon /> },
