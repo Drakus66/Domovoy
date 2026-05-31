@@ -28,11 +28,16 @@
 
 ---
 
-# Фаза 0 — Фундамент (СЕЙЧАС)
+# Фаза 0 — Фундамент (фундамент заложен)
 
 **Цель фазы:** привести ядро в состояние, пригодное для роста: единый контракт, обобщённая модель устройства, чистый data-path, базовая безопасность. Без этого автоматизации/ML/плагины «зацементируют» текущий технический долг.
 
 **Выход фазы:** новое устройство любого домена описывается через capability-модель; все события ходят в едином конверте; история событий копится; есть базовая аутентификация.
+
+> **Статус фазы (на 2026-06-01): функционально закрыта.** P0-1 ✅ · P0-2 ✅ · P0-3 ✅ · P0-4 🚧 (код готов,
+> остаётся интеграционный тест сквозного пути) · P0-5 ✅ · P0-6 ✅. Все .NET-проекты + WebUI (`tsc`/lint/тесты)
+> зелёные. **Сквозной рантайм против реального RabbitMQ/Mongo/Zigbee не прогонялся** — см. `docs/runbook.md`.
+> Работа идёт уже в Фазе 1 (Эпик 1A сделан).
 
 > **Ход исполнения (capability-миграция, на 2026-05-27).** Аддитивно, инкрементально, сборка зелёная:
 > 1. ✅ `Domovoy.Contracts` — конверт `Envelope<T>` (CloudEvents), **открытая capability-модель**, `BusTopology` (единое именование), детерминированные id (`DeviceIdFactory`).
@@ -45,17 +50,17 @@
 >
 > Не проверено вживую (нет RabbitMQ/Mongo/Zigbee): рантайм-потоки и Mongo-сериализация. Проводной контракт валидируется собирающимся эмулятором. Пошаговый статус — `src/Common/Domovoy.Contracts/README.md`.
 
-### P0-1. Единый версионируемый контракт событий и команд 🚧
-- Ввести конверт сообщений в стиле **CloudEvents** (`id`, `type`, `source`, `subject`, `time`, `dataschema`, `data`).
-- Завести пакет-контракт `Domovoy.Contracts` (схемы событий/команд + версии), от которого зависят все сервисы и будущие плагины.
-- Зафиксировать единое именование шины (сейчас смешаны `domovoy.*` / `device.*` / `domovoy/...`) — выбрать одну конвенцию и описать в `docs/architecture/message_bus_ru.md`.
-- **DoD:** все publish/subscribe в `UnifiedDeviceService`, `Connectivity`, `ApiGateway`, `DbGateway` используют константы из `Domovoy.Contracts`; нет «магических строк» в коде; схемы версионированы (`v1`).
+### P0-1. Единый версионируемый контракт событий и команд ✅
+- ✅ Конверт сообщений в стиле **CloudEvents** ([Envelope](../../src/Common/Domovoy.Contracts/Messaging/Envelope.cs): `id`, `specversion`, `type`, `source`, `subject`, `time`, `correlationid`, `data`).
+- ✅ Пакет-контракт `Domovoy.Contracts` (payload-схемы + `MessageTypes` с версией `.v1`), от которого зависят все сервисы.
+- ✅ Единое именование шины кодифицировано в [BusTopology](../../src/Common/Domovoy.Contracts/Messaging/BusTopology.cs) (dotted `domovoy.<domain>` exchanges + dotted routing keys) — все продьюсеры/консьюмеры используют константы, «магических строк» нет. Отдельный `message_bus_ru.md` не писали — конвенция живёт в коде (источник истины).
+- **DoD:** все publish/subscribe в сервисах/шлюзах используют константы из `Domovoy.Contracts`; схемы версионированы (`v1`). ✅
 
-### P0-2. Capability-модель устройства вместо закрытого enum 🚧
-- Заменить закрытый тип (`Light/Sensor/Switch/Generic` в [IDeviceTypeHandler](../../src/Common/Domovoy.Common/Services/IDeviceTypeHandler.cs)) на набор **возможностей**: `on_off`, `brightness`, `color`, `color_temp`, `temperature_setpoint`, `humidity`, `co2`, `presence`, `lock`, `valve`, `battery`, `camera_stream` (расширяемый список).
-- Устройство = идентичность + список capability + текущее состояние по каждой capability.
-- Стратегию-обработчик переориентировать с «типа устройства» на «возможность» (handler per capability), сохранив существующий strategy-подход.
-- **DoD:** климат-зона, клапан полива и замок выражаются без добавления новых enum-значений; discovery Zigbee2MQTT мапит описание устройства в набор capability.
+### P0-2. Capability-модель устройства вместо закрытого enum ✅
+- ✅ Закрытый тип (`Light/Sensor/Switch/Generic` + `IDeviceTypeHandler`) **удалён** (Шаг 5); вместо него — **открытая** модель [Capability](../../src/Common/Domovoy.Contracts/Capabilities/Capability.cs) `(id, kind, attrs)` + [WellKnownCapabilities](../../src/Common/Domovoy.Contracts/Capabilities/WellKnownCapabilities.cs) (`on_off`, `brightness`, `color_temp`, `temperature`, `humidity`, `co2`, `presence`, `lock`, `valve`, `battery`, … — расширяемый, не enum).
+- ✅ Устройство = [DeviceDescriptor](../../src/Common/Domovoy.Contracts/Devices/DeviceDescriptor.cs) (идентичность + список capability) + состояние по каждой capability.
+- ✅ Кодек живёт per-adapter (Z2M `exposes`→capabilities decode/encode), а не «handler per device-type» — расширение без перекомпиляции ядра.
+- **DoD:** климат-зона, клапан полива и замок выражаются без новых enum-значений; discovery Zigbee2MQTT мапит описание устройства в набор capability. ✅
 
 ### P0-3. Зоны/участок как first-class сущность ✅
 - ✅ Модель [Zone](../../src/Gateway/Domovoy.DbGateway/Models/Zone.cs) (граф area через `ParentZoneId`: этаж → комната; участок → грядка/газон/въезд) в коллекции `zones`; старый неиспользуемый `Location.cs` удалён.
@@ -66,9 +71,10 @@
 - **DoD:** устройство имеет зону; можно получить устройства по зоне (`?zoneId=`); UI показывает группировку по зонам. ✅ (рантайм-проверка с Mongo не прогонялась.)
 
 ### P0-4. Единый data-path и устранение дубль-моделей 🚧
-- Свести два несогласованных набора (`Common.Models.Devices.*` ↔ `DbGateway.Models.*`) к контракту из P0-1 + явный маппинг на персистентную модель.
-- Довести state-path до конца (см. исправления в `currentState.md`): живое состояние → `UpdateDeviceState` → персист + SignalR без рассинхрона.
-- **DoD:** одно изменение состояния устройства проходит весь путь (адаптер → шина → персист в Mongo → SignalR в UI) в интеграционном тесте.
+- ✅ Дубль-модели сняты: старые `Common.Models.Devices.*` и `DbGateway.Models.Device/Light/Sensor` удалены (Шаг 5); единый контракт P0-1 + персистентная read-модель `CapabilityDeviceDocument`.
+- ✅ State-path доведён: адаптер → `DeviceStateReportV1` на шине → `CapabilityDeviceManager` → SignalR **и** `EventInterceptor` → персист в Mongo (`capability_devices` + event-log P0-5), без рассинхрона.
+- 🚧 **Остаётся:** интеграционный тест сквозного пути (адаптер → шина → Mongo → SignalR). Сам путь в коде готов и собирается, но автоматического теста ещё нет — поэтому пункт не закрыт.
+- **DoD:** одно изменение состояния проходит весь путь в **интеграционном тесте** (← не выполнено; код-путь готов, тест отсутствует).
 
 ### P0-5. Журнал событий (event-log) как реплейабельный feature store — начать копить данные ✅
 
@@ -109,9 +115,12 @@
 
 ---
 
-# Фаза 1 — Автоматизация и платформа данных (ближайшее)
+# Фаза 1 — Автоматизация и платформа данных (СЕЙЧАС)
 
 **Цель фазы:** продукт начинает работать «по сценариям» сам; появляется фундамент данных для ML и SDK для расширений.
+
+> **Статус фазы (на 2026-06-01):** 1A ✅ (AutomationService) · 1H ⬜ дизайн зафиксирован · 1B/1C/1D/1E/1F/1G ⬜.
+> Рантайм против реального RabbitMQ/Mongo не прогонялся.
 
 ### Эпик 1A. AutomationService — детерминированный движок ✅
 Отдельный сервис, подписан на шину, держит состояние правил.
@@ -274,8 +283,8 @@ E2 (композит) и конфигом-инстансом на уровне E
 
 | Фаза | Горизонт | Ключевой результат | Главные компоненты |
 |---|---|---|---|
-| **0. Фундамент** | сейчас | ядро пригодно к росту | контракт, capability-модель, зоны, event-log (Mongo TS), снятие auth-трения + чистка |
-| **1. Автоматизация** | ближайшее | дом работает по сценариям; копятся данные; действия объяснимы | AutomationService (1A ✅), control blocks (1H), TSDB (1B), Integration SDK (1C), climate/heating/irrigation адаптеры (1D), объяснимость+реплей (1F), режимы дома (1G) |
+| **0. Фундамент** | ✅ заложен | ядро пригодно к росту | контракт, capability-модель, зоны, event-log (Mongo TS), снятие auth-трения + чистка |
+| **1. Автоматизация** | сейчас | дом работает по сценариям; копятся данные; действия объяснимы | AutomationService (1A ✅), control blocks (1H, дизайн), TSDB (1B), Integration SDK (1C), climate/heating/irrigation адаптеры (1D), объяснимость+реплей (1F), режимы дома (1G) |
 | **2. Интеллект** | среднесрочно | подсказки ML + внешние устройства + доступ | ML shadow→предложения, cloud-плагины, полная безопасность, замки |
 | **3. Автономность** | долгосрочно | самоуправление + голос + видео | видеоаналитика, голосовой ассистент, active-ML, Matter/Thread |
 
