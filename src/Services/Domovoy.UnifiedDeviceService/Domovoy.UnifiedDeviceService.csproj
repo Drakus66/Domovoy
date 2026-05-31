@@ -15,6 +15,7 @@
         <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets"/>
         <PackageReference Include="RabbitMQ.Client"/>
         <PackageReference Include="Microsoft.Extensions.Http"/>
+        <PackageReference Include="prometheus-net"/>
         <PackageReference Include="Serilog"/>
         <PackageReference Include="Serilog.Extensions.Hosting"/>
         <PackageReference Include="Serilog.Sinks.Console"/>
@@ -23,6 +24,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\Common\Domovoy.Common\Domovoy.Common.csproj"/>
         <ProjectReference Include="..\..\Common\Domovoy.MessageBus\Domovoy.MessageBus.csproj"/>
+        <ProjectReference Include="..\..\Common\Domovoy.Contracts\Domovoy.Contracts.csproj"/>
     </ItemGroup>
 
 </Project>

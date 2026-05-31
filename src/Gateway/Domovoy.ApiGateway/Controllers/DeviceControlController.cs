@@ -1,19 +1,15 @@
-using Domovoy.Common.Configuration;
-using Domovoy.Common.Models.Commands;
-using Domovoy.Common.Models.Enums;
+using System.Text.Json;
+
+using Domovoy.Contracts.Messaging;
 using Domovoy.MessageBus;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Domovoy.ApiGateway.Controllers;
 
 /// <summary>
-/// Generic device control endpoint used by the WebUI dashboard.
-/// Publishes a <see cref="DeviceCommand"/> to the message bus with a "command.*" routing key
-/// so that UnifiedDeviceManager receives it, enriches it with the device's stored metadata
-/// (command_topic, adapter source, …) and forwards it to the Connectivity service.
-///
-/// This replaces the old Ocelot route that proxied /api/device-control to the now-removed
-/// standalone DeviceService.
+/// Capability-addressed device control. Publishes <see cref="DeviceCommandV1"/> on the canonical bus
+/// topology; the owning adapter (Zigbee2MQTT, Domovoy Native) encodes the capability set into the
+/// device's protocol and applies it.
 /// </summary>
 [ApiController]
 [Route("api/device-control")]
@@ -28,50 +24,37 @@ public class DeviceControlController : ControllerBase
         _logger = logger;
     }
 
-    [HttpPost("command")]
-    public async Task<IActionResult> SendCommand([FromBody] DeviceControlRequest request)
+    /// <summary>
+    /// Apply a capability set to a device, e.g. body: <c>{ "on_off": true, "brightness": 50 }</c>.
+    /// </summary>
+    [HttpPost("{id}/set")]
+    public async Task<IActionResult> SetCapabilities(string id, [FromBody] Dictionary<string, JsonElement> set)
     {
-        if (request is null || string.IsNullOrWhiteSpace(request.DeviceId))
-            return BadRequest(new { error = "deviceId is required" });
+        if (!Guid.TryParse(id, out var deviceId))
+            return BadRequest(new { error = $"deviceId '{id}' is not a valid GUID" });
+        if (set is null || set.Count == 0)
+            return BadRequest(new { error = "a non-empty capability set is required" });
 
-        if (!Guid.TryParse(request.DeviceId, out var deviceId))
-            return BadRequest(new { error = $"deviceId '{request.DeviceId}' is not a valid GUID" });
+        var normalized = set.ToDictionary(kv => kv.Key, kv => Normalize(kv.Value));
 
-        var command = new DeviceCommand
-        {
-            DeviceId = deviceId,
-            CommandTypes = MapCommandType(request.Command),
-            Parameters = request.Parameters is null
-                ? new Dictionary<string, object>()
-                : new Dictionary<string, object>(request.Parameters),
-            Source = "ApiGateway",
-        };
+        var envelope = Envelope<DeviceCommandV1>.Create(
+            MessageTypes.DeviceCommand,
+            source: "apigateway",
+            data: new DeviceCommandV1(deviceId, normalized),
+            subject: id);
 
-        await _messageBus.PublishAsync(
-            MessageBusConfiguration.DeviceCommandsExchange,
-            MessageBusConfiguration.DeviceControlCommandRoutingKey,
-            command);
+        await _messageBus.PublishAsync(BusTopology.CommandsExchange, BusTopology.DeviceCommandKey, envelope);
 
-        _logger.LogInformation(
-            "Device control command {Command} ({CommandType}) published for device {DeviceId}",
-            request.Command, command.CommandTypes, deviceId);
-
-        return Accepted(new { correlationId = command.CorrelationId, deviceId = request.DeviceId });
+        _logger.LogInformation("Capability command published for {DeviceId}: {Caps}", deviceId, string.Join(", ", set.Keys));
+        return Accepted(new { deviceId = id, capabilities = set.Keys });
     }
 
-    private static DeviceCommandTypes MapCommandType(string? command) =>
-        (command ?? string.Empty).Trim().ToLowerInvariant() switch
-        {
-            "getstate" => DeviceCommandTypes.GetState,
-            "updateconfiguration" or "configure" => DeviceCommandTypes.UpdateConfiguration,
-            "identify" => DeviceCommandTypes.Identify,
-            // toggle / setbrightness / setcolor / setstate / on / off / … are all state changes
-            _ => DeviceCommandTypes.SetState,
-        };
+    private static object? Normalize(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        JsonValueKind.Number => value.TryGetInt64(out var l) ? l : value.GetDouble(),
+        JsonValueKind.String => value.GetString(),
+        _ => null
+    };
 }
-
-/// <summary>Matches the WebUI <c>DeviceCommand</c> payload: { deviceId, command, parameters }.</summary>
-public record DeviceControlRequest(
-    string DeviceId,
-    string? Command,
-    Dictionary<string, object>? Parameters);

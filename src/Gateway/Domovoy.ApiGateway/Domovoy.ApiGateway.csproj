@@ -16,12 +16,8 @@
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
         <PackageReference Include="Microsoft.AspNetCore.SignalR" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Yaml" />
         <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
         <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" />
-        <PackageReference Include="Ocelot" />
-        <PackageReference Include="Ocelot.Cache.CacheManager" />
-        <PackageReference Include="Ocelot.Provider.Polly" />
         <PackageReference Include="Prometheus.Client.AspNetCore" />
         <PackageReference Include="Serilog" />
         <PackageReference Include="Serilog.AspNetCore" />
@@ -36,12 +32,7 @@
     <ItemGroup>
       <ProjectReference Include="..\..\Common\Domovoy.Common\Domovoy.Common.csproj" />
       <ProjectReference Include="..\..\Common\Domovoy.MessageBus\Domovoy.MessageBus.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <Content Update="ocelot.yml">
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </Content>
+      <ProjectReference Include="..\..\Common\Domovoy.Contracts\Domovoy.Contracts.csproj" />
     </ItemGroup>
 
 </Project>

@@ -1,27 +1,25 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { ThemeProvider } from '@mui/material/styles';
+import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material/styles';
 import theme from './theme';
 import App from './App';
 
 describe('App', () => {
   it('renders without crashing', () => {
     render(
-      <ThemeProvider theme={theme}>
+      <CssVarsProvider theme={theme}>
         <App />
-      </ThemeProvider>
+      </CssVarsProvider>
     );
-    // Check for navigation bar
     expect(screen.getAllByText('Domovoy').length).toBeGreaterThan(0);
   });
 
-  it('renders Dashboard page by default', () => {
+  it('renders the Devices page by default', () => {
     render(
-      <ThemeProvider theme={theme}>
+      <CssVarsProvider theme={theme}>
         <App />
-      </ThemeProvider>
+      </CssVarsProvider>
     );
-    // Check for Dashboard heading (h1 element with variant h4)
-    expect(screen.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Devices', level: 1 })).toBeInTheDocument();
   });
 });

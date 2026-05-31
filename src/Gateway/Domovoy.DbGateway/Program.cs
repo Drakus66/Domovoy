@@ -2,17 +2,15 @@ namespace Domovoy.DbGateway;
 
 using Config;
 using Domovoy.DbGateway.Serializers;
-using Domovoy.DbGateway.Repositories;
 using Endpoints;
 using MessageBus;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
 using MongoDB.Driver;
+using Prometheus;
 using Serilog;
-using System.Text.Json;
 
 using Domovoy.Common.Logging;
-using Domovoy.DbGateway.Models;
 
 internal static class Program
 {
@@ -57,10 +55,6 @@ internal static class Program
             // Add EventInterceptor as a hosted service
             builder.Services.AddHostedService<Services.EventInterceptor>();
 
-            // Register repositories
-            builder.Services.AddSingleton<IBaseRepository<Device>, DeviceRepository>();
-            builder.Services.AddSingleton<IDeviceRepository, DeviceRepository>();
-
             // Add services to the container
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddOpenApi();
@@ -73,8 +67,14 @@ internal static class Program
                 app.MapOpenApi();
             }
 
+            // Prometheus: collect per-request HTTP metrics and expose them on /metrics (port 8080).
+            app.UseHttpMetrics();
+
             // Map endpoints
-            app.MapDeviceEndpoints();
+            app.MapCapabilityDeviceEndpoints();
+            app.MapZoneEndpoints();
+            app.MapHistoryEndpoints();
+            app.MapMetrics();
 
             // Health check endpoint
             app.MapGet("/health", () => Results.Ok("Healthy"))

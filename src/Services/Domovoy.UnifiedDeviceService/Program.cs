@@ -2,15 +2,10 @@ namespace Domovoy.UnifiedDeviceService;
 
 using Services;
 using MessageBus;
-using Common.Configuration;
-using Domovoy.Common.Services;
-using Domovoy.Common.Services.Handlers;
 using Microsoft.Extensions.DependencyInjection;
+using Prometheus;
 using Serilog;
 using Domovoy.Common.Logging;
-using Microsoft.Extensions.Options;
-
-using Domovoy.UnifiedDeviceService.Services.Identity;
 
 internal static class Program
 {
@@ -24,32 +19,23 @@ internal static class Program
             hostBuilder.ConfigureSerilog();
             hostBuilder.ConfigureServices((context, services) =>
             {
-                // Configure HttpClient for DbGateway
-                BaseService.ConfigureHttpClient(services, context.Configuration);
-                
-                services.AddHttpClient();
-                services.Configure<ServiceEndpoints>(context.Configuration.GetSection("ServiceEndpoints"));
-                services.Configure<BaseServiceOptions>(context.Configuration.GetSection("BaseService"));
-                
                 // Configure RabbitMQ
                 services.Configure<RabbitMqConfig>(context.Configuration.GetSection("RabbitMQ"));
-                
+
                 // Register message bus
                 services.AddSingleton<IMessageBus, RabbitMqConnection>();
 
-                // Register device type handlers
-                services.AddSingleton<IDeviceTypeHandler, GenericDeviceHandler>();
-                services.AddSingleton<IDeviceTypeHandler, LightDeviceHandler>();
-                services.AddSingleton<IDeviceTypeHandler, SensorDeviceHandler>();
-                
-                // Register identity resolver
-                services.AddSingleton<IDeviceIdentityResolver, DeviceIdentityResolver>();
-
-                // Register the unified manager
-                services.AddHostedService<UnifiedDeviceManager>();
+                // Capability-contract consumer — sole device-management path after roadmap Step 5.
+                services.AddHostedService<CapabilityDeviceManager>();
             });
 
             var host = hostBuilder.Build();
+
+            // Generic host has no Kestrel of its own — expose Prometheus metrics on a standalone
+            // server (:9090) so Prometheus can scrape this service like the others.
+            var metricServer = new MetricServer(port: 9090);
+            metricServer.Start();
+
             host.Run();
         }
         catch (Exception ex)

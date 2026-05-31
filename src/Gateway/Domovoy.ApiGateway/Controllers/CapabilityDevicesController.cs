@@ -1,0 +1,64 @@
+using Microsoft.AspNetCore.Mvc;
+
+namespace Domovoy.ApiGateway.Controllers;
+
+/// <summary>
+/// Thin reverse proxy for the capability device read-model. Forwards requests to the DbGateway
+/// read endpoints (<c>/api/capability-devices</c>). Replaces the former single Ocelot route now
+/// that the gateway is uniformly endpoint-routed — there is no terminal Ocelot middleware to
+/// shadow the in-process controllers and SignalR hub.
+/// </summary>
+[ApiController]
+[Route("api/capability-devices")]
+public class CapabilityDevicesController : ControllerBase
+{
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public CapabilityDevicesController(IHttpClientFactory httpClientFactory)
+        => _httpClientFactory = httpClientFactory;
+
+    /// <summary>List the read-model, optionally filtered by <paramref name="zoneId"/> (P0-3).</summary>
+    [HttpGet]
+    public Task<IActionResult> List([FromQuery] string? zoneId, CancellationToken ct)
+    {
+        var path = zoneId is null
+            ? "api/capability-devices"
+            : $"api/capability-devices?zoneId={Uri.EscapeDataString(zoneId)}";
+        return Forward(HttpMethod.Get, path, ct);
+    }
+
+    /// <summary>Fetch a single capability device by id.</summary>
+    [HttpGet("{id}")]
+    public Task<IActionResult> Get(string id, CancellationToken ct)
+        => Forward(HttpMethod.Get, $"api/capability-devices/{Uri.EscapeDataString(id)}", ct);
+
+    /// <summary>Bind the device to a zone (or unassign). Body: <c>{ "zoneId": "..." }</c> (P0-3).</summary>
+    [HttpPut("{id}/zone")]
+    public Task<IActionResult> AssignZone(string id, CancellationToken ct)
+        => Forward(HttpMethod.Put, $"api/capability-devices/{Uri.EscapeDataString(id)}/zone", ct);
+
+    private async Task<IActionResult> Forward(HttpMethod method, string relativePath, CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient("db-gateway");
+        using var request = new HttpRequestMessage(method, relativePath);
+
+        if (method == HttpMethod.Put || method == HttpMethod.Post)
+        {
+            Request.EnableBuffering();
+            Request.Body.Position = 0;
+            using var reader = new StreamReader(Request.Body, leaveOpen: true);
+            var body = await reader.ReadToEndAsync(ct);
+            request.Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+        }
+
+        using var upstream = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        var responseBody = await upstream.Content.ReadAsStringAsync(ct);
+
+        return new ContentResult
+        {
+            StatusCode = (int)upstream.StatusCode,
+            Content = string.IsNullOrEmpty(responseBody) ? null : responseBody,
+            ContentType = upstream.Content.Headers.ContentType?.ToString() ?? "application/json",
+        };
+    }
+}

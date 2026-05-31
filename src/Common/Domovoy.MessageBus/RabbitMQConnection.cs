@@ -64,15 +64,11 @@ public class RabbitMqConnection : IMessageBus
             _connection = factory.CreateConnectionAsync().Result;
             _channel = _connection.CreateChannelAsync().Result;
 
-            if (_useMqtt)
-            {
-                ConfigureMqttExchanges().Wait();
-                _logger.LogInformation("Successfully connected to RabbitMQ (MQTT-compatible mode) on port {Port}", factory.Port);
-            }
-            else
-            {
-                _logger.LogInformation("Successfully connected to RabbitMQ using AMQP protocol on port {Port}", factory.Port);
-            }
+            _logger.LogInformation(
+                "Successfully connected to RabbitMQ ({Mode}) on port {Port}",
+                _useMqtt ? "MQTT-compatible" : "AMQP",
+                factory.Port);
+            // Exchanges are declared lazily on first PublishAsync (topic, durable).
         }
         catch (Exception ex)
         {
@@ -112,64 +108,6 @@ public class RabbitMqConnection : IMessageBus
                 throw; // Re-throw as we weren't trying MQTT in the first place
             }
         }
-    }
-
-    private async Task ConfigureMqttExchanges()
-    {
-        // Configure the discovery exchange
-        await _channel.ExchangeDeclareAsync(
-            MessageBusConfiguration.DeviceDiscoveryExchange,
-            "topic",
-            durable: true,
-            arguments: new Dictionary<string, object>
-            {
-                { "mqtt-subscription-qos", 1 },
-                { "mqtt-subscription-retain", true }
-            }!);
-
-        // Configure the device commands exchange
-        await _channel.ExchangeDeclareAsync(
-            MessageBusConfiguration.DeviceCommandsExchange,
-            "topic",
-            durable: true,
-            arguments: new Dictionary<string, object>
-            {
-                { "mqtt-subscription-qos", 1 },
-                { "mqtt-subscription-retain", true }
-            }!);
-
-        // Configure the device events exchange
-        await _channel.ExchangeDeclareAsync(
-            MessageBusConfiguration.DeviceEventsExchange,
-            "topic",
-            durable: true,
-            arguments: new Dictionary<string, object>
-            {
-                { "mqtt-subscription-qos", 1 },
-                { "mqtt-subscription-retain", true }
-            }!);
-
-        // Configure the device data exchange
-        await _channel.ExchangeDeclareAsync(
-            MessageBusConfiguration.DeviceDataExchange,
-            "topic",
-            durable: true,
-            arguments: new Dictionary<string, object>
-            {
-                { "mqtt-subscription-qos", 0 },
-                { "mqtt-subscription-retain", false }
-            }!);
-
-        // Configure the device availability exchange
-        await _channel.ExchangeDeclareAsync(
-            MessageBusConfiguration.DeviceAvailabilityExchange,
-            "topic",
-            durable: true,
-            arguments: new Dictionary<string, object>
-            {
-                { "mqtt-subscription-qos", 1 },
-                { "mqtt-subscription-retain", true }
-            }!);
     }
 
     public async Task PublishAsync<T>(string exchange, string routingKey, T message, CancellationToken cancellationToken = default)

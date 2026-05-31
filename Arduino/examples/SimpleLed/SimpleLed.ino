@@ -1,40 +1,35 @@
 /*
-  SimpleLed.ino - Example for DomovoyClient
-  Controls logic of an LED via Domovoy Native Protocol
+  SimpleLed.ino — Example for DomovoyClient (Domovoy Native protocol v1).
+  A board fronting a SINGLE logical device: an LED exposed as the writable boolean "on_off".
+  (A board can front many devices — see DomovoyMegaGateway.ino.)
 */
 
 #include <DomovoyClient.h>
 #include <Ethernet.h>
 #include <SPI.h>
 
-// Update these with values suitable for your network.
 byte mac[] = {0xDE, 0xED, 0xBA, 0xFE, 0xFE, 0xED};
 IPAddress ip(192, 168, 1, 150);
-const char *mqtt_server = "192.168.1.100"; // Domovoy server IP
+const char *mqtt_server = "192.168.1.100"; // Domovoy server (RabbitMQ MQTT) IP
 
 EthernetClient ethClient;
-DomovoyClient client(ethClient);
+DomovoyHub hub(ethClient);
+DomovoyDevice led("domovoy-led-01", "Simple LED", "Domovoy DIY LED", "1.0");
 
 const int ledPin = 13;
+bool ledOn = false;
 
-void callback(String deviceName, String action, JsonObject params) {
-  Serial.print("Device: ");
-  Serial.println(deviceName);
-  Serial.print("Action: ");
-  Serial.println(action);
+void publishLed() {
+  StaticJsonDocument<64> doc;
+  doc["on_off"] = ledOn;
+  hub.publishState(led, doc);
+}
 
-  if (action == "SetState") { // DeviceCommandTypes.SetState
-    // Extract parameters
-    if (params.containsKey("state")) {
-      const char *state = params["state"];
-      if (strcmp(state, "ON") == 0) {
-        digitalWrite(ledPin, HIGH);
-        client.publishState("SimpleLed", "{\"state\": \"ON\"}");
-      } else if (strcmp(state, "OFF") == 0) {
-        digitalWrite(ledPin, LOW);
-        client.publishState("SimpleLed", "{\"state\": \"OFF\"}");
-      }
-    }
+void onLedCommand(JsonObject set) {
+  if (set.containsKey("on_off")) {
+    ledOn = set["on_off"].as<bool>();
+    digitalWrite(ledPin, ledOn ? HIGH : LOW);
+    publishLed();
   }
 }
 
@@ -42,29 +37,23 @@ void setup() {
   pinMode(ledPin, OUTPUT);
   Serial.begin(9600);
 
-  // Start Ethernet
-  if (Ethernet.begin(mac) == 0) {
-    Serial.println("Failed to configure Ethernet using DHCP");
-    Ethernet.begin(mac, ip);
-  }
-  delay(1500); // Allow hardware to initialize
+  if (Ethernet.begin(mac) == 0) Ethernet.begin(mac, ip);
+  delay(1500);
 
-  client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);
+  led.addBoolean("on_off", /*writable*/ true);
+  led.onCommand(onLedCommand);
 
-  if (client.connect("DomovoyClient-LED")) {
-    Serial.println("Connected to MQTT");
+  hub.setServer(mqtt_server, 1883);
+  hub.addDevice(led);
 
-    // Announce device
-    // Type: light, Name: SimpleLed, ID: unique-id-123
-    StaticJsonDocument<200> meta;
-    meta["description"] = "Example LED";
-
-    client.announce(light, "SimpleLed", "unique-id-123", meta.as<JsonObject>());
-
+  if (hub.connect("domovoy-led-board")) {
+    Serial.println("Connected to Domovoy");
+    publishLed();
   } else {
     Serial.println("Connection failed");
   }
 }
 
-void loop() { client.loop(); }
+void loop() {
+  hub.loop();
+}

@@ -1,41 +1,45 @@
 {
   "home_name": "Domovoy Test Home",
   "mqtt_broker": "localhost:1883",
+  "mqtt_username": "user",
+  "mqtt_password": "user",
+  "web_port": 5080,
   "devices": [
     {
       "id": "living_room_light",
-      "type": "light",
-      "name": "Living Room Main Light",
-      "capabilities": ["brightness", "color"]
+      "name": "Living Room Light",
+      "model": "Virtual Dimmable Light",
+      "capabilities": [
+        { "id": "on_off", "kind": "Boolean", "writable": true },
+        { "id": "brightness", "kind": "Number", "unit": "%", "min": 0, "max": 100, "writable": true }
+      ]
     },
     {
-        "id": "bedroom_light",
-        "type": "light",
-        "name": "Bedroom Nightstand",
-        "capabilities": ["brightness"]
+      "id": "kitchen_climate",
+      "name": "Kitchen Climate",
+      "model": "Virtual Multi-Sensor",
+      "simulate": true,
+      "capabilities": [
+        { "id": "temperature", "kind": "Number", "unit": "°C", "min": 15, "max": 30 },
+        { "id": "humidity", "kind": "Number", "unit": "%", "min": 30, "max": 70 },
+        { "id": "co2", "kind": "Number", "unit": "ppm", "min": 400, "max": 1500 }
+      ]
     },
     {
-      "id": "kitchen_sensor",
-      "type": "sensor",
-      "name": "Kitchen Environment",
-      "sensor_type": "multiset",
-      "update_interval_seconds": 15
+      "id": "hallway_motion",
+      "name": "Hallway Motion",
+      "model": "Virtual Motion Sensor",
+      "capabilities": [
+        { "id": "occupancy", "kind": "Boolean" }
+      ]
     },
     {
-        "id": "motion_sensor_hall",
-        "type": "sensor",
-        "name": "Hallway Motion",
-        "sensor_type": "motion" 
-    },
-    {
-      "id": "hallway_switch",
-      "type": "switch",
-      "name": "Hallway Light Switch"
-    },
-    {
-        "id": "garage_opener",
-        "type": "switch",
-        "name": "Garage Door Opener"
+      "id": "garage_relay",
+      "name": "Garage Relay",
+      "model": "Virtual Switch",
+      "capabilities": [
+        { "id": "on_off", "kind": "Boolean", "writable": true }
+      ]
     }
   ]
 }

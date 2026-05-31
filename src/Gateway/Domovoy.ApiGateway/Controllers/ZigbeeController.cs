@@ -127,27 +127,9 @@ public class ZigbeeController : ControllerBase
         return Ok(new { removed = friendlyName });
     }
 
-    [HttpPost("devices/{friendlyName}/set")]
-    public async Task<IActionResult> SetDeviceState(string friendlyName, [FromBody] Dictionary<string, object> payload)
-    {
-        var deviceCommand = new Domovoy.Common.Models.Commands.DeviceCommand
-        {
-            Source = "ApiGateway",
-            CommandTypes = Domovoy.Common.Models.Enums.DeviceCommandTypes.SetState,
-            Parameters = new Dictionary<string, object>(payload)
-            {
-                ["command_topic"] = $"zigbee2mqtt/{friendlyName}/set",
-                ["AdapterSource"] = "Zigbee2Mqtt",
-            },
-        };
-
-        await _messageBus.PublishAsync(
-            MessageBusConfiguration.DeviceCommandsExchange,
-            MessageBusConfiguration.DeviceCommandsQueue,
-            deviceCommand);
-
-        return Ok();
-    }
+    // Per-device control is now handled by the capability path:
+    //   POST /api/device-control/{deviceId}/set  (DeviceControlController -> DeviceCommandV1)
+    // This controller only covers Zigbee-bridge-level operations (permit-join / rename / remove).
 }
 
 public record PermitJoinRequest(int Duration = 254);

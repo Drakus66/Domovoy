@@ -12,6 +12,8 @@ EXPOSE 8081
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
+# Central package versions live here — must be present before restore so versions stay pinned.
+COPY ["Directory.Packages.props", "./"]
 COPY ["src/Services/Domovoy.UnifiedDeviceService/Domovoy.UnifiedDeviceService.csproj", "src/Services/Domovoy.UnifiedDeviceService/"]
 RUN dotnet restore "./src/Services/Domovoy.UnifiedDeviceService/Domovoy.UnifiedDeviceService.csproj"
 COPY . .

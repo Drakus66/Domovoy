@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Domovoy Device Emulator</title>
+  <style>
+    :root { --bg:#0f1419; --card:#1b2430; --line:#2b3949; --txt:#e6edf3; --muted:#8aa0b3; --accent:#4ea1ff; --on:#3fb950; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--txt); }
+    header { display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid var(--line); }
+    header h1 { font-size:16px; margin:0; font-weight:600; }
+    #status { margin-left:auto; font-size:13px; color:var(--muted); }
+    #status.ok { color:var(--on); }
+    .wrap { display:grid; grid-template-columns: 1fr 360px; gap:16px; padding:16px 20px; align-items:start; }
+    #devices { display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:14px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
+    .card.unregistered { opacity:.55; }
+    .card .head { display:flex; align-items:flex-start; gap:8px; }
+    .card .head .info { flex:1; min-width:0; }
+    .card h2 { margin:0 0 2px; font-size:15px; }
+    .card .model { color:var(--muted); font-size:12px; margin-bottom:10px; }
+    .reg { cursor:pointer; flex:none; border:1px solid var(--line); background:#243040; color:var(--txt); border-radius:6px; padding:3px 10px; font-size:11px; }
+    .reg.on { border-color:var(--on); color:var(--on); }
+    .reg.off { border-color:var(--accent); color:var(--accent); }
+    .cap { display:flex; align-items:center; gap:10px; padding:7px 0; border-top:1px solid var(--line); }
+    .cap .id { width:120px; font-size:13px; }
+    .cap .tag { font-size:10px; color:var(--muted); border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+    .cap .val { margin-left:auto; font-variant-numeric: tabular-nums; min-width:56px; text-align:right; }
+    input[type=range] { flex:1; accent-color: var(--accent); }
+    .toggle { cursor:pointer; border:1px solid var(--line); background:#243040; color:var(--txt); border-radius:6px; padding:4px 12px; font-size:13px; }
+    .toggle.on { background:var(--on); border-color:var(--on); color:#06210f; font-weight:600; }
+    #logpanel { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; position:sticky; top:16px; }
+    #logpanel h3 { margin:0 0 8px; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+    #log { font-family: ui-monospace, monospace; font-size:12px; height:70vh; overflow-y:auto; line-height:1.5; }
+    #log .line { white-space:nowrap; }
+    #log .ts { color:var(--muted); }
+    #log .server { color:var(--accent); }
+    #log .ui { color:#d29922; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🏠 Domovoy Device Emulator</h1>
+    <span id="status">connecting…</span>
+  </header>
+  <div class="wrap">
+    <div id="devices"></div>
+    <div id="logpanel">
+      <h3>Activity log</h3>
+      <div id="log"></div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

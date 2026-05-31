@@ -3,6 +3,7 @@ namespace Domovoy.Connectivity;
 using Services;
 using MessageBus;
 using Adapters;
+using Prometheus;
 using Serilog;
 
 using Domovoy.Common.Logging;
@@ -34,6 +35,12 @@ internal static class Program
             builder.Services.AddHostedService<AdapterManager>();
 
             var host = builder.Build();
+
+            // Worker host has no Kestrel of its own — expose Prometheus metrics on a standalone
+            // server (:9090) so Prometheus can scrape this service like the others.
+            var metricServer = new MetricServer(port: 9090);
+            metricServer.Start();
+
             host.Run();
         }
         catch (Exception ex)

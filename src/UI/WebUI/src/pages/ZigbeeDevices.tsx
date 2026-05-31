@@ -17,12 +17,12 @@ import SensorsIcon from '@mui/icons-material/Sensors';
 import PowerIcon from '@mui/icons-material/Power';
 import DevicesIcon from '@mui/icons-material/Devices';
 import SignalCellularAltIcon from '@mui/icons-material/SignalCellularAlt';
-import { HubConnectionBuilder, HubConnection, LogLevel } from '@microsoft/signalr';
+import { HubConnection } from '@microsoft/signalr';
 import { zigbeeApi, ZigbeeBridge, ZigbeeDevice } from '../api/zigbee';
+import { buildDeviceHubConnection, startDeviceHub } from '../api/deviceHub';
 
 const PERMIT_JOIN_DURATIONS = [30, 60, 120, 254];
 const REFRESH_INTERVAL_MS = 30_000;
-const HUB_URL = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/hub/devices`;
 
 function deviceIcon(type: string, description: string) {
   const desc = description.toLowerCase();
@@ -218,11 +218,8 @@ export default function ZigbeeDevices() {
   }, [fetchData]);
 
   useEffect(() => {
-    const conn = new HubConnectionBuilder()
-      .withUrl(HUB_URL)
-      .withAutomaticReconnect()
-      .configureLogging(LogLevel.Warning)
-      .build();
+    let cancelled = false;
+    const conn = buildDeviceHubConnection();
 
     conn.on('ZigbeeBridgeStateChanged', (isOnline: boolean) => {
       setBridge((prev) => prev ? { ...prev, isOnline } : prev);
@@ -246,9 +243,12 @@ export default function ZigbeeDevices() {
       }
     });
 
-    conn.start().catch(() => { /* silently ignore — REST data still works */ });
+    // If reconnection ultimately gives up (or never engaged), re-establish from scratch.
+    conn.onclose(() => { if (!cancelled) startDeviceHub(conn, () => cancelled); });
+
+    startDeviceHub(conn, () => cancelled);
     hubRef.current = conn;
-    return () => { conn.stop(); };
+    return () => { cancelled = true; conn.stop(); };
   }, [fetchData]);
 
   const handlePermitJoin = async (duration: number) => {

@@ -3,7 +3,8 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { ThemeProvider, useMediaQuery } from '@mui/material';
+import { useMediaQuery } from '@mui/material';
+import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material/styles';
 import { BrowserRouter } from 'react-router-dom';
 import theme from '../../theme';
 import Navigation from './Navigation';
@@ -20,9 +21,9 @@ vi.mock('@mui/material', async () => {
 const renderNavigation = () => {
   return render(
     <BrowserRouter>
-      <ThemeProvider theme={theme}>
+      <CssVarsProvider theme={theme}>
         <Navigation />
-      </ThemeProvider>
+      </CssVarsProvider>
     </BrowserRouter>
   );
 };
@@ -122,9 +123,9 @@ describe('Navigation Responsive Behavior', () => {
     vi.mocked(useMediaQuery).mockReturnValue(true);
     rerender(
       <BrowserRouter>
-        <ThemeProvider theme={theme}>
+        <CssVarsProvider theme={theme}>
           <Navigation />
-        </ThemeProvider>
+        </CssVarsProvider>
       </BrowserRouter>
     );
     expect(screen.getAllByText('Domovoy').length).toBeGreaterThan(0);

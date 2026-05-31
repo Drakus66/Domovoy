@@ -7,6 +7,8 @@ networks:
 services:
   # ============ Application Services ============
 
+  # Subscribes to the capability contract on the bus and re-emits normalized state for SignalR/persist.
+  # No HTTP/MQTT — RabbitMQ AMQP only.
   unified-device-service:
     container_name: unified-device-service
     image: ${DOCKER_REGISTRY-}unified-device-service
@@ -16,10 +18,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-      mongodb:
-        condition: service_healthy
-      db-gateway:
-        condition: service_healthy
     networks:
       - domovoy-network
     environment:
@@ -27,11 +25,10 @@ services:
       - RABBITMQ__PORT=5672
       - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
-      - MQTT__BROKER=rabbitmq
-      - MQTT__PORT=1883
-      - BASESERVICE__DBGATEWAYBASEURL=http://db-gateway:8080
     restart: unless-stopped
 
+  # Owns the MQTT client; runs Zigbee2MQTT + Domovoy Native adapters and publishes the capability
+  # contract. Needs RabbitMQ (AMQP + MQTT broker), nothing else.
   connectivity-service:
     container_name: connectivity-service
     image: ${DOCKER_REGISTRY-}connectivity-service
@@ -41,8 +38,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-      db-gateway:
-        condition: service_healthy
     networks:
       - domovoy-network
     environment:
@@ -52,7 +47,6 @@ services:
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - MQTT__BROKER=rabbitmq
       - MQTT__PORT=1883
-      - BASESERVICE__DBGATEWAYBASEURL=http://db-gateway:8080
     restart: unless-stopped
 
   db-gateway:
@@ -105,7 +99,6 @@ services:
       - RABBITMQ__PORT=5672
       - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
-      - DBGATEWAY__BASEURL=http://db-gateway:8080
     restart: unless-stopped
 
   webui:

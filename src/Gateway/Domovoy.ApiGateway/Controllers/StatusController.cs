@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Reflection;
 
@@ -18,13 +17,12 @@ namespace Domovoy.ApiGateway.Controllers
         }
 
         [HttpGet]
-        [AllowAnonymous]
         public IActionResult GetStatus()
         {
             _logger.LogInformation("API Status requested");
-            
+
             var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
-            
+
             return Ok(new
             {
                 Status = "Running",
@@ -34,20 +32,19 @@ namespace Domovoy.ApiGateway.Controllers
             });
         }
 
+        // Reflects the actual post-consolidation topology (2 backend services + 2 gateways). The old
+        // list (AuthService/DeviceService/MqttService/UserService/AutomationService) referenced services
+        // removed in the capability migration — see roadmap P0-6 cleanup. Authorization is deferred to
+        // Phase 2, so this internal endpoint is anonymous for now (no [Authorize]).
         [HttpGet("services")]
-        [Authorize(Roles = "Admin")]
         public IActionResult GetServicesStatus()
         {
-            var serviceSettings = _configuration.GetSection("ServiceSettings");
-            
             return Ok(new
             {
-                DbGateway = serviceSettings["DbGatewayHost"],
-                AuthService = serviceSettings["AuthServiceHost"],
-                DeviceService = serviceSettings["DeviceServiceHost"],
-                MqttService = serviceSettings["MqttServiceHost"],
-                UserService = serviceSettings["UserServiceHost"],
-                AutomationService = serviceSettings["AutomationServiceHost"]
+                Connectivity = new { Role = "MQTT adapters (Zigbee2MQTT, Domovoy Native) → capability contract" },
+                UnifiedDeviceService = new { Role = "CapabilityDeviceManager — normalizes state → SignalR" },
+                DbGateway = new { Url = _configuration["DbGateway:BaseUrl"], Role = "Mongo read-model + event-log/telemetry feature store" },
+                Prometheus = new { Url = _configuration["Prometheus:BaseUrl"], Role = "metrics" }
             });
         }
     }

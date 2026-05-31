@@ -20,7 +20,7 @@ catch {
 # Attach USB device to WSL
 try {
     Write-Host "Attaching USB device 2-3 to WSL..." -ForegroundColor Yellow
-    & usbipd attach --wsl --busid 2-2
+    & usbipd attach --wsl --busid 3-2
     Write-Host "USB device attached successfully!" -ForegroundColor Green
 }
 catch {

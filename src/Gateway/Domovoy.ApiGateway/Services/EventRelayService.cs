@@ -29,19 +29,13 @@ public class EventRelayService : BackgroundService
     {
         _logger.LogInformation("EventRelayService starting - subscribing to state change events");
 
-        // Subscribe to device state changes
+        // Subscribe to device state changes — CapabilityDeviceManager re-emits normalized state
+        // as this event so SignalR clients receive live updates with capability values.
         _messageBus.SubscribeAsync<DeviceStateUpdatedEvent>(
             "apigateway-device-states",
             MessageBusConfiguration.DeviceEventsExchange,
             MessageBusConfiguration.DeviceStateUpdatedRoutingKey,
             HandleDeviceStateChanged);
-
-        // Subscribe to device discovery events
-        _messageBus.SubscribeAsync<DeviceDiscoveredEvent>(
-            "apigateway-device-discovery",
-            MessageBusConfiguration.DeviceDiscoveryExchange,
-            MessageBusConfiguration.DeviceDiscoveredRoutingKey,
-            HandleDeviceDiscovered);
 
         _logger.LogInformation("EventRelayService subscriptions complete");
         return Task.CompletedTask;
@@ -64,27 +58,6 @@ public class EventRelayService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error relaying device state change for {DeviceId}", stateEvent.DeviceId);
-        }
-    }
-
-    private async Task HandleDeviceDiscovered(DeviceDiscoveredEvent discoveryEvent)
-    {
-        try
-        {
-            _logger.LogDebug("Relaying device discovery for {DeviceId} to SignalR clients", discoveryEvent.DeviceId);
-
-            // Push to all connected SignalR clients
-            await _hubContext.Clients.All.SendAsync(
-                "DeviceDiscovered",
-                discoveryEvent.DeviceId,
-                discoveryEvent.DeviceType.ToString(),
-                discoveryEvent.Name);
-
-            _logger.LogInformation("Device discovery relayed to clients: {DeviceId}", discoveryEvent.DeviceId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error relaying device discovery for {DeviceId}", discoveryEvent.DeviceId);
         }
     }
 

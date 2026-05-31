@@ -1,13 +1,8 @@
 namespace Domovoy.ApiGateway;
 
-using Microsoft.Extensions.Configuration.Yaml;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using Ocelot.DependencyInjection;
-using Ocelot.Middleware;
-using Ocelot.Cache.CacheManager;
-using Ocelot.Provider.Polly;
 using Prometheus;
 using System.Text;
 using Serilog;
@@ -31,73 +26,86 @@ internal static class Program
             builder.Configuration
                 .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                 .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
-                .AddYamlFile("ocelot.yml", optional: false, reloadOnChange: true)
                 .AddEnvironmentVariables();
 
             // Add services to the container
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
 
+            // Authorization is deliberately deferred to Phase 2 (local auth "on top" of gateways/UI,
+            // before locks & cameras). During development JWT is OFF by default so it doesn't get in
+            // the way of testing — it stays wired behind a flag (JwtSettings:Enabled) rather than being
+            // ripped out, so it can be switched back on without re-plumbing. See roadmap P0-6.
+            var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+            var jwtEnabled = jwtSettings.GetValue<bool>("Enabled");
+
             // Configure Swagger
             builder.Services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "Domovoy API Gateway", Version = "v1" });
 
-                c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                if (jwtEnabled)
                 {
-                    Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
-                    Name = "Authorization",
-                    In = ParameterLocation.Header,
-                    Type = SecuritySchemeType.ApiKey,
-                    Scheme = "Bearer"
-                });
-
-                c.AddSecurityRequirement(new OpenApiSecurityRequirement
-                {
+                    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
                     {
-                        new OpenApiSecurityScheme
+                        Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
+                        Name = "Authorization",
+                        In = ParameterLocation.Header,
+                        Type = SecuritySchemeType.ApiKey,
+                        Scheme = "Bearer"
+                    });
+
+                    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+                    {
                         {
-                            Reference = new OpenApiReference
+                            new OpenApiSecurityScheme
                             {
-                                Type = ReferenceType.SecurityScheme,
-                                Id = "Bearer"
-                            }
-                        },
-                        Array.Empty<string>()
-                    }
-                });
+                                Reference = new OpenApiReference
+                                {
+                                    Type = ReferenceType.SecurityScheme,
+                                    Id = "Bearer"
+                                }
+                            },
+                            Array.Empty<string>()
+                        }
+                    });
+                }
             });
 
-            // Configure JWT authentication
-            var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-            var secretKey = jwtSettings["SecretKey"] ?? "DefaultDevelopmentSecretKeyThatShouldBeReplacedInProduction";
-            var issuer = jwtSettings["Issuer"] ?? "domovoy";
-            var audience = jwtSettings["Audience"] ?? "domovoy-clients";
+            if (jwtEnabled)
+            {
+                var secretKey = jwtSettings["SecretKey"] ?? "DefaultDevelopmentSecretKeyThatShouldBeReplacedInProduction";
+                var issuer = jwtSettings["Issuer"] ?? "domovoy";
+                var audience = jwtSettings["Audience"] ?? "domovoy-clients";
 
-            builder.Services.AddAuthentication(options =>
-            {
-                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-            })
-            .AddJwtBearer(options =>
-            {
-                options.TokenValidationParameters = new TokenValidationParameters
+                builder.Services.AddAuthentication(options =>
                 {
-                    ValidateIssuer = true,
-                    ValidateAudience = true,
-                    ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true,
-                    ValidIssuer = issuer,
-                    ValidAudience = audience,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
-                };
-            });
+                    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+                })
+                .AddJwtBearer(options =>
+                {
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidateAudience = true,
+                        ValidateLifetime = true,
+                        ValidateIssuerSigningKey = true,
+                        ValidIssuer = issuer,
+                        ValidAudience = audience,
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+                    };
+                });
+            }
 
-            // Configure Ocelot
-            builder.Services
-                .AddOcelot(builder.Configuration)
-                .AddCacheManager(x => x.WithDictionaryHandle())
-                .AddPolly();
+            // Capability device read-model lives in DbGateway; the gateway forwards reads to it
+            // via CapabilityDevicesController (replaces the former Ocelot proxy route).
+            var dbGatewayUrl = builder.Configuration["DbGateway:BaseUrl"] ?? "http://db-gateway:8080";
+            builder.Services.AddHttpClient("db-gateway", client =>
+            {
+                client.BaseAddress = new Uri(dbGatewayUrl);
+                client.Timeout = TimeSpan.FromSeconds(10);
+            });
 
             builder.Services.AddSignalR();
             builder.Services.AddSingleton<MessageBus.IMessageBus, MessageBus.RabbitMqConnection>();
@@ -148,8 +156,6 @@ internal static class Program
             app.UseHttpsRedirection();
             app.UseCors("CorsPolicy");
 
-            // Static files middleware removed - wwwroot not required
-
             app.UseMiddleware<Middleware.RequestLoggingMiddleware>();
             app.UseMiddleware<Middleware.RequestCounterMiddleware>();
             app.UseMiddleware<Middleware.RouteCounterMiddleware>();
@@ -158,15 +164,16 @@ internal static class Program
             var metricServer = app.Services.GetRequiredService<MetricServer>();
             metricServer.Start();
 
-            app.UseAuthentication();
+            if (jwtEnabled)
+                app.UseAuthentication();
             app.UseAuthorization();
-            app.MapHealthChecks("/health");
 
-            // Map endpoints BEFORE Ocelot — UseOcelot() is terminal middleware
+            // Uniform endpoint routing — every gateway responsibility is an in-process endpoint:
+            // controllers (device-control, zigbee, metrics, status, capability-devices proxy),
+            // the SignalR hub, and health checks.
+            app.MapHealthChecks("/health");
             app.MapControllers();
             app.MapHub<Hubs.DeviceHub>("/hub/devices");
-
-            await app.UseOcelot();
 
             await app.RunAsync();
         }

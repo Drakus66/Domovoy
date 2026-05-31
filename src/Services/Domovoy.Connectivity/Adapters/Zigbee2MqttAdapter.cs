@@ -1,10 +1,11 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Domovoy.Common.Configuration;
 using Domovoy.Common.Models.Commands;
 using Domovoy.Common.Models.Events;
-using Domovoy.Common.Models.Enums.EntityTypes;
-using Domovoy.Common.Models.Enums;
 using Domovoy.Connectivity.Services;
+using Domovoy.Contracts.Devices;
+using Domovoy.Contracts.Messaging;
 using Domovoy.MessageBus;
 using MQTTnet;
 using MQTTnet.Client;
@@ -18,10 +19,20 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
     private readonly IMessageBus _messageBus;
     private IMqttClient? _mqttClient;
 
-    public string Name => "Zigbee2Mqtt";
+    // Per-device capability binding (z2m exposes → capabilities + codec). Indexed by friendly name
+    // (for inbound state decode) and by deterministic device id (for outbound command encode).
+    // Rebuilt on every bridge/devices publish, so it self-heals after restarts.
+    private readonly ConcurrentDictionary<string, Z2mBinding> _bindingsByFriendly = new();
+    private readonly ConcurrentDictionary<Guid, Z2mBinding> _bindingsById = new();
 
-    public event Func<DeviceDiscoveredEvent, Task>? OnDeviceDiscovered;
-    public event Func<AdapterStateReportedEvent, Task>? OnAdapterStateReported;
+    // True once z2m's retained bridge/state has been received at least once. Gates the periodic
+    // re-publish so we don't emit an all-empty bridge snapshot before z2m has reported anything.
+    private volatile bool _bridgeStateReceived;
+
+    // How often the cached bridge state/info is re-emitted on the bus (see RepublishBridgeStateAsync).
+    private static readonly TimeSpan BridgeRepublishInterval = TimeSpan.FromSeconds(15);
+
+    public string Name => "Zigbee2Mqtt";
 
     public Zigbee2MqttAdapter(
         ILogger<Zigbee2MqttAdapter> logger,
@@ -54,6 +65,21 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
             MessageBusConfiguration.ZigbeeBridgeCommandRoutingKey,
             HandleBridgeCommandAsync,
             token);
+
+        // Capability-addressed commands (roadmap Step 3). Each adapter uses its own queue and
+        // ignores commands for devices it doesn't own, so only the owning adapter acts.
+        await _messageBus.SubscribeAsync<Envelope<DeviceCommandV1>>(
+            $"connectivity-{Name}-commands-v1",
+            BusTopology.CommandsExchange,
+            BusTopology.DeviceCommandKey,
+            HandleCapabilityCommandAsync,
+            token);
+
+        // z2m publishes bridge/state and bridge/info as one-shot retained MQTT messages, which we
+        // forward to the bus exactly once. The bus events are NOT retained, so any consumer that
+        // (re)starts later — e.g. ApiGateway — misses them and shows the bridge as permanently
+        // offline. Periodically re-emitting the cached snapshot lets late subscribers converge.
+        _ = Task.Run(() => RepublishBridgeStateAsync(token), token);
 
         _logger.LogInformation("Zigbee2MqttAdapter started");
     }
@@ -102,6 +128,7 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
         var isOnline = stateStr == "online";
 
         _cache.UpdateBridgeState(isOnline);
+        _bridgeStateReceived = true;
 
         var ev = new ZigbeeBridgeStateEvent { IsOnline = isOnline, Source = Name };
         await _messageBus.PublishAsync(
@@ -110,6 +137,55 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
             ev);
 
         _logger.LogInformation("Zigbee bridge is {State}", isOnline ? "ONLINE" : "OFFLINE");
+    }
+
+    /// <summary>
+    /// Periodically re-publishes the cached bridge state and info so consumers that join the bus
+    /// after the initial retained MQTT publish (e.g. a restarted ApiGateway) converge to the real
+    /// state. Without this the bus events are one-shot and a late subscriber shows the bridge as
+    /// offline indefinitely.
+    /// </summary>
+    private async Task RepublishBridgeStateAsync(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(BridgeRepublishInterval, token);
+
+                if (!_bridgeStateReceived) continue; // nothing received from z2m yet
+
+                var info = _cache.GetBridgeInfo();
+
+                await _messageBus.PublishAsync(
+                    MessageBusConfiguration.ZigbeeBridgeExchange,
+                    MessageBusConfiguration.ZigbeeBridgeStateRoutingKey,
+                    new ZigbeeBridgeStateEvent { IsOnline = info.IsOnline, Source = Name });
+
+                await _messageBus.PublishAsync(
+                    MessageBusConfiguration.ZigbeeBridgeExchange,
+                    MessageBusConfiguration.ZigbeeBridgeInfoRoutingKey,
+                    new ZigbeeBridgeInfoEvent
+                    {
+                        Version = info.Version,
+                        CoordinatorType = info.CoordinatorType,
+                        CoordinatorAddress = info.CoordinatorAddress,
+                        Channel = info.Channel,
+                        PanId = info.PanId,
+                        PermitJoin = info.PermitJoin,
+                        PermitJoinTimeout = info.PermitJoinTimeout,
+                        Source = Name,
+                    });
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to re-publish cached Zigbee bridge state");
+            }
+        }
     }
 
     private async Task HandleBridgeInfo(string payload)
@@ -231,26 +307,7 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
 
             if (!interviewCompleted) continue;
 
-            var deviceType = DetermineDeviceType(device);
-            var discoveryEvent = new DeviceDiscoveredEvent
-            {
-                DeviceId = Guid.NewGuid(),
-                Name = friendlyName,
-                DeviceType = deviceType,
-                Source = Name,
-                Metadata = new Dictionary<string, object>
-                {
-                    { "ieee_address", ieee },
-                    { "friendly_name", friendlyName },
-                    { "command_topic", $"zigbee2mqtt/{friendlyName}/set" },
-                    { "state_topic", $"zigbee2mqtt/{friendlyName}" },
-                    { "model", model },
-                    { "vendor", vendor },
-                }
-            };
-
-            if (OnDeviceDiscovered != null)
-                await OnDeviceDiscovered.Invoke(discoveryEvent);
+            await PublishCapabilityDiscoveryAsync(device, friendlyName, ieee, model, vendor);
         }
 
         _cache.UpdateDevices(cacheDevices);
@@ -268,59 +325,87 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
         }
         catch { /* non-JSON payloads are fine to ignore */ }
 
-        if (OnAdapterStateReported != null)
+        await PublishNormalizedStateAsync(friendlyName, payload);
+    }
+
+    /// <summary>
+    /// Builds the capability descriptor from <c>definition.exposes</c> and publishes
+    /// <see cref="DeviceDiscoveredV1"/> on the canonical bus topology. Best-effort: never throws into
+    /// the legacy discovery path.
+    /// </summary>
+    private async Task PublishCapabilityDiscoveryAsync(JsonElement device, string friendlyName, string ieee, string model, string vendor)
+    {
+        try
         {
-            await OnAdapterStateReported.Invoke(new AdapterStateReportedEvent
-            {
-                AdapterSource = Name,
-                Topic = topic,
-                Payload = payload
-            });
+            if (string.IsNullOrEmpty(ieee)) return;
+            if (!device.TryGetProperty("definition", out var definition) || definition.ValueKind != JsonValueKind.Object)
+                return;
+
+            var deviceModel = Zigbee2MqttCodec.BuildModel(definition);
+            if (deviceModel.Capabilities.Count == 0) return;
+
+            var deviceId = DeviceIdFactory.Derive(Name, ieee);
+            var binding = new Z2mBinding(deviceId, friendlyName, $"zigbee2mqtt/{friendlyName}/set", deviceModel);
+            _bindingsByFriendly[friendlyName] = binding;
+            _bindingsById[deviceId] = binding;
+
+            var descriptor = new DeviceDescriptor(
+                Id: deviceId,
+                Name: friendlyName,
+                ZoneId: Guid.Empty,
+                Identity: new DeviceIdentity(
+                    AdapterSource: Name,
+                    HardwareId: ieee,
+                    StateTopic: $"zigbee2mqtt/{friendlyName}",
+                    CommandTopic: $"zigbee2mqtt/{friendlyName}/set"),
+                Capabilities: deviceModel.Capabilities,
+                Manufacturer: string.IsNullOrEmpty(vendor) ? null : vendor,
+                Model: string.IsNullOrEmpty(model) ? null : model);
+
+            var envelope = Envelope<DeviceDiscoveredV1>.Create(
+                MessageTypes.DeviceDiscovered,
+                source: $"connectivity/{Name}",
+                data: new DeviceDiscoveredV1(descriptor),
+                subject: deviceId.ToString());
+
+            await _messageBus.PublishAsync(BusTopology.DiscoveryExchange, BusTopology.DeviceDiscoveredKey, envelope);
+
+            _logger.LogInformation(
+                "Published capability discovery for '{Friendly}' ({Count} caps: {Caps}) as {DeviceId}",
+                friendlyName, deviceModel.Capabilities.Count,
+                string.Join(", ", deviceModel.Capabilities.Select(c => c.Id)), deviceId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to publish capability discovery for '{Friendly}'", friendlyName);
         }
     }
 
-    private static GlobalEntityTypes DetermineDeviceType(JsonElement device)
+    /// <summary>
+    /// Decodes a z2m state payload into normalized capability values and publishes
+    /// <see cref="DeviceStateReportV1"/>. Best-effort: never throws into the legacy state path.
+    /// </summary>
+    private async Task PublishNormalizedStateAsync(string friendlyName, string payload)
     {
-        if (device.TryGetProperty("definition", out var def) &&
-            def.TryGetProperty("description", out var desc))
+        if (!_bindingsByFriendly.TryGetValue(friendlyName, out var binding)) return;
+
+        try
         {
-            var d = desc.GetString()?.ToLower() ?? "";
-            if (d.Contains("light") || d.Contains("bulb")) return GlobalEntityTypes.Light;
-            if (d.Contains("sensor")) return GlobalEntityTypes.Sensor;
-            if (d.Contains("switch") || d.Contains("plug")) return GlobalEntityTypes.Switch;
+            var capabilityState = Zigbee2MqttCodec.Decode(binding.Model, payload);
+            if (capabilityState.Values.Count == 0) return;
+
+            var envelope = Envelope<DeviceStateReportV1>.Create(
+                MessageTypes.DeviceState,
+                source: $"connectivity/{Name}",
+                data: new DeviceStateReportV1(binding.DeviceId, capabilityState.Values),
+                subject: binding.DeviceId.ToString());
+
+            await _messageBus.PublishAsync(BusTopology.StateExchange, BusTopology.DeviceStateUpdatedKey, envelope);
         }
-        return GlobalEntityTypes.Generic;
-    }
-
-    // =========================================================
-    // Outgoing commands
-    // =========================================================
-
-    public async Task HandleCommandAsync(DeviceCommand command)
-    {
-        if (_mqttClient == null) return;
-
-        if (!command.Parameters.TryGetValue("command_topic", out var topicObj) || topicObj is not string topic)
+        catch (Exception ex)
         {
-            _logger.LogWarning("Z2M: command for {DeviceId} has no 'command_topic'", command.DeviceId);
-            return;
+            _logger.LogWarning(ex, "Failed to publish normalized state for '{Friendly}'", friendlyName);
         }
-
-        if (!IsValidZigbee2MqttTopic(topic)) return;
-
-        var payload = new Dictionary<string, object>();
-        if (command.CommandTypes == DeviceCommandTypes.SetState)
-        {
-            AddIfPresent(payload, command.Parameters, "state");
-            AddIfPresent(payload, command.Parameters, "brightness");
-            AddIfPresent(payload, command.Parameters, "color_temp");
-            AddIfPresent(payload, command.Parameters, "color");
-            AddIfPresent(payload, command.Parameters, "transition");
-        }
-
-        if (payload.Count == 0) return;
-
-        await PublishMqttAsync(topic, payload);
     }
 
     private async Task HandleBridgeCommandAsync(ZigbeeBridgeCommand command)
@@ -352,14 +437,6 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
         _logger.LogInformation("Z2M Bridge command sent: {Type}", command.CommandType);
     }
 
-    private static bool IsValidZigbee2MqttTopic(string topic) => topic.StartsWith("zigbee2mqtt/");
-
-    private static void AddIfPresent(Dictionary<string, object> target, Dictionary<string, object> source, string key)
-    {
-        if (source.TryGetValue(key, out var value))
-            target[key] = value;
-    }
-
     private async Task PublishMqttAsync(string topic, Dictionary<string, object> payload)
     {
         var json = JsonSerializer.Serialize(payload);
@@ -369,4 +446,30 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
             .Build());
         _logger.LogDebug("Z2M → {Topic}: {Payload}", topic, json);
     }
+
+    /// <summary>
+    /// Handles a capability-addressed command (roadmap Step 3). Encodes the normalized capability set
+    /// into a z2m payload via the device's codec and publishes it to the device's command topic.
+    /// Ignores devices this adapter does not own.
+    /// </summary>
+    private async Task HandleCapabilityCommandAsync(Envelope<DeviceCommandV1> envelope)
+    {
+        var command = envelope.Data;
+        if (command is null || _mqttClient is null) return;
+        if (!_bindingsById.TryGetValue(command.DeviceId, out var binding)) return; // not ours
+
+        var payload = Zigbee2MqttCodec.Encode(binding.Model, command.Set);
+        if (payload.Count == 0)
+        {
+            _logger.LogWarning("Z2M: capability command for {DeviceId} produced no z2m payload (set: {Keys})",
+                command.DeviceId, string.Join(", ", command.Set.Keys));
+            return;
+        }
+
+        await PublishMqttAsync(binding.CommandTopic, payload);
+        _logger.LogInformation("Z2M: encoded capability command for {DeviceId} → {Topic}", command.DeviceId, binding.CommandTopic);
+    }
+
+    /// <summary>Capability binding for one Zigbee device: deterministic id, friendly name, command topic and codec model.</summary>
+    private sealed record Z2mBinding(Guid DeviceId, string FriendlyName, string CommandTopic, Zigbee2MqttDeviceModel Model);
 }

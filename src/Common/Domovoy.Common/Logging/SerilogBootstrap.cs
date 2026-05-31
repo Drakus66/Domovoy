@@ -13,7 +13,6 @@ public static class SerilogBootstrap
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-            .MinimumLevel.Override("Ocelot", LogEventLevel.Information)
             .Enrich.FromLogContext()
             .Enrich.WithProperty("Service", serviceName)
             .WriteTo.Console(

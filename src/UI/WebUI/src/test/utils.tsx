@@ -1,6 +1,6 @@
 import { ReactElement } from 'react';
 import { render, RenderOptions } from '@testing-library/react';
-import { ThemeProvider } from '@mui/material/styles';
+import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 import theme from '../theme';
 
@@ -13,11 +13,11 @@ function customRender(
   
   function Wrapper({ children }: { children: React.ReactNode }) {
     return (
-      <ThemeProvider theme={theme}>
+      <CssVarsProvider theme={theme}>
         <MemoryRouter initialEntries={initialEntries}>
           {children}
         </MemoryRouter>
-      </ThemeProvider>
+      </CssVarsProvider>
     );
   }
 

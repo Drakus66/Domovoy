@@ -4,37 +4,8 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
-    ports:
-      - "5002:80"
-      - "8081"
     volumes:
       - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
-      - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro
-
-  # --- Legacy services (replaced by unified-device-service) ---
-  # device-service:
-  #   environment:
-  #     - ASPNETCORE_ENVIRONMENT=Development
-  #     - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
-  #     - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
-  #   ports:
-  #     - "5002:80"
-  #     - "8081"
-  #   volumes:
-  #     - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
-  #     - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro
-
-  # light-service:
-  #   environment:
-  #     - ASPNETCORE_ENVIRONMENT=Development
-  #     - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
-  #     - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
-
-  # sensor-service:
-  #   environment:
-  #     - ASPNETCORE_ENVIRONMENT=Development
-  #     - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
-  #     - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
 
   db-gateway:
     environment:
