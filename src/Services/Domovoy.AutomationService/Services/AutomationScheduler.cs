@@ -46,7 +46,7 @@ public sealed class AutomationScheduler : BackgroundService
     {
         var nowUtc = now.ToUniversalTime();
 
-        foreach (var rule in _store.Rules.Where(r => r.IsProtected || r.Status == RuleStatus.Active))
+        foreach (var rule in _store.Rules.Where(r => r.IsProtected || r.Status is RuleStatus.Active or RuleStatus.Shadow))
         {
             foreach (var trigger in rule.Triggers)
             {

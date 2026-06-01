@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Box, Drawer, Stack, Typography, IconButton, Chip, Divider, Button,
-  TextField, MenuItem,
+  TextField, MenuItem, Tooltip,
 } from '@mui/material';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import CircleIcon from '@mui/icons-material/Circle';
@@ -9,6 +9,7 @@ import ArrowRightAltRoundedIcon from '@mui/icons-material/ArrowRightAltRounded';
 import { CapabilityDevice, isUnassignedZone } from '../../api/capabilityDevices';
 import type { Zone } from '../../api/zones';
 import { historyApi, EventLogEntry } from '../../api/history';
+import { automationsApi } from '../../api/automations';
 import CapabilityControl, { type CommandFn } from './CapabilityControls';
 import { describeDevice } from './deviceVisuals';
 import TelemetryChart from '../charts/TelemetryChart';
@@ -76,6 +77,21 @@ function DrawerBody({
       .catch(() => { if (!cancelled) setHistory([]); });
     return () => { cancelled = true; };
   }, [device.id]);
+
+  // Rule id → name, so rule-caused changes can be explained with "why" (roadmap Epic 1F).
+  const [ruleNames, setRuleNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    automationsApi.getRules()
+      .then((rules) => { if (!cancelled) setRuleNames(Object.fromEntries(rules.map((r) => [r.id, r.name]))); })
+      .catch(() => { if (!cancelled) setRuleNames({}); });
+    return () => { cancelled = true; };
+  }, []);
+  const explainRule = (e: EventLogEntry): string | null => {
+    if (e.triggerSource !== 'rule') return null;
+    const id = e.ruleId || e.correlationId || '';
+    return ruleNames[id] ?? (id ? 'a rule' : null);
+  };
 
   const controls = device.capabilities.filter((c) => c.writable || c.kind === 'Action');
   const sensors = device.capabilities.filter((c) => !c.writable && c.kind !== 'Action');
@@ -205,8 +221,14 @@ function DrawerBody({
                     </Stack>
                   )}
                   <Box flex={1} />
-                  <Chip size="small" variant="outlined" label={e.triggerSource}
-                    color={TRIGGER_COLOR[e.triggerSource] ?? 'default'} />
+                  {explainRule(e) ? (
+                    <Tooltip title={`Caused by rule: ${explainRule(e)}`}>
+                      <Chip size="small" variant="outlined" color="secondary" label={`via ${explainRule(e)}`} />
+                    </Tooltip>
+                  ) : (
+                    <Chip size="small" variant="outlined" label={e.triggerSource}
+                      color={TRIGGER_COLOR[e.triggerSource] ?? 'default'} />
+                  )}
                   <Typography variant="caption" color="text.secondary">
                     {new Date(e.timestamp).toLocaleString()}
                   </Typography>
