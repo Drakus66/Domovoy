@@ -1,3 +1,8 @@
+using Domovoy.AutomationService.Configuration;
+using Domovoy.AutomationService.Ml;
+
+using Microsoft.Extensions.Options;
+
 namespace Domovoy.AutomationService.Blocks;
 
 /// <summary>
@@ -9,14 +14,16 @@ public sealed class BlockCatalog
 {
     private readonly Dictionary<string, IBlockType> _types;
 
-    public BlockCatalog()
+    public BlockCatalog(MlModelService models, IOptions<AutomationOptions> options)
     {
+        var o = options.Value;
         var types = new IBlockType[]
         {
             new EwmaFilterType(),
             new ThermostatType(),
             new Co2VentilationType(),
             new IrrigationSequencerType(),
+            new MlSetpointType(models, o.SetpointMin, o.SetpointMax), // Epic 2A: ML-driven setpoint
         };
         _types = types.ToDictionary(t => t.TypeId, StringComparer.OrdinalIgnoreCase);
     }

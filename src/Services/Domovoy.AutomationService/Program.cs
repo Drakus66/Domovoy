@@ -2,6 +2,7 @@ namespace Domovoy.AutomationService;
 
 using Blocks;
 using Configuration;
+using Ml;
 using Services;
 
 using Domovoy.Common.Logging;
@@ -52,7 +53,9 @@ internal static class Program
             builder.Services.AddSingleton<RuleRunner>();
             builder.Services.AddSingleton<HomeModeState>();
             builder.Services.AddSingleton<ReplayService>();   // 1F: dry-run a rule over history
-            builder.Services.AddSingleton<BlockCatalog>();    // 1H: built-in control-block types
+            builder.Services.AddSingleton<MlTrainer>();        // 2A: ML.NET training
+            builder.Services.AddSingleton<MlModelService>();   // 2A: load/serve latest model for inference
+            builder.Services.AddSingleton<BlockCatalog>();    // 1H: built-in control-block types (incl. ml_setpoint)
             builder.Services.AddSingleton<BlockStore>();
 
             // Order matters only loosely: RefreshLoop seeds rules/devices/mode, the engine + scheduler fire them.
@@ -62,6 +65,8 @@ internal static class Program
             builder.Services.AddHostedService<HomeModeMonitor>();   // 1G: track current home mode from the bus
             builder.Services.AddHostedService<PresenceMonitor>();   // 1G: presence-driven Home/Away switching
             builder.Services.AddHostedService<BlockRuntime>();      // 1H: tick control blocks as virtual devices
+            builder.Services.AddSingleton<MlTrainingService>();     // 2A: train + keep the model loaded
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<MlTrainingService>());
 
             var app = builder.Build();
 
@@ -75,6 +80,10 @@ internal static class Program
             // Replay/simulation (roadmap Epic 1F): POST a candidate rule + window, get when it would fire.
             app.MapPost("/api/replay", async (ReplayRequest request, ReplayService replay, CancellationToken ct) =>
                 Results.Ok(await replay.RunAsync(request, ct)));
+
+            // Train an ML model now (roadmap Epic 2A): trains on recent telemetry, registers it, reloads it.
+            app.MapPost("/api/ml/train", async (MlTrainingService ml, CancellationToken ct) =>
+                Results.Ok(await ml.TrainOnceAsync(ct)));
 
             // Control-block catalog (roadmap Epic 1H): the built-in types' schema for the authoring UI.
             app.MapGet("/api/blocks/catalog", (BlockCatalog catalog) => Results.Ok(
