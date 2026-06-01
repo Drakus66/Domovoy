@@ -37,6 +37,11 @@ public class CapabilityDevicesController : ControllerBase
     public Task<IActionResult> AssignZone(string id, CancellationToken ct)
         => Forward(HttpMethod.Put, $"api/capability-devices/{Uri.EscapeDataString(id)}/zone", ct);
 
+    /// <summary>Set/clear the manual archetype override (Epic 2D). Body: <c>{ "archetype": "light" | null }</c>.</summary>
+    [HttpPut("{id}/archetype")]
+    public Task<IActionResult> SetArchetype(string id, CancellationToken ct)
+        => Forward(HttpMethod.Put, $"api/capability-devices/{Uri.EscapeDataString(id)}/archetype", ct);
+
     private async Task<IActionResult> Forward(HttpMethod method, string relativePath, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient("db-gateway");

@@ -6,7 +6,7 @@ import {
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import CircleIcon from '@mui/icons-material/Circle';
 import ArrowRightAltRoundedIcon from '@mui/icons-material/ArrowRightAltRounded';
-import { CapabilityDevice, isUnassignedZone } from '../../api/capabilityDevices';
+import { CapabilityDevice, isUnassignedZone, DEVICE_ARCHETYPES, effectiveArchetype } from '../../api/capabilityDevices';
 import type { Zone } from '../../api/zones';
 import { historyApi, EventLogEntry } from '../../api/history';
 import { automationsApi } from '../../api/automations';
@@ -25,10 +25,11 @@ const fmtValue = (v: unknown): string => {
 };
 
 export type AssignZoneFn = (deviceId: string, zoneId: string | null) => void;
+export type SetArchetypeFn = (deviceId: string, archetype: string | null) => void;
 
 /** Sliding panel with the full per-capability control surface for one device. */
 export default function DeviceDetailDrawer({
-  device, zones, open, onClose, onCommand, onAssignZone,
+  device, zones, open, onClose, onCommand, onAssignZone, onSetArchetype,
 }: {
   device: CapabilityDevice | null;
   zones: Zone[];
@@ -36,6 +37,7 @@ export default function DeviceDetailDrawer({
   onClose: () => void;
   onCommand: CommandFn;
   onAssignZone: AssignZoneFn;
+  onSetArchetype: SetArchetypeFn;
 }) {
   return (
     <Drawer
@@ -47,7 +49,7 @@ export default function DeviceDetailDrawer({
       {device && (
         <DrawerBody
           device={device} zones={zones} onClose={onClose}
-          onCommand={onCommand} onAssignZone={onAssignZone}
+          onCommand={onCommand} onAssignZone={onAssignZone} onSetArchetype={onSetArchetype}
         />
       )}
     </Drawer>
@@ -55,13 +57,14 @@ export default function DeviceDetailDrawer({
 }
 
 function DrawerBody({
-  device, zones, onClose, onCommand, onAssignZone,
+  device, zones, onClose, onCommand, onAssignZone, onSetArchetype,
 }: {
   device: CapabilityDevice;
   zones: Zone[];
   onClose: () => void;
   onCommand: CommandFn;
   onAssignZone: AssignZoneFn;
+  onSetArchetype: SetArchetypeFn;
 }) {
   const { accent, Icon } = describeDevice(device);
   const offline = !device.isOnline;
@@ -126,6 +129,8 @@ function DrawerBody({
               label={zones.find((z) => z.id === currentZone)?.name ?? 'Unassigned'}
               variant="outlined"
             />
+            <Chip size="small" color="info" variant="outlined"
+              label={effectiveArchetype(device).replace(/_/g, ' ')} />
             <Stack direction="row" spacing={0.5} alignItems="center">
               <CircleIcon sx={{ fontSize: 9, color: offline ? 'text.disabled' : 'success.main' }} />
               <Typography variant="caption" color="text.secondary">
@@ -153,6 +158,22 @@ function DrawerBody({
         <MenuItem value=""><em>Unassigned</em></MenuItem>
         {zones.map((z) => (
           <MenuItem key={z.id} value={z.id}>{z.name}</MenuItem>
+        ))}
+      </TextField>
+
+      {/* Semantic type (Epic 2D): empty = auto-classified; pick to override. */}
+      <TextField
+        select
+        size="small"
+        label="Type"
+        value={device.archetype ?? ''}
+        onChange={(e) => onSetArchetype(device.id, e.target.value || null)}
+        sx={{ mb: 2 }}
+        fullWidth
+      >
+        <MenuItem value=""><em>Auto · {device.autoArchetype ?? 'unknown'}</em></MenuItem>
+        {DEVICE_ARCHETYPES.map((a) => (
+          <MenuItem key={a} value={a}>{a.replace(/_/g, ' ')}</MenuItem>
         ))}
       </TextField>
 

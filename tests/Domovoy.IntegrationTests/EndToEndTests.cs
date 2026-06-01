@@ -78,6 +78,8 @@ public sealed class EndToEndTests
         var doc = await Devices.Find(x => x.Id == id.ToString()).FirstAsync();
         Assert.Equal(21.5, Convert.ToDouble(doc.State["temperature"]), 3);
         Assert.True(Convert.ToBoolean(doc.State["on_off"]));
+        // Semantic typing (Epic 2D): writable on_off (+ temperature) classifies as a switch.
+        Assert.Equal(DeviceArchetypes.Switch, doc.AutoArchetype);
 
         var reading = await Readings.Find(x => x.Meta.DeviceId == id.ToString() && x.Meta.CapabilityId == "temperature").FirstAsync();
         Assert.Equal(21.5, reading.Value, 3);

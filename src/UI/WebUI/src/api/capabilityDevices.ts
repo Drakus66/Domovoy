@@ -22,8 +22,21 @@ export interface CapabilityDevice {
   capabilities: Capability[];
   state: Record<string, unknown>;
   isOnline: boolean;
+  /** Auto-inferred semantic archetype (roadmap Epic 2D). */
+  autoArchetype?: string;
+  /** Manual override; null/absent ⇒ use autoArchetype. */
+  archetype?: string | null;
   lastUpdated: string;
 }
+
+/** Well-known device archetypes (mirrors Domovoy.Contracts DeviceArchetypes, Epic 2D). */
+export const DEVICE_ARCHETYPES = [
+  'light', 'switch', 'thermostat', 'climate_sensor', 'motion', 'contact',
+  'lock', 'valve', 'energy_meter', 'sensor', 'control_block', 'unknown',
+] as const;
+
+/** Effective archetype = manual override if set, else the auto-inferred value. */
+export const effectiveArchetype = (d: CapabilityDevice): string => d.archetype || d.autoArchetype || 'unknown';
 
 export const capabilityDevicesApi = {
   /** List capability devices (Zigbee, native and emulator devices, normalized). */
@@ -43,6 +56,12 @@ export const capabilityDevicesApi = {
   assignZone: (deviceId: string, zoneId: string | null): Promise<void> =>
     apiClient
       .put(`/api/capability-devices/${encodeURIComponent(deviceId)}/zone`, { zoneId })
+      .then(() => undefined),
+
+  /** Override the semantic archetype (roadmap Epic 2D); pass null to revert to auto-classification. */
+  setArchetype: (deviceId: string, archetype: string | null): Promise<void> =>
+    apiClient
+      .put(`/api/capability-devices/${encodeURIComponent(deviceId)}/archetype`, { archetype })
       .then(() => undefined),
 };
 
