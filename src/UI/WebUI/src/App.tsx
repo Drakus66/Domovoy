@@ -10,6 +10,7 @@ import Automations from './pages/Automations';
 import Blocks from './pages/Blocks';
 import Plugins from './pages/Plugins';
 import Flow from './pages/Flow';
+import Models from './pages/Models';
 import Logs from './pages/Logs';
 import SystemStatus from './pages/SystemStatus';
 import ZigbeeDevices from './pages/ZigbeeDevices';
@@ -28,6 +29,7 @@ function App() {
             <Route path="automations" element={<Automations />} />
             <Route path="flow" element={<Flow />} />
             <Route path="blocks" element={<Blocks />} />
+            <Route path="models" element={<Models />} />
             <Route path="plugins" element={<Plugins />} />
             <Route path="logs" element={<Logs />} />
             <Route path="status" element={<SystemStatus />} />

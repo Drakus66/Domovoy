@@ -15,6 +15,7 @@ import HomeWorkRoundedIcon from '@mui/icons-material/HomeWorkRounded';
 import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
 import ExtensionRoundedIcon from '@mui/icons-material/ExtensionRounded';
 import AccountTreeRoundedIcon2 from '@mui/icons-material/SchemaRounded';
+import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
 import ColorModeToggle from '../theme/ColorModeToggle';
 
 const DRAWER_WIDTH = 248;
@@ -26,6 +27,7 @@ const navItems = [
   { label: 'Automations', path: '/automations', icon: <BoltRoundedIcon /> },
   { label: 'Flow editor', path: '/flow', icon: <AccountTreeRoundedIcon2 /> },
   { label: 'Control blocks', path: '/blocks', icon: <AccountTreeRoundedIcon /> },
+  { label: 'ML models', path: '/models', icon: <PsychologyRoundedIcon /> },
   { label: 'Plugins', path: '/plugins', icon: <ExtensionRoundedIcon /> },
   { label: 'Zigbee', path: '/zigbee', icon: <BluetoothSearchingRoundedIcon /> },
   { label: 'System Status', path: '/status', icon: <MonitorHeartRoundedIcon /> },

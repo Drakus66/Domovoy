@@ -3,6 +3,7 @@ using System.Text.Json;
 
 using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Blocks;
+using Domovoy.Contracts.Ml;
 
 namespace Domovoy.AutomationService.Services;
 
@@ -120,6 +121,79 @@ public sealed class DbGatewayClient
             _logger.LogWarning(ex, "Could not load event-log for replay from DbGateway");
             return null;
         }
+    }
+
+    // ===== ML substrate (Epic 2A) =====
+
+    /// <summary>Numeric telemetry for training (Epic 2A); null on failure.</summary>
+    public async Task<List<TelemetrySample>?> GetTelemetryAsync(string capabilityId, DateTime fromUtc, int limit, CancellationToken ct)
+    {
+        try
+        {
+            var url = $"api/telemetry?capabilityId={Uri.EscapeDataString(capabilityId)}&from={fromUtc:o}&limit={limit}";
+            return await _http.GetFromJsonAsync<List<TelemetrySample>>(url, Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load telemetry for {Capability}", capabilityId);
+            return null;
+        }
+    }
+
+    /// <summary>Register a freshly trained model (metadata + serialized artifact). Returns the stored metadata.</summary>
+    public async Task<MlModel?> RegisterModelAsync(MlModel model, byte[] artifact, CancellationToken ct)
+    {
+        try
+        {
+            var body = new { model, artifactBase64 = Convert.ToBase64String(artifact) };
+            var response = await _http.PostAsJsonAsync("api/ml/models", body, Json, ct);
+            if (!response.IsSuccessStatusCode) return null;
+            return await response.Content.ReadFromJsonAsync<MlModel>(Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not register ML model {Name}", model.Name);
+            return null;
+        }
+    }
+
+    /// <summary>Latest registered model metadata for a (kind, target), or null.</summary>
+    public async Task<MlModel?> GetLatestModelAsync(string kind, string target, CancellationToken ct)
+    {
+        try
+        {
+            var url = $"api/ml/models/latest?kind={Uri.EscapeDataString(kind)}&target={Uri.EscapeDataString(target)}";
+            var response = await _http.GetAsync(url, ct);
+            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<MlModel>(Json, ct) : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load latest ML model");
+            return null;
+        }
+    }
+
+    /// <summary>Download a model's serialized artifact, or null.</summary>
+    public async Task<byte[]?> GetModelArtifactAsync(string id, CancellationToken ct)
+    {
+        try
+        {
+            var response = await _http.GetAsync($"api/ml/models/{Uri.EscapeDataString(id)}/artifact", ct);
+            return response.IsSuccessStatusCode ? await response.Content.ReadAsByteArrayAsync(ct) : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not download ML artifact {Id}", id);
+            return null;
+        }
+    }
+
+    /// <summary>One numeric telemetry sample (mirrors DbGateway TelemetryDto).</summary>
+    public sealed class TelemetrySample
+    {
+        public DateTime Timestamp { get; set; }
+        public string CapabilityId { get; set; } = string.Empty;
+        public double Value { get; set; }
     }
 
     /// <summary>Subset of the capability-device read-model the engine needs (zone + current state).</summary>

@@ -82,6 +82,7 @@ internal static class Program
             app.MapModeEndpoints();
             app.MapBlockEndpoints();
             app.MapActivityEndpoints();
+            app.MapMlEndpoints();
             app.MapMetrics();
 
             // Health check endpoint
