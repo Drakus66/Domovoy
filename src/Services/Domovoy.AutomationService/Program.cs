@@ -44,11 +44,14 @@ internal static class Program
             builder.Services.AddSingleton<RuleEvaluator>();
             builder.Services.AddSingleton<ActionExecutor>();
             builder.Services.AddSingleton<RuleRunner>();
+            builder.Services.AddSingleton<HomeModeState>();
 
-            // Order matters only loosely: RefreshLoop seeds rules/devices, the engine + scheduler fire them.
+            // Order matters only loosely: RefreshLoop seeds rules/devices/mode, the engine + scheduler fire them.
             builder.Services.AddHostedService<RefreshLoop>();
             builder.Services.AddHostedService<AutomationEngine>();
             builder.Services.AddHostedService<AutomationScheduler>();
+            builder.Services.AddHostedService<HomeModeMonitor>();   // 1G: track current home mode from the bus
+            builder.Services.AddHostedService<PresenceMonitor>();   // 1G: presence-driven Home/Away switching
 
             var host = builder.Build();
 

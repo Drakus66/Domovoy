@@ -59,6 +59,18 @@ public static class ValueOps
 
     public static bool ValuesEqual(object? a, object? b) => Compare(a, "eq", b);
 
+    /// <summary>
+    /// Interpret a value as a presence/occupancy boolean: real bool, non-zero number, or a truthy string
+    /// (<c>true/on/yes/1/detected/present/occupied</c>). Used by the presence-driven mode switch (1G).
+    /// </summary>
+    public static bool AsBool(object? v) => Normalize(v) switch
+    {
+        bool b => b,
+        double d => d != 0,
+        string s => s.Trim().ToLowerInvariant() is "true" or "on" or "yes" or "1" or "detected" or "present" or "occupied",
+        _ => false
+    };
+
     private static bool TryDouble(object? v, out double result)
     {
         switch (Normalize(v))

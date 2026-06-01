@@ -36,6 +36,43 @@ public sealed class DbGatewayClient
         }
     }
 
+    /// <summary>Current home mode (1G), or null if the gateway is unreachable.</summary>
+    public async Task<string?> GetModeAsync(CancellationToken ct)
+    {
+        try
+        {
+            var state = await _http.GetFromJsonAsync<HomeStateDto>("api/mode", Json, ct);
+            return state?.Mode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load home mode from DbGateway");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Request a home-mode switch (1G). The DbGateway persists it and publishes the change on the bus,
+    /// which <see cref="HomeModeMonitor"/> then mirrors into <see cref="HomeModeState"/>. Idempotent on
+    /// the gateway side, so a no-op switch is harmless. Returns false if the gateway is unreachable.
+    /// </summary>
+    public async Task<bool> SetModeAsync(string mode, string source, CancellationToken ct)
+    {
+        try
+        {
+            var response = await _http.PutAsJsonAsync("api/mode", new ModeUpdateDto(mode, source), Json, ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not set home mode {Mode} via DbGateway", mode);
+            return false;
+        }
+    }
+
+    private sealed record HomeStateDto(string Mode, string Source, DateTime UpdatedAt);
+    private sealed record ModeUpdateDto(string Mode, string Source);
+
     public async Task<List<DeviceSnapshot>?> GetDevicesAsync(CancellationToken ct)
     {
         try

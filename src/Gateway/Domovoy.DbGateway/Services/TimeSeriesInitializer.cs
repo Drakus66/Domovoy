@@ -1,3 +1,4 @@
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace Domovoy.DbGateway.Services;
@@ -19,31 +20,66 @@ public static class TimeSeriesInitializer
     private const string TimeField = "Timestamp";
     private const string MetaField = "Meta";
 
-    public static async Task EnsureCollectionsAsync(IMongoDatabase database, ILogger logger, CancellationToken ct = default)
+    public static async Task EnsureCollectionsAsync(
+        IMongoDatabase database, ILogger logger, int rawRetentionDays = 0, CancellationToken ct = default)
     {
         var existing = await (await database.ListCollectionNamesAsync(cancellationToken: ct)).ToListAsync(ct);
 
         foreach (var name in new[] { DeviceEventsCollection, SensorReadingsCollection })
         {
+            // Retention (TTL) applies to raw telemetry only; the event-log is the replay/ML store (Epic 1B).
+            var ttl = name == SensorReadingsCollection && rawRetentionDays > 0
+                ? TimeSpan.FromDays(rawRetentionDays)
+                : (TimeSpan?)null;
+
             if (existing.Contains(name))
             {
                 logger.LogInformation("Time-series collection {Collection} already present", name);
-                continue;
+            }
+            else
+            {
+                try
+                {
+                    await database.CreateCollectionAsync(name, new CreateCollectionOptions
+                    {
+                        TimeSeriesOptions = new TimeSeriesOptions(TimeField, MetaField, TimeSeriesGranularity.Seconds),
+                        ExpireAfter = ttl,
+                    }, ct);
+                    logger.LogInformation("Created time-series collection {Collection}{Ttl}", name,
+                        ttl is null ? "" : $" (retention {rawRetentionDays}d)");
+                }
+                catch (MongoCommandException ex) when (ex.Message.Contains("already exists"))
+                {
+                    // Raced with another instance — fine.
+                    logger.LogInformation("Time-series collection {Collection} created concurrently", name);
+                }
             }
 
-            try
+            // Apply/clear the retention policy on every startup so a config change takes effect (Epic 1B).
+            if (name == SensorReadingsCollection)
+                await ApplyRetention(database, name, rawRetentionDays, logger, ct);
+        }
+    }
+
+    /// <summary>Set (or clear when 0) the TTL on an existing collection via <c>collMod</c>.</summary>
+    private static async Task ApplyRetention(
+        IMongoDatabase database, string collection, int retentionDays, ILogger logger, CancellationToken ct)
+    {
+        try
+        {
+            var command = new BsonDocument
             {
-                await database.CreateCollectionAsync(name, new CreateCollectionOptions
-                {
-                    TimeSeriesOptions = new TimeSeriesOptions(TimeField, MetaField, TimeSeriesGranularity.Seconds),
-                }, ct);
-                logger.LogInformation("Created time-series collection {Collection}", name);
-            }
-            catch (MongoCommandException ex) when (ex.Message.Contains("already exists"))
-            {
-                // Raced with another instance — fine.
-                logger.LogInformation("Time-series collection {Collection} created concurrently", name);
-            }
+                { "collMod", collection },
+                // MongoDB accepts a number of seconds, or the string "off" to remove the TTL.
+                { "expireAfterSeconds", retentionDays > 0 ? (BsonValue)(retentionDays * 86400L) : "off" },
+            };
+            await database.RunCommandAsync<BsonDocument>(command, cancellationToken: ct);
+            logger.LogInformation("Telemetry retention for {Collection}: {Policy}", collection,
+                retentionDays > 0 ? $"{retentionDays}d" : "keep forever");
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not apply retention policy to {Collection}", collection);
         }
     }
 }

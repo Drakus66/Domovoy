@@ -21,4 +21,18 @@ public class AutomationOptions
 
     /// <summary>Path to the local safety-floor rules file (protected, non-disableable from UI).</summary>
     public string SafetyRulesPath { get; set; } = "safety-rules.json";
+
+    // --- Presence-driven home mode (roadmap Epic 1G) ---
+
+    /// <summary>
+    /// When true, presence sensors auto-switch the home mode between Home and Away (never Night/Vacation,
+    /// which are manual). Disable to keep the mode purely manual.
+    /// </summary>
+    public bool PresenceAutoMode { get; set; } = true;
+
+    /// <summary>Capability ids treated as presence/occupancy signals.</summary>
+    public string[] PresenceCapabilities { get; set; } = { "presence", "occupancy" };
+
+    /// <summary>How long all presence signals must stay clear before switching Home → Away.</summary>
+    public int AwayDelaySeconds { get; set; } = 600;
 }

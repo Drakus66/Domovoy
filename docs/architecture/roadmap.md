@@ -119,7 +119,8 @@
 
 **Цель фазы:** продукт начинает работать «по сценариям» сам; появляется фундамент данных для ML и SDK для расширений.
 
-> **Статус фазы (на 2026-06-01):** 1A ✅ (AutomationService) · 1H ⬜ дизайн зафиксирован · 1B/1C/1D/1E/1F/1G ⬜.
+> **Статус фазы (на 2026-06-01):** 1A ✅ (AutomationService) · 1G ✅ (режимы дома + присутствие) ·
+> 1B ✅ (платформа данных телеметрии) · 1H ⬜ дизайн зафиксирован · 1C/1D/1E/1F ⬜.
 > Рантайм против реального RabbitMQ/Mongo не прогонялся.
 
 ### Эпик 1A. AutomationService — детерминированный движок ✅
@@ -148,10 +149,27 @@
 - **Очередь предложений с апрувом:** статусы правила `Proposed → Approved → Active → Disabled` (заранее — под ML из Фазы 2).
 - **DoD:** правило «движение в коридоре после заката → включить свет на 5 мин» создаётся, сохраняется, срабатывает и пишется в историю; защитное правило работает даже при недоступном UI. ✅ (выражается через device-state триггер + sun-условие `dark` + действия command/delay/command; safety floor — из локального файла. Рантайм с RabbitMQ/Mongo не прогонялся.)
 
-### Эпик 1B. Платформа данных для телеметрии ⬜
+### Эпик 1B. Платформа данных для телеметрии ✅
 - Использовать **MongoDB time-series collections** (решение принято: единая БД, отдельный TSDB не вводим) рядом с текущим состоянием в Mongo и журналом из P0-5.
 - Ретеншн-политики, агрегация (минутные/часовые свёртки), экспорт за период.
 - **DoD:** показания климат-датчиков пишутся в Mongo time-series; график «температура зоны за сутки» строится из API.
+
+> **✅ Реализовано (Epic 1B).** Поверх готового `sensor_readings` (P0-5, запись телеметрии уже шла).
+> **Ретеншн:** [`TelemetryOptions.RawRetentionDays`](../../src/Gateway/Domovoy.DbGateway/Config/TelemetryOptions.cs)
+> (0 = хранить вечно) → TTL на `sensor_readings` через
+> [`TimeSeriesInitializer`](../../src/Gateway/Domovoy.DbGateway/Services/TimeSeriesInitializer.cs)
+> (`ExpireAfter` при создании + `collMod` на старте, чтобы смена политики применялась). **Доменный
+> event-log `device_events` сознательно НЕ истекает** — это реплейабельный feature store (P0-5/1F).
+> **Агрегация (свёртки):** `GET /api/telemetry/aggregate?bucket=minute|hour|day&agg=avg|min|max` —
+> on-the-fly свёртки через Mongo `$dateTrunc`+`$group` (avg/min/max/count на бакет; фильтры
+> deviceId/capabilityId/**zoneId**/from/to), в [`HistoryEndpoints`](../../src/Gateway/Domovoy.DbGateway/Endpoints/HistoryEndpoints.cs).
+> Отдельный rollup-store не вводим (homelab): свёртки считаются из сырых семплов в пределах окна ретеншна.
+> **Экспорт за период:** `GET /api/telemetry?...&format=csv`. Прокси в ApiGateway `HistoryController`.
+> **WebUI:** компонент [`TelemetryChart`](../../src/UI/WebUI/src/components/charts/TelemetryChart.tsx)
+> (recharts area-chart, 24ч/часовые бакеты, scope по device **или** zone) — встроен в детальный drawer
+> устройства секцией «Trends · last 24h» для числовых сенсоров. График «температура зоны за сутки»
+> строится тем же эндпоинтом/компонентом по `zoneId`. 8 .NET-проектов + `tsc`/lint/26 тестов зелёные.
+> **Не проверено вживую** против Mongo (агрегация `$dateTrunc`, TTL `collMod`).
 
 ### Эпик 1C. Integration SDK — внепроцессные плагины поверх шины ⬜
 - Обобщить [IProtocolAdapter](../../src/Services/Domovoy.Connectivity/Adapters/IProtocolAdapter.cs) из «адаптера протокола» в **«интеграцию»**.
@@ -188,7 +206,7 @@
 - **Стадийный выкат правила:** `Proposed → Shadow (логирует, что сделал бы) → Bounded-Active (в безопасных границах) → Full` — поверх статусов правил из 1A.
 - **DoD:** для любого совершённого действия UI показывает причину (правило + триггер); новое правило можно прогнать на истории за период и увидеть, когда оно сработало бы, до его активации.
 
-### Эпик 1G. Режимы дома и присутствие как контекст ⬜
+### Эпик 1G. Режимы дома и присутствие как контекст ✅
 
 > Поднято из Фазы 2: безопасный пол (1A) и будущий ML опираются на контекст, а сделать его дёшево —
 > инверсия зависимостей, если оставлять в Фазе 2.
@@ -197,6 +215,25 @@
 - Источник присутствия (устройства/сенсоры) → переключение режима; ручное переключение из UI.
 - Режим/контекст пишется в event-log (P0-5) как фича.
 - **DoD:** правило может зависеть от режима дома; смена режима меняет поведение климата/света; режим виден в UI и в журнале.
+
+> **✅ Реализовано (Epic 1G).** **Открытая** модель режимов в контракте
+> ([`WellKnownModes`](../../src/Common/Domovoy.Contracts/Home/HomeMode.cs): `Home/Away/Night/Vacation`,
+> строки-расширяемо, а не enum) + событие [`HomeModeChangedV1`](../../src/Common/Domovoy.Contracts/Messaging/Payloads.cs).
+> **DbGateway — авторитет персиста:** single-doc коллекция `home_state`
+> ([`HomeState`](../../src/Gateway/Domovoy.DbGateway/Models/HomeState.cs)) + эндпоинты
+> [`ModeEndpoints`](../../src/Gateway/Domovoy.DbGateway/Endpoints/ModeEndpoints.cs) (`GET /api/mode`,
+> `GET /api/mode/options`, `PUT /api/mode` — апсертит и публикует `HomeModeChangedV1` на шину при реальной
+> смене). Прокси [`ModeController`](../../src/Gateway/Domovoy.ApiGateway/Controllers/ModeController.cs).
+> **event-log как фича (P0-5):** [`EventInterceptor`](../../src/Gateway/Domovoy.DbGateway/Services/EventInterceptor.cs)
+> подписан на `HomeModeChangedV1`, держит текущий режим (засев из `home_state` на старте) и **штампует `Mode`
+> на каждую запись `device_events`** + пишет отдельную запись `mode_change` (capability `home_mode`,
+> `old→new`). **AutomationService:** `HomeModeState` (singleton) + `HomeModeMonitor` (слушает шину) →
+> `RuleRunner` теперь передаёт реальный режим в условия `Mode` (раньше был `null`); засев/ремонт режима в
+> `RefreshLoop` из DbGateway. **Присутствие → авто-режим:** `PresenceMonitor` слушает capability
+> `presence`/`occupancy`, переводит Away→Home при детекте и Home→Away после `AwayDelaySeconds` тишины
+> (настройки в `AutomationOptions`); **никогда не перебивает ручные Night/Vacation**. **WebUI:** страница
+> `/modes` (карточки режимов, текущий режим + источник, недавние смены из event-log). 8 .NET-проектов +
+> `tsc`/lint/26 тестов зелёные. **Не проверено вживую** против RabbitMQ/Mongo.
 
 ### Эпик 1H. Control blocks — контурное/блочное управление ⬜
 
@@ -284,7 +321,7 @@ E2 (композит) и конфигом-инстансом на уровне E
 | Фаза | Горизонт | Ключевой результат | Главные компоненты |
 |---|---|---|---|
 | **0. Фундамент** | ✅ заложен | ядро пригодно к росту | контракт, capability-модель, зоны, event-log (Mongo TS), снятие auth-трения + чистка |
-| **1. Автоматизация** | сейчас | дом работает по сценариям; копятся данные; действия объяснимы | AutomationService (1A ✅), control blocks (1H, дизайн), TSDB (1B), Integration SDK (1C), climate/heating/irrigation адаптеры (1D), объяснимость+реплей (1F), режимы дома (1G) |
+| **1. Автоматизация** | сейчас | дом работает по сценариям; копятся данные; действия объяснимы | AutomationService (1A ✅), режимы дома+присутствие (1G ✅), платформа данных телеметрии (1B ✅), control blocks (1H, дизайн), Integration SDK (1C), climate/heating/irrigation адаптеры (1D), объяснимость+реплей (1F) |
 | **2. Интеллект** | среднесрочно | подсказки ML + внешние устройства + доступ | ML shadow→предложения, cloud-плагины, полная безопасность, замки |
 | **3. Автономность** | долгосрочно | самоуправление + голос + видео | видеоаналитика, голосовой ассистент, active-ML, Matter/Thread |
 

@@ -11,19 +11,21 @@ public sealed class RuleRunner
 {
     private readonly RuleEvaluator _evaluator;
     private readonly ActionExecutor _executor;
+    private readonly HomeModeState _mode;
     private readonly ILogger<RuleRunner> _logger;
 
-    public RuleRunner(RuleEvaluator evaluator, ActionExecutor executor, ILogger<RuleRunner> logger)
+    public RuleRunner(RuleEvaluator evaluator, ActionExecutor executor, HomeModeState mode, ILogger<RuleRunner> logger)
     {
         _evaluator = evaluator;
         _executor = executor;
+        _mode = mode;
         _logger = logger;
     }
 
     public void Fire(AutomationRule rule, string triggerSummary, CancellationToken ct)
     {
-        // Home mode (1G) not yet available — passed as null; Mode conditions won't hold until then.
-        var conditionsMet = _evaluator.ConditionsHold(rule.Conditions, DateTimeOffset.Now, mode: null);
+        // Evaluate Mode conditions against the live home mode (roadmap Epic 1G).
+        var conditionsMet = _evaluator.ConditionsHold(rule.Conditions, DateTimeOffset.Now, _mode.Current);
 
         _logger.LogInformation("Rule '{Name}' triggered ({Summary}); conditions {Met}",
             rule.Name, triggerSummary, conditionsMet ? "met" : "not met");

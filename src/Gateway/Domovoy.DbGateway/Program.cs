@@ -49,6 +49,10 @@ internal static class Program
             builder.Services.AddSingleton<IMongoDatabase>(sp =>
                 sp.GetRequiredService<IMongoClient>().GetDatabase(mongoDbSettings.DatabaseName));
 
+            // Telemetry data-platform options (retention; roadmap Epic 1B).
+            builder.Services.Configure<Config.TelemetryOptions>(
+                builder.Configuration.GetSection(Config.TelemetryOptions.SectionName));
+
             // Configure RabbitMQ
             builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
 
@@ -75,6 +79,7 @@ internal static class Program
             app.MapZoneEndpoints();
             app.MapHistoryEndpoints();
             app.MapAutomationEndpoints();
+            app.MapModeEndpoints();
             app.MapMetrics();
 
             // Health check endpoint

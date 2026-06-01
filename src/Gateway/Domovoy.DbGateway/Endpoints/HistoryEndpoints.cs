@@ -1,6 +1,10 @@
+using System.Globalization;
+using System.Text;
+
 using Domovoy.DbGateway.Models;
 using Domovoy.DbGateway.Services;
 
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace Domovoy.DbGateway.Endpoints;
@@ -26,6 +30,15 @@ public static class HistoryEndpoints
     /// <summary>Flattened telemetry sample for the client.</summary>
     public record TelemetryDto(
         DateTime Timestamp, string DeviceId, string ZoneId, string CapabilityId, string? Unit, double Value);
+
+    /// <summary>One time bucket of aggregated telemetry (roadmap Epic 1B). <c>Value</c> is the requested agg.</summary>
+    public record AggregateBucket(DateTime Timestamp, double Value, double Min, double Max, double Avg, long Count);
+
+    /// <summary>Bucket size → MongoDB <c>$dateTrunc</c> unit. Closed allow-list (no injection).</summary>
+    private static readonly Dictionary<string, string> Buckets = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["minute"] = "minute", ["hour"] = "hour", ["day"] = "day",
+    };
 
     public static void MapHistoryEndpoints(this IEndpointRouteBuilder app)
     {
@@ -58,10 +71,10 @@ public static class HistoryEndpoints
                 d.OldValue, d.NewValue, d.TriggerSource, d.RuleId, d.DecisionId, d.Mode, d.CorrelationId)));
         });
 
-        // GET /api/telemetry?deviceId=&capabilityId=&zoneId=&from=&to=&limit=
+        // GET /api/telemetry?deviceId=&capabilityId=&zoneId=&from=&to=&limit=&format=json|csv
         group.MapGet("/telemetry", async (
             string? deviceId, string? capabilityId, string? zoneId,
-            DateTime? from, DateTime? to, int? limit, IMongoDatabase db) =>
+            DateTime? from, DateTime? to, int? limit, string? format, IMongoDatabase db) =>
         {
             var (lo, hi, take) = Window(from, to, limit);
             var b = Builders<SensorReading>.Filter;
@@ -79,9 +92,82 @@ public static class HistoryEndpoints
                 .Limit(take)
                 .ToListAsync();
 
-            return Results.Ok(docs.Select(d => new TelemetryDto(
-                d.Timestamp, d.Meta.DeviceId, d.Meta.ZoneId, d.Meta.CapabilityId, d.Meta.Unit, d.Value)));
+            var samples = docs.Select(d => new TelemetryDto(
+                d.Timestamp, d.Meta.DeviceId, d.Meta.ZoneId, d.Meta.CapabilityId, d.Meta.Unit, d.Value)).ToList();
+
+            // Period export (Epic 1B): CSV for spreadsheets / external tools.
+            if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
+                return Results.Text(ToCsv(samples), "text/csv", Encoding.UTF8);
+
+            return Results.Ok(samples);
         });
+
+        // GET /api/telemetry/aggregate?deviceId=&capabilityId=&zoneId=&from=&to=&bucket=hour&agg=avg
+        // Minute/hour/day rollups computed on the fly (roadmap Epic 1B) — e.g. "zone temperature per hour".
+        group.MapGet("/telemetry/aggregate", async (
+            string? deviceId, string? capabilityId, string? zoneId,
+            DateTime? from, DateTime? to, string? bucket, string? agg, IMongoDatabase db) =>
+        {
+            if (!Buckets.TryGetValue(bucket ?? "hour", out var unit))
+                return Results.BadRequest(new { error = "bucket must be minute, hour or day" });
+
+            var which = (agg ?? "avg").ToLowerInvariant();
+            if (which is not ("avg" or "min" or "max"))
+                return Results.BadRequest(new { error = "agg must be avg, min or max" });
+
+            var (lo, hi, _) = Window(from, to, null);
+
+            var match = new BsonDocument
+            {
+                { "Timestamp", new BsonDocument { { "$gte", lo }, { "$lte", hi } } },
+            };
+            if (!string.IsNullOrEmpty(deviceId)) match["Meta.DeviceId"] = deviceId;
+            if (!string.IsNullOrEmpty(zoneId)) match["Meta.ZoneId"] = zoneId;
+            if (!string.IsNullOrEmpty(capabilityId)) match["Meta.CapabilityId"] = capabilityId;
+
+            var pipeline = new[]
+            {
+                new BsonDocument("$match", match),
+                new BsonDocument("$group", new BsonDocument
+                {
+                    { "_id", new BsonDocument("$dateTrunc", new BsonDocument
+                        { { "date", "$Timestamp" }, { "unit", unit }, { "binSize", 1 } }) },
+                    { "avg", new BsonDocument("$avg", "$Value") },
+                    { "min", new BsonDocument("$min", "$Value") },
+                    { "max", new BsonDocument("$max", "$Value") },
+                    { "count", new BsonDocument("$sum", 1) },
+                }),
+                new BsonDocument("$sort", new BsonDocument("_id", 1)),
+                new BsonDocument("$limit", MaxLimit),
+            };
+
+            var rows = await db.GetCollection<SensorReading>(TimeSeriesInitializer.SensorReadingsCollection)
+                .Aggregate<BsonDocument>(pipeline)
+                .ToListAsync();
+
+            var buckets = rows.Select(r =>
+            {
+                var avg = r["avg"].ToDouble();
+                var min = r["min"].ToDouble();
+                var max = r["max"].ToDouble();
+                var value = which switch { "min" => min, "max" => max, _ => avg };
+                return new AggregateBucket(r["_id"].ToUniversalTime(), value, min, max, avg, r["count"].ToInt64());
+            });
+
+            return Results.Ok(buckets);
+        });
+    }
+
+    private static string ToCsv(IEnumerable<TelemetryDto> samples)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("timestamp,deviceId,zoneId,capabilityId,unit,value");
+        foreach (var s in samples)
+            sb.Append(s.Timestamp.ToString("o", CultureInfo.InvariantCulture)).Append(',')
+              .Append(s.DeviceId).Append(',').Append(s.ZoneId).Append(',')
+              .Append(s.CapabilityId).Append(',').Append(s.Unit).Append(',')
+              .Append(s.Value.ToString(CultureInfo.InvariantCulture)).Append('\n');
+        return sb.ToString();
     }
 
     private static (DateTime from, DateTime to, int limit) Window(DateTime? from, DateTime? to, int? limit)
