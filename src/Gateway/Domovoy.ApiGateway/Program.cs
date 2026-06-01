@@ -115,6 +115,14 @@ internal static class Program
                 client.Timeout = TimeSpan.FromSeconds(30); // replay scans history; allow headroom
             });
 
+            // PluginSupervisor hosts the plugin registry + lifecycle API (roadmap Epic 1C); proxy to it.
+            var supervisorUrl = builder.Configuration["PluginSupervisor:BaseUrl"] ?? "http://plugin-supervisor:8080";
+            builder.Services.AddHttpClient("plugin-supervisor", client =>
+            {
+                client.BaseAddress = new Uri(supervisorUrl);
+                client.Timeout = TimeSpan.FromSeconds(10);
+            });
+
             builder.Services.AddSignalR();
             builder.Services.AddSingleton<MessageBus.IMessageBus, MessageBus.RabbitMqConnection>();
             builder.Services.AddHostedService<Services.EventRelayService>();

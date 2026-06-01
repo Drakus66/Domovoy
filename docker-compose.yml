@@ -125,6 +125,23 @@ services:
       - AUTOMATION__DBGATEWAYBASEURL=http://db-gateway:8080
     restart: unless-stopped
 
+  # Integration SDK supervisor (Epic 1C): discovers plugin manifests under ./plugins, gates each on host
+  # resources, and runs satisfiable ones as isolated processes. Plugins connect to the bus themselves.
+  plugin-supervisor:
+    container_name: plugin-supervisor
+    image: ${DOCKER_REGISTRY-}plugin-supervisor
+    build:
+      context: .
+      dockerfile: src/Services/Domovoy.PluginSupervisor/Dockerfile
+    networks:
+      - domovoy-network
+    volumes:
+      - ./plugins:/app/plugins:ro
+    environment:
+      - SUPERVISOR__GPUAVAILABLE=false
+      - SUPERVISOR__INTERNETAVAILABLE=true
+    restart: unless-stopped
+
   webui:
     container_name: webui
     image: ${DOCKER_REGISTRY-}webui
