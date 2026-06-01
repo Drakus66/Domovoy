@@ -11,6 +11,7 @@ import type { Zone } from '../../api/zones';
 import { historyApi, EventLogEntry } from '../../api/history';
 import CapabilityControl, { type CommandFn } from './CapabilityControls';
 import { describeDevice } from './deviceVisuals';
+import TelemetryChart from '../charts/TelemetryChart';
 
 const TRIGGER_COLOR: Record<string, 'primary' | 'secondary' | 'default' | 'info'> = {
   user: 'primary', rule: 'secondary', ml: 'info', device: 'default',
@@ -78,6 +79,8 @@ function DrawerBody({
 
   const controls = device.capabilities.filter((c) => c.writable || c.kind === 'Action');
   const sensors = device.capabilities.filter((c) => !c.writable && c.kind !== 'Action');
+  // Numeric sensors get a 24h trend chart (roadmap Epic 1B).
+  const numericSensors = sensors.filter((c) => c.kind === 'Number');
 
   const allOff = () => {
     const set: Record<string, unknown> = {};
@@ -166,6 +169,21 @@ function DrawerBody({
 
         {device.capabilities.length === 0 && (
           <Typography variant="body2" color="text.secondary">No capabilities reported.</Typography>
+        )}
+
+        {numericSensors.length > 0 && (
+          <Section title="Trends · last 24h">
+            <Stack spacing={2.5}>
+              {numericSensors.map((cap) => (
+                <Box key={cap.id}>
+                  <Typography variant="body2" fontWeight={600} mb={0.5}>
+                    {cap.id}{cap.unit ? ` (${cap.unit})` : ''}
+                  </Typography>
+                  <TelemetryChart capabilityId={cap.id} deviceId={device.id} unit={cap.unit} height={160} />
+                </Box>
+              ))}
+            </Stack>
+          </Section>
         )}
 
         <Section title="History">

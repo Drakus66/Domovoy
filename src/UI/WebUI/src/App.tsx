@@ -5,6 +5,7 @@ import theme from './theme';
 import Layout from './components/layout/Layout';
 import Devices from './pages/Devices';
 import Zones from './pages/Zones';
+import Modes from './pages/Modes';
 import Automations from './pages/Automations';
 import Logs from './pages/Logs';
 import SystemStatus from './pages/SystemStatus';
@@ -20,6 +21,7 @@ function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<Devices />} />
             <Route path="zones" element={<Zones />} />
+            <Route path="modes" element={<Modes />} />
             <Route path="automations" element={<Automations />} />
             <Route path="logs" element={<Logs />} />
             <Route path="status" element={<SystemStatus />} />

@@ -11,6 +11,7 @@ public static class MessageTypes
     public const string DeviceCommand = "domovoy.device.command.v1";
     public const string DeviceOnlineChanged = "domovoy.device.online.v1";
     public const string AutomationTriggered = "domovoy.automation.triggered.v1";
+    public const string HomeModeChanged = "domovoy.home.mode.v1";
 }
 
 /// <summary>
@@ -33,4 +34,5 @@ public static class BusTopology
     public const string DeviceStateUpdatedKey = "device.state.updated";
     public const string DeviceOnlineChangedKey = "device.online.changed";
     public const string AutomationTriggeredKey = "automation.triggered";
+    public const string HomeModeChangedKey = "home.mode.changed";
 }

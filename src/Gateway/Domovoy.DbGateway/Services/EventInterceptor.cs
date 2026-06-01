@@ -3,10 +3,15 @@ using System.Globalization;
 using System.Text.Json;
 
 using Domovoy.Contracts.Capabilities;
+using Domovoy.Contracts.Home;
 using Domovoy.Contracts.Messaging;
+using Domovoy.DbGateway.Config;
 using Domovoy.DbGateway.Endpoints;
 using Domovoy.DbGateway.Models;
 using Domovoy.MessageBus;
+
+using Microsoft.Extensions.Options;
+
 using MongoDB.Driver;
 
 namespace Domovoy.DbGateway.Services;
@@ -26,6 +31,7 @@ public class EventInterceptor : BackgroundService
 {
     private readonly IMessageBus _messageBus;
     private readonly IMongoDatabase _database;
+    private readonly TelemetryOptions _telemetry;
     private readonly ILogger<EventInterceptor> _logger;
 
     /// <summary>
@@ -35,22 +41,35 @@ public class EventInterceptor : BackgroundService
     private readonly ConcurrentDictionary<Guid, RecentCommand> _recentCommands = new();
     private static readonly TimeSpan CommandCorrelationWindow = TimeSpan.FromSeconds(15);
 
+    /// <summary>
+    /// Current home mode (roadmap Epic 1G), kept live from <see cref="HomeModeChangedV1"/> and seeded
+    /// from <c>home_state</c> at startup. Stamped onto every event-log record as an ML feature (P0-5).
+    /// </summary>
+    private volatile string _currentMode = WellKnownModes.Default;
+
     private sealed record RecentCommand(DateTime At, string TriggerSource, string? CorrelationId, IReadOnlyDictionary<string, object?> Set);
 
     public EventInterceptor(
         IMessageBus messageBus,
         IMongoDatabase database,
+        IOptions<TelemetryOptions> telemetry,
         ILogger<EventInterceptor> logger)
     {
         _messageBus = messageBus ?? throw new ArgumentNullException(nameof(messageBus));
         _database = database ?? throw new ArgumentNullException(nameof(database));
+        _telemetry = telemetry.Value;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Ensure the append-only feature-store collections exist as time-series before we write.
-        await TimeSeriesInitializer.EnsureCollectionsAsync(_database, _logger, stoppingToken);
+        // Ensure the append-only feature-store collections exist as time-series before we write, and
+        // apply the raw-telemetry retention policy (Epic 1B).
+        await TimeSeriesInitializer.EnsureCollectionsAsync(
+            _database, _logger, _telemetry.RawRetentionDays, stoppingToken);
+
+        // Seed the home mode (1G) so events logged before the first switch carry the right context.
+        await SeedCurrentMode();
 
         _logger.LogInformation("EventInterceptor starting — subscribing to capability contract events");
 
@@ -86,6 +105,13 @@ public class EventInterceptor : BackgroundService
             BusTopology.EventsExchange,
             BusTopology.AutomationTriggeredKey,
             HandleAutomationTriggered);
+
+        // Home mode changes (Epic 1G) — track the current mode and record the change in the event-log.
+        await _messageBus.SubscribeAsync<Envelope<HomeModeChangedV1>>(
+            "dbgateway-home-mode",
+            BusTopology.EventsExchange,
+            BusTopology.HomeModeChangedKey,
+            HandleHomeModeChanged);
 
         _logger.LogInformation("EventInterceptor subscriptions complete");
     }
@@ -203,6 +229,7 @@ public class EventInterceptor : BackgroundService
                 CapabilityId = kv.Key,
                 NewValue = kv.Value,
                 TriggerSource = trigger,
+                Mode = _currentMode,
                 CorrelationId = correlationId,
             }).ToList();
 
@@ -244,6 +271,7 @@ public class EventInterceptor : BackgroundService
                 OldValue = oldValue,
                 NewValue = newValue,
                 TriggerSource = commanded ? recent!.TriggerSource : TriggerSources.Device,
+                Mode = _currentMode,
                 CorrelationId = commanded ? recent!.CorrelationId : null,
             });
 
@@ -289,6 +317,64 @@ public class EventInterceptor : BackgroundService
         {
             _logger.LogError(ex, "Error persisting automation history for rule {RuleId}", e.RuleId);
         }
+    }
+
+    // ====================================================================
+    // Home mode / presence context (roadmap Epic 1G)
+    // ====================================================================
+
+    private async Task SeedCurrentMode()
+    {
+        try
+        {
+            var state = await _database.GetCollection<HomeState>(ModeEndpoints.Collection)
+                .Find(x => x.Id == HomeState.SingletonId)
+                .FirstOrDefaultAsync();
+            if (state is not null && !string.IsNullOrWhiteSpace(state.Mode))
+                _currentMode = state.Mode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not seed current home mode; defaulting to {Mode}", _currentMode);
+        }
+    }
+
+    private async Task HandleHomeModeChanged(Envelope<HomeModeChangedV1> envelope)
+    {
+        var change = envelope.Data;
+        if (change is null || string.IsNullOrWhiteSpace(change.Mode)) return;
+
+        _currentMode = change.Mode;
+
+        // Record the mode change itself as a feature-store event so history/replay can reconstruct context.
+        try
+        {
+            await EventLog.InsertOneAsync(new DeviceEventLog
+            {
+                Timestamp = change.ChangedAt.UtcDateTime,
+                Meta = new EventMeta { Kind = EventKinds.ModeChange },
+                CapabilityId = ContextCapabilities.HomeMode,
+                OldValue = change.PreviousMode,
+                NewValue = change.Mode,
+                TriggerSource = MapModeSource(change.Source),
+                Mode = change.Mode,
+            });
+            _logger.LogInformation("Home mode changed to {Mode} (was {Previous}, by {Source})",
+                change.Mode, change.PreviousMode ?? "—", change.Source);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error recording home-mode change to {Mode}", change.Mode);
+        }
+    }
+
+    private static string MapModeSource(string? source)
+    {
+        var s = source?.ToLowerInvariant() ?? string.Empty;
+        if (s.Contains("ml")) return TriggerSources.Ml;
+        if (s.Contains("rule") || s.Contains("automation")) return TriggerSources.Rule;
+        if (s.Contains("presence") || s.Contains("device")) return TriggerSources.Device;
+        return TriggerSources.User;
     }
 
     private IMongoCollection<DeviceEventLog> EventLog =>

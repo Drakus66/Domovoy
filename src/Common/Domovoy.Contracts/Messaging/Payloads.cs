@@ -49,3 +49,16 @@ public sealed record AutomationTriggeredV1(
     string TriggerSummary,
     int ActionsExecuted,
     string? Detail = null);
+
+/// <summary>
+/// The home mode changed (roadmap Epic 1G). Published by the DbGateway (the persistence authority for
+/// the mode) after a manual or presence-driven switch. The AutomationService consumes it to feed
+/// <c>Mode</c> conditions, and the DbGateway's own EventInterceptor consumes it to stamp the current
+/// mode onto every event-log record as an ML feature (P0-5).
+/// </summary>
+/// <remarks>Envelope type: <see cref="MessageTypes.HomeModeChanged"/>.</remarks>
+public sealed record HomeModeChangedV1(
+    string Mode,
+    string? PreviousMode,
+    string Source,
+    DateTimeOffset ChangedAt);
