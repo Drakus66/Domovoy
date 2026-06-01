@@ -1,18 +1,163 @@
-import { Container, Typography, Box } from '@mui/material';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Container, Box, Typography, Stack, Chip, TextField, MenuItem, InputAdornment,
+  LinearProgress, Alert, Card, IconButton, Tooltip, Divider,
+} from '@mui/material';
+import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
+import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
+import DevicesRoundedIcon from '@mui/icons-material/DevicesRounded';
+import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
+import TerminalRoundedIcon from '@mui/icons-material/TerminalRounded';
+import { activityApi, ActivityEntry, ActivitySource, ActivitySeverity } from '../api/activity';
+import { capabilityDevicesApi } from '../api/capabilityDevices';
 
-function Logs() {
+const SOURCE_META: Record<ActivitySource, { label: string; icon: JSX.Element; color: 'primary' | 'secondary' | 'default' }> = {
+  device: { label: 'Devices', icon: <DevicesRoundedIcon fontSize="small" />, color: 'primary' },
+  automation: { label: 'Automations', icon: <BoltRoundedIcon fontSize="small" />, color: 'secondary' },
+  system: { label: 'System', icon: <TerminalRoundedIcon fontSize="small" />, color: 'default' },
+};
+
+const SEVERITY_COLOR: Record<ActivitySeverity, 'default' | 'warning' | 'error'> = {
+  info: 'default', warn: 'warning', error: 'error',
+};
+
+const SEVERITY_BAR: Record<ActivitySeverity, string> = {
+  info: 'var(--mui-palette-divider)', warn: 'var(--mui-palette-warning-main)', error: 'var(--mui-palette-error-main)',
+};
+
+const WINDOWS = [
+  { label: 'Last hour', hours: 1 },
+  { label: 'Last 24h', hours: 24 },
+  { label: 'Last 7 days', hours: 168 },
+];
+
+export default function Logs() {
+  const [entries, setEntries] = useState<ActivityEntry[]>([]);
+  const [deviceNames, setDeviceNames] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState<ActivitySource | 'all'>('all');
+  const [severity, setSeverity] = useState<ActivitySeverity | 'all'>('all');
+  const [hours, setHours] = useState(24);
+  const [search, setSearch] = useState('');
+
+  const since = useMemo(() => new Date(Date.now() - hours * 3600 * 1000).toISOString(), [hours]);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const rows = await activityApi.get({
+        from: since, limit: 500,
+        source: source === 'all' ? undefined : source,
+        severity: severity === 'all' ? undefined : severity,
+        q: search.trim() || undefined,
+      });
+      setEntries(rows);
+    } catch {
+      setError('Failed to load activity. Check ApiGateway / DbGateway connection.');
+    } finally {
+      setLoading(false);
+    }
+  }, [since, source, severity, search]);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const t = setInterval(load, 10000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  // Resolve device ids → names for readable device rows (best-effort).
+  useEffect(() => {
+    capabilityDevicesApi.getDevices()
+      .then((ds) => setDeviceNames(Object.fromEntries(ds.map((d) => [d.id, d.name]))))
+      .catch(() => undefined);
+  }, []);
+
+  const fmt = (iso: string) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+  };
+
   return (
-    <Container maxWidth="xl">
-      <Box sx={{ py: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          System Logs
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Log entries will be displayed here
-        </Typography>
+    <Container maxWidth="lg">
+      <Box py={{ xs: 3, md: 4 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
+          <Box>
+            <Typography variant="h4" component="h1" fontWeight={700}>Activity</Typography>
+            <Typography variant="caption" color="text.secondary">
+              What happened and why — device events, automation runs and system logs in one searchable feed.
+            </Typography>
+          </Box>
+          <Tooltip title="Refresh"><IconButton onClick={load} disabled={loading}><RefreshRoundedIcon /></IconButton></Tooltip>
+        </Stack>
+
+        <Stack direction="row" spacing={1.5} mb={2} flexWrap="wrap" useFlexGap alignItems="center">
+          <TextField
+            size="small" placeholder="Search…" value={search}
+            onChange={(e) => setSearch(e.target.value)} sx={{ minWidth: 220 }}
+            InputProps={{ startAdornment: (<InputAdornment position="start"><SearchRoundedIcon fontSize="small" /></InputAdornment>) }}
+          />
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Chip label="All" variant={source === 'all' ? 'filled' : 'outlined'}
+              color={source === 'all' ? 'primary' : 'default'} onClick={() => setSource('all')} />
+            {(Object.keys(SOURCE_META) as ActivitySource[]).map((s) => (
+              <Chip key={s} icon={SOURCE_META[s].icon} label={SOURCE_META[s].label}
+                variant={source === s ? 'filled' : 'outlined'}
+                color={source === s ? SOURCE_META[s].color : 'default'} onClick={() => setSource(s)} />
+            ))}
+          </Stack>
+          <TextField select size="small" label="Severity" value={severity} sx={{ width: 130 }}
+            onChange={(e) => setSeverity(e.target.value as ActivitySeverity | 'all')}>
+            <MenuItem value="all">All</MenuItem>
+            <MenuItem value="info">Info</MenuItem>
+            <MenuItem value="warn">Warning</MenuItem>
+            <MenuItem value="error">Error</MenuItem>
+          </TextField>
+          <TextField select size="small" label="Window" value={hours} sx={{ width: 140 }}
+            onChange={(e) => setHours(Number(e.target.value))}>
+            {WINDOWS.map((w) => <MenuItem key={w.hours} value={w.hours}>{w.label}</MenuItem>)}
+          </TextField>
+        </Stack>
+
+        {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
+        {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+
+        {entries.length === 0 && !loading ? (
+          <Box textAlign="center" py={8}>
+            <Typography color="text.secondary">No activity in the selected window.</Typography>
+          </Box>
+        ) : (
+          <Card variant="outlined">
+            <Stack divider={<Divider />}>
+              {entries.map((e, i) => (
+                <Stack key={`${e.timestamp}-${i}`} direction="row" spacing={1.5} alignItems="flex-start"
+                  sx={{ px: 2, py: 1.25, borderLeft: '3px solid', borderLeftColor: SEVERITY_BAR[e.severity] }}>
+                  <Box flex={1} minWidth={0}>
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap mb={0.25}>
+                      <Chip size="small" variant="outlined" color={SOURCE_META[e.source]?.color ?? 'default'}
+                        label={SOURCE_META[e.source]?.label ?? e.source} />
+                      {e.severity !== 'info' && (
+                        <Chip size="small" color={SEVERITY_COLOR[e.severity]} label={e.severity} />
+                      )}
+                      <Typography variant="body2" fontWeight={600} sx={{ wordBreak: 'break-word' }}>{e.title}</Typography>
+                    </Stack>
+                    {(e.detail || e.deviceId || e.service) && (
+                      <Typography variant="caption" color="text.secondary">
+                        {e.deviceId ? `${deviceNames[e.deviceId] ?? e.deviceId} · ` : ''}
+                        {e.service ? `${e.service} · ` : ''}
+                        {e.detail ?? ''}
+                      </Typography>
+                    )}
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap', pt: 0.25 }}>
+                    {fmt(e.timestamp)}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          </Card>
+        )}
       </Box>
     </Container>
   );
 }
-
-export default Logs;
