@@ -12,6 +12,7 @@ import BluetoothSearchingRoundedIcon from '@mui/icons-material/BluetoothSearchin
 import RoomRoundedIcon from '@mui/icons-material/RoomRounded';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import HomeWorkRoundedIcon from '@mui/icons-material/HomeWorkRounded';
+import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
 import ColorModeToggle from '../theme/ColorModeToggle';
 
 const DRAWER_WIDTH = 248;
@@ -21,6 +22,7 @@ const navItems = [
   { label: 'Zones', path: '/zones', icon: <RoomRoundedIcon /> },
   { label: 'Modes', path: '/modes', icon: <HomeWorkRoundedIcon /> },
   { label: 'Automations', path: '/automations', icon: <BoltRoundedIcon /> },
+  { label: 'Control blocks', path: '/blocks', icon: <AccountTreeRoundedIcon /> },
   { label: 'Zigbee', path: '/zigbee', icon: <BluetoothSearchingRoundedIcon /> },
   { label: 'System Status', path: '/status', icon: <MonitorHeartRoundedIcon /> },
   { label: 'Logs', path: '/logs', icon: <ArticleRoundedIcon /> },
