@@ -137,6 +137,9 @@ public class EventInterceptor : BackgroundService
                 .Set(x => x.Model, device.Model)
                 .Set(x => x.Capabilities, device.Capabilities.Select(ToCapabilityDocument).ToList())
                 .Set(x => x.IsOnline, true)
+                // Semantic archetype (Epic 2D): recompute the auto value each (re)announce; the manual
+                // override field is left untouched so a re-announce never clobbers the user's choice.
+                .Set(x => x.AutoArchetype, DeviceClassifier.Classify(device.Capabilities, device.Identity.AdapterSource, device.Model))
                 .Set(x => x.LastUpdated, DateTime.UtcNow)
                 // ZoneId is a manual, UI-assigned read-model concern (P0-3). Adapters always announce
                 // Guid.Empty, so it is set only on first insert — a re-announce must not wipe the zone.

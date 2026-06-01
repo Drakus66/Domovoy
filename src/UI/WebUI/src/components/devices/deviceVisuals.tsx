@@ -19,6 +19,7 @@ import NetworkCheckRoundedIcon from '@mui/icons-material/NetworkCheckRounded';
 import SensorsRoundedIcon from '@mui/icons-material/SensorsRounded';
 import DevicesOtherRoundedIcon from '@mui/icons-material/DevicesOtherRounded';
 import type { Capability, CapabilityDevice } from '../../api/capabilityDevices';
+import { effectiveArchetype } from '../../api/capabilityDevices';
 
 /** Loose coercions — adapters report state as strings, numbers or booleans. */
 export const asBool = (v: unknown) => v === true || v === 'ON' || v === 'true' || v === 1 || v === 'on';
@@ -77,7 +78,18 @@ const has = (device: CapabilityDevice, id: string) => device.capabilities.some((
 const writable = (device: CapabilityDevice, id: string) =>
   device.capabilities.some((c) => c.id === id && c.writable);
 
+/** Backend archetype (Epic 2D) → UI category. Falls back to the capability heuristic if unknown/absent. */
+const ARCHETYPE_CATEGORY: Record<string, DeviceCategory> = {
+  light: 'light', switch: 'switch', thermostat: 'climate', valve: 'climate',
+  climate_sensor: 'sensor', motion: 'sensor', contact: 'sensor', sensor: 'sensor',
+  lock: 'security', energy_meter: 'energy', control_block: 'other',
+};
+
 export function deviceCategory(device: CapabilityDevice): DeviceCategory {
+  // Prefer the authoritative semantic archetype from the backend (Epic 2D).
+  const mapped = ARCHETYPE_CATEGORY[effectiveArchetype(device)];
+  if (mapped) return mapped;
+  // Fallback: derive from the capability set (also used when archetype is unknown/absent).
   if (has(device, 'brightness') || has(device, 'color') || has(device, 'color_temp')) return 'light';
   if (has(device, 'lock')) return 'security';
   if (has(device, 'temperature_setpoint') || has(device, 'valve')) return 'climate';

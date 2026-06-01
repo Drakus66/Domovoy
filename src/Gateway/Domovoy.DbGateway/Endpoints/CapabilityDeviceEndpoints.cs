@@ -16,6 +16,9 @@ public static class CapabilityDeviceEndpoints
     /// <summary>Request body for binding a device to a zone (empty/null zoneId unassigns).</summary>
     public record ZoneAssignment(string? ZoneId);
 
+    /// <summary>Request body for the manual archetype override (empty/null reverts to the auto value).</summary>
+    public record ArchetypeAssignment(string? Archetype);
+
     public static void MapCapabilityDeviceEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/capability-devices")
@@ -57,6 +60,19 @@ public static class CapabilityDeviceEndpoints
             var collection = db.GetCollection<CapabilityDeviceDocument>(Collection);
             var update = Builders<CapabilityDeviceDocument>.Update
                 .Set(x => x.ZoneId, zoneId)
+                .Set(x => x.LastUpdated, DateTime.UtcNow);
+            var result = await collection.UpdateOneAsync(x => x.Id == id, update);
+            return result.MatchedCount == 0 ? Results.NotFound() : Results.NoContent();
+        });
+
+        // Manual archetype override (Epic 2D). Empty/null reverts to the auto-classified value. The
+        // discovery path only writes AutoArchetype, so this override survives re-announces.
+        group.MapPut("/{id}/archetype", async (string id, ArchetypeAssignment body, IMongoDatabase db) =>
+        {
+            var archetype = string.IsNullOrWhiteSpace(body.Archetype) ? null : body.Archetype.Trim().ToLowerInvariant();
+            var collection = db.GetCollection<CapabilityDeviceDocument>(Collection);
+            var update = Builders<CapabilityDeviceDocument>.Update
+                .Set(x => x.Archetype, archetype)
                 .Set(x => x.LastUpdated, DateTime.UtcNow);
             var result = await collection.UpdateOneAsync(x => x.Id == id, update);
             return result.MatchedCount == 0 ? Results.NotFound() : Results.NoContent();

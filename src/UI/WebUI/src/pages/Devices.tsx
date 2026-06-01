@@ -99,6 +99,11 @@ export default function Devices() {
     capabilityDevicesApi.assignZone(deviceId, zoneId).catch(() => setError('Failed to assign zone'));
   }, []);
 
+  const handleSetArchetype = useCallback((deviceId: string, archetype: string | null) => {
+    setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, archetype } : d)));
+    capabilityDevicesApi.setArchetype(deviceId, archetype).catch(() => setError('Failed to set device type'));
+  }, []);
+
   const adapters = useMemo(
     () => Array.from(new Set(devices.map((d) => d.adapterSource))).sort(),
     [devices],
@@ -232,6 +237,7 @@ export default function Devices() {
         onClose={() => setSelectedId(null)}
         onCommand={handleCommand}
         onAssignZone={handleAssignZone}
+        onSetArchetype={handleSetArchetype}
       />
     </Container>
   );
