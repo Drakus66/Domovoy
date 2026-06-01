@@ -1,3 +1,4 @@
+using Domovoy.AutomationService.Blocks;
 using Domovoy.AutomationService.Configuration;
 
 using Microsoft.Extensions.Options;
@@ -12,6 +13,7 @@ namespace Domovoy.AutomationService.Services;
 public sealed class RefreshLoop : BackgroundService
 {
     private readonly RuleStore _store;
+    private readonly BlockStore _blocks;
     private readonly DeviceRegistry _registry;
     private readonly DbGatewayClient _db;
     private readonly HomeModeState _mode;
@@ -19,10 +21,11 @@ public sealed class RefreshLoop : BackgroundService
     private readonly ILogger<RefreshLoop> _logger;
 
     public RefreshLoop(
-        RuleStore store, DeviceRegistry registry, DbGatewayClient db, HomeModeState mode,
+        RuleStore store, BlockStore blocks, DeviceRegistry registry, DbGatewayClient db, HomeModeState mode,
         IOptions<AutomationOptions> options, ILogger<RefreshLoop> logger)
     {
         _store = store;
+        _blocks = blocks;
         _registry = registry;
         _db = db;
         _mode = mode;
@@ -38,6 +41,7 @@ public sealed class RefreshLoop : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             await _store.RefreshAsync(stoppingToken);
+            await _blocks.RefreshAsync(stoppingToken);
             await RefreshDevices(stoppingToken);
             await RefreshMode(stoppingToken);
 

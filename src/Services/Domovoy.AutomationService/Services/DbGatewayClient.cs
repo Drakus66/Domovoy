@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 
 using Domovoy.Contracts.Automations;
+using Domovoy.Contracts.Blocks;
 
 namespace Domovoy.AutomationService.Services;
 
@@ -32,6 +33,20 @@ public sealed class DbGatewayClient
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not load user rules from DbGateway");
+            return null;
+        }
+    }
+
+    /// <summary>Control-block instance configs (Epic 1H), or null if the gateway is unreachable.</summary>
+    public async Task<List<ControlBlock>?> GetBlocksAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<List<ControlBlock>>("api/blocks", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load control blocks from DbGateway");
             return null;
         }
     }

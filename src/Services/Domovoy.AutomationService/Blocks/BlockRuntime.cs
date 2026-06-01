@@ -1,0 +1,248 @@
+using System.Collections.Concurrent;
+
+using Domovoy.AutomationService.Services;
+using Domovoy.Contracts.Blocks;
+using Domovoy.Contracts.Capabilities;
+using Domovoy.Contracts.Devices;
+using Domovoy.Contracts.Messaging;
+using Domovoy.MessageBus;
+
+namespace Domovoy.AutomationService.Blocks;
+
+/// <summary>
+/// Hosts and ticks control-block instances (roadmap Epic 1H) — the stateful middle layer. On its own
+/// fast cadence (separate from the 1-minute rule scheduler) it: syncs running instances with the configs
+/// in <see cref="BlockStore"/>; reads each block's bound inputs from the shared <see cref="DeviceRegistry"/>
+/// blackboard; ticks it; and publishes the emitted outputs as a <b>virtual capability device</b>'s state
+/// (<see cref="DeviceStateReportV1"/>, source <c>block:{id}</c>). Each block is announced once via
+/// <see cref="DeviceDiscoveredV1"/> so it appears in <c>/devices</c> with history/zones. Composition is
+/// free: a block whose input is bound to another block's virtual device reads it from the registry, which
+/// is kept live by the <see cref="AutomationEngine"/> subscription. Writable outputs (setpoints) are
+/// retargeted by commanding the virtual device (<see cref="DeviceCommandV1"/>).
+/// </summary>
+public sealed class BlockRuntime : BackgroundService
+{
+    private readonly IMessageBus _bus;
+    private readonly DeviceRegistry _registry;
+    private readonly BlockCatalog _catalog;
+    private readonly BlockStore _store;
+    private readonly ILogger<BlockRuntime> _logger;
+
+    private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(15);
+    private readonly ConcurrentDictionary<string, RunningBlock> _running = new();
+
+    public BlockRuntime(
+        IMessageBus bus, DeviceRegistry registry, BlockCatalog catalog, BlockStore store,
+        ILogger<BlockRuntime> logger)
+    {
+        _bus = bus;
+        _registry = registry;
+        _catalog = catalog;
+        _store = store;
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        // Capture setpoint (and other writable-output) commands aimed at a block's virtual device.
+        await _bus.SubscribeAsync<Envelope<DeviceCommandV1>>(
+            "automation-block-commands",
+            BusTopology.CommandsExchange,
+            BusTopology.DeviceCommandKey,
+            env => HandleCommand(env),
+            stoppingToken);
+
+        _logger.LogInformation("BlockRuntime started (tick {Seconds}s)", TickInterval.TotalSeconds);
+
+        using var timer = new PeriodicTimer(TickInterval);
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await SyncInstances(stoppingToken);
+                await TickAll(stoppingToken);
+            }
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "BlockRuntime tick failed");
+            }
+
+            if (!await timer.WaitForNextTickAsync(stoppingToken)) break;
+        }
+    }
+
+    // Reconcile running instances with the latest configs: add new, drop removed, rebuild on config change.
+    private async Task SyncInstances(CancellationToken ct)
+    {
+        var configs = _store.Blocks.ToDictionary(b => b.Id, StringComparer.Ordinal);
+
+        foreach (var goneId in _running.Keys.Where(id => !configs.ContainsKey(id)).ToList())
+            _running.TryRemove(goneId, out _);
+
+        foreach (var config in configs.Values)
+        {
+            if (_running.TryGetValue(config.Id, out var existing) && existing.ConfigStamp == config.UpdatedAt)
+                continue; // unchanged
+
+            var type = _catalog.Get(config.TypeId);
+            if (type is null)
+            {
+                _logger.LogWarning("Block {Id} references unknown type {Type}", config.Id, config.TypeId);
+                continue;
+            }
+
+            var deviceId = ResolveDeviceId(config);
+            var running = new RunningBlock(config, type.Create(), deviceId, config.UpdatedAt);
+            _running[config.Id] = running;
+
+            await AnnounceDevice(config, type, deviceId, ct);
+        }
+    }
+
+    private async Task TickAll(CancellationToken ct)
+    {
+        var now = DateTimeOffset.Now;
+        foreach (var rb in _running.Values)
+        {
+            if (!rb.Config.Enabled) continue;
+
+            var emitted = new Dictionary<string, object?>();
+            try
+            {
+                rb.Block.Tick(new BlockContext(rb, _registry, now, emitted, _logger));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Block {Id} ({Type}) tick threw", rb.Config.Id, rb.Config.TypeId);
+                continue;
+            }
+
+            if (emitted.Count == 0) continue;
+
+            // Mirror into the local blackboard immediately so a downstream block composed on this one
+            // sees the value this same round (the bus round-trip would otherwise add a tick of latency).
+            foreach (var kv in emitted) _registry.SetValue(rb.DeviceId, kv.Key, kv.Value);
+
+            var envelope = Envelope<DeviceStateReportV1>.Create(
+                MessageTypes.DeviceState,
+                source: $"block:{rb.Config.Id}",
+                data: new DeviceStateReportV1(rb.DeviceId, emitted),
+                subject: rb.DeviceId.ToString());
+            await _bus.PublishAsync(BusTopology.StateExchange, BusTopology.DeviceStateUpdatedKey, envelope, ct);
+        }
+    }
+
+    private async Task AnnounceDevice(ControlBlock config, IBlockType type, Guid deviceId, CancellationToken ct)
+    {
+        Guid.TryParse(config.ZoneId, out var zone);
+        var descriptor = new DeviceDescriptor(
+            Id: deviceId,
+            Name: config.Name,
+            ZoneId: zone,
+            Identity: new DeviceIdentity("ControlBlock", config.Id),
+            Capabilities: type.Outputs,
+            Manufacturer: "Domovoy",
+            Model: $"block/{type.TypeId}");
+
+        var envelope = Envelope<DeviceDiscoveredV1>.Create(
+            MessageTypes.DeviceDiscovered,
+            source: $"block:{config.Id}",
+            data: new DeviceDiscoveredV1(descriptor),
+            subject: deviceId.ToString());
+        await _bus.PublishAsync(BusTopology.DiscoveryExchange, BusTopology.DeviceDiscoveredKey, envelope, ct);
+        _logger.LogInformation("Announced control block '{Name}' ({Type}) as device {DeviceId}",
+            config.Name, type.TypeId, deviceId);
+    }
+
+    private Task HandleCommand(Envelope<DeviceCommandV1> envelope)
+    {
+        var cmd = envelope.Data;
+        if (cmd is null) return Task.CompletedTask;
+
+        // A command to a block's virtual device retargets its writable outputs (e.g. a setpoint).
+        var rb = _running.Values.FirstOrDefault(r => r.DeviceId == cmd.DeviceId);
+        if (rb is null) return Task.CompletedTask;
+
+        foreach (var kv in cmd.Set)
+            rb.Commanded[kv.Key] = ValueOps.Normalize(kv.Value);
+
+        return Task.CompletedTask;
+    }
+
+    private static Guid ResolveDeviceId(ControlBlock config) =>
+        Guid.TryParse(config.DeviceId, out var id) && id != Guid.Empty
+            ? id
+            : DeviceIdFactory.Derive("ControlBlock", config.Id);
+
+    /// <summary>Live per-instance state of a running block.</summary>
+    private sealed class RunningBlock
+    {
+        public RunningBlock(ControlBlock config, IBlock block, Guid deviceId, DateTime configStamp)
+        {
+            Config = config;
+            Block = block;
+            DeviceId = deviceId;
+            ConfigStamp = configStamp;
+        }
+
+        public ControlBlock Config { get; }
+        public IBlock Block { get; }
+        public Guid DeviceId { get; }
+        public DateTime ConfigStamp { get; }
+        public Dictionary<string, object?> State { get; } = new();
+        public Dictionary<string, object?> Commanded { get; } = new();
+    }
+
+    /// <summary>Per-tick view handed to a block: inputs from the blackboard, params, commands, state.</summary>
+    private sealed class BlockContext : IBlockContext
+    {
+        private readonly RunningBlock _rb;
+        private readonly DeviceRegistry _registry;
+        private readonly Dictionary<string, object?> _emitted;
+        private readonly ILogger _logger;
+
+        public BlockContext(RunningBlock rb, DeviceRegistry registry, DateTimeOffset now,
+            Dictionary<string, object?> emitted, ILogger logger)
+        {
+            _rb = rb;
+            _registry = registry;
+            Now = now;
+            _emitted = emitted;
+            _logger = logger;
+        }
+
+        public DateTimeOffset Now { get; }
+
+        public object? Read(string inputPort)
+        {
+            if (!_rb.Config.Inputs.TryGetValue(inputPort, out var binding)) return null;
+            if (!Guid.TryParse(binding.DeviceId, out var src)) return null;
+            return _registry.GetValue(src, binding.CapabilityId);
+        }
+
+        public double? ReadNumber(string inputPort) => ToDouble(Read(inputPort));
+
+        public double Param(string key, double fallback) =>
+            _rb.Config.Params.TryGetValue(key, out var v) ? v : fallback;
+
+        public object? Commanded(string capabilityId) =>
+            _rb.Commanded.TryGetValue(capabilityId, out var v) ? v : null;
+
+        public void Emit(string capabilityId, object? value) => _emitted[capabilityId] = value;
+
+        public T? GetState<T>(string key) =>
+            _rb.State.TryGetValue(key, out var v) && v is T t ? t : default;
+
+        public void SetState<T>(string key, T value) => _rb.State[key] = value;
+
+        public void Log(string message) => _logger.LogInformation("[block {Id}] {Message}", _rb.Config.Id, message);
+
+        private static double? ToDouble(object? v) => ValueOps.Normalize(v) switch
+        {
+            double d => d,
+            bool b => b ? 1 : 0,
+            _ => null,
+        };
+    }
+}

@@ -1,9 +1,11 @@
 namespace Domovoy.AutomationService;
 
+using Blocks;
 using Configuration;
 using Services;
 
 using Domovoy.Common.Logging;
+using Domovoy.Contracts.Capabilities;
 using Domovoy.MessageBus;
 
 using Microsoft.Extensions.Options;
@@ -50,6 +52,8 @@ internal static class Program
             builder.Services.AddSingleton<RuleRunner>();
             builder.Services.AddSingleton<HomeModeState>();
             builder.Services.AddSingleton<ReplayService>();   // 1F: dry-run a rule over history
+            builder.Services.AddSingleton<BlockCatalog>();    // 1H: built-in control-block types
+            builder.Services.AddSingleton<BlockStore>();
 
             // Order matters only loosely: RefreshLoop seeds rules/devices/mode, the engine + scheduler fire them.
             builder.Services.AddHostedService<RefreshLoop>();
@@ -57,6 +61,7 @@ internal static class Program
             builder.Services.AddHostedService<AutomationScheduler>();
             builder.Services.AddHostedService<HomeModeMonitor>();   // 1G: track current home mode from the bus
             builder.Services.AddHostedService<PresenceMonitor>();   // 1G: presence-driven Home/Away switching
+            builder.Services.AddHostedService<BlockRuntime>();      // 1H: tick control blocks as virtual devices
 
             var app = builder.Build();
 
@@ -70,6 +75,27 @@ internal static class Program
             // Replay/simulation (roadmap Epic 1F): POST a candidate rule + window, get when it would fire.
             app.MapPost("/api/replay", async (ReplayRequest request, ReplayService replay, CancellationToken ct) =>
                 Results.Ok(await replay.RunAsync(request, ct)));
+
+            // Control-block catalog (roadmap Epic 1H): the built-in types' schema for the authoring UI.
+            app.MapGet("/api/blocks/catalog", (BlockCatalog catalog) => Results.Ok(
+                catalog.Types.Select(t => new
+                {
+                    typeId = t.TypeId,
+                    title = t.Title,
+                    description = t.Description,
+                    inputs = t.Inputs.Select(p => new { name = p.Name, kind = p.Kind.ToString(), description = p.Description }),
+                    outputs = t.Outputs.Select(c => new
+                    {
+                        id = c.Id,
+                        kind = c.Kind.ToString(),
+                        unit = c.Attributes.TryGetValue(CapabilityAttributeKeys.Unit, out var u) ? u : null,
+                        writable = c.IsWritable,
+                    }),
+                    @params = t.Params.Select(p => new
+                    {
+                        name = p.Name, @default = p.Default, unit = p.Unit, min = p.Min, max = p.Max, description = p.Description,
+                    }),
+                })));
 
             app.Run();
         }

@@ -7,6 +7,7 @@ import Devices from './pages/Devices';
 import Zones from './pages/Zones';
 import Modes from './pages/Modes';
 import Automations from './pages/Automations';
+import Blocks from './pages/Blocks';
 import Logs from './pages/Logs';
 import SystemStatus from './pages/SystemStatus';
 import ZigbeeDevices from './pages/ZigbeeDevices';
@@ -23,6 +24,7 @@ function App() {
             <Route path="zones" element={<Zones />} />
             <Route path="modes" element={<Modes />} />
             <Route path="automations" element={<Automations />} />
+            <Route path="blocks" element={<Blocks />} />
             <Route path="logs" element={<Logs />} />
             <Route path="status" element={<SystemStatus />} />
             <Route path="zigbee" element={<ZigbeeDevices />} />
