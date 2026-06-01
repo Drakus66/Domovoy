@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Container, Box, Typography, Stack, Button, IconButton, LinearProgress, Alert,
-  Card, CardContent, Tooltip, Switch, Chip, Dialog, DialogTitle, DialogContent,
+  Card, CardContent, Tooltip, Chip, Dialog, DialogTitle, DialogContent,
   DialogActions, TextField, MenuItem, FormControlLabel, Checkbox, Divider, Drawer,
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
@@ -10,12 +10,18 @@ import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import ShieldRoundedIcon from '@mui/icons-material/ShieldRounded';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import ScienceRoundedIcon from '@mui/icons-material/ScienceRounded';
 import {
-  automationsApi, AutomationRule, AutoHistoryEntry, RuleTrigger, RuleCondition, RuleAction, NewRule,
+  automationsApi, AutomationRule, AutoHistoryEntry, RuleTrigger, RuleCondition, RuleAction, NewRule, RuleStatus,
 } from '../api/automations';
+import { replayApi, ReplayResult } from '../api/replay';
 import { capabilityDevicesApi, CapabilityDevice } from '../api/capabilityDevices';
 
 const OPERATORS = ['eq', 'ne', 'gt', 'lt', 'gte', 'lte', 'changed'];
+// User-selectable lifecycle (Proposed/Approved are reserved for ML proposals, Epic 1F/Phase 2).
+const STATUS_OPTIONS: RuleStatus[] = ['Active', 'Shadow', 'Disabled'];
+const statusColor = (s: RuleStatus): 'success' | 'info' | 'default' =>
+  s === 'Active' ? 'success' : s === 'Shadow' ? 'info' : 'default';
 
 const parseValue = (raw: string): unknown => {
   const s = raw.trim();
@@ -34,11 +40,13 @@ interface DraftState {
   onlyDark: boolean;
   actDevice: string; actCap: string; actValue: string;
   autoOffSeconds: number;
+  status: RuleStatus;
 }
 
 const EMPTY_DRAFT: DraftState = {
   name: '', trigDevice: '', trigCap: '', trigOp: 'eq', trigValue: 'true',
   onlyDark: false, actDevice: '', actCap: '', actValue: 'true', autoOffSeconds: 0,
+  status: 'Active',
 };
 
 export default function Automations() {
@@ -48,6 +56,7 @@ export default function Automations() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [historyFor, setHistoryFor] = useState<AutomationRule | 'all' | null>(null);
+  const [simulateFor, setSimulateFor] = useState<AutomationRule | null>(null);
 
   const deviceName = useCallback(
     (id?: string | null) => devices.find((d) => d.id === id)?.name ?? id ?? '—',
@@ -69,8 +78,8 @@ export default function Automations() {
 
   useEffect(() => { load(); }, [load]);
 
-  const toggle = async (rule: AutomationRule) => {
-    const next = rule.status === 'Active' ? 'Disabled' : 'Active';
+  const changeStatus = async (rule: AutomationRule, next: RuleStatus) => {
+    if (next === rule.status) return;
     setRules((prev) => prev.map((x) => (x.id === rule.id ? { ...x, status: next } : x)));
     try { await automationsApi.setStatus(rule.id, next); }
     catch { setError('Failed to change status'); load(); }
@@ -115,7 +124,7 @@ export default function Automations() {
       actions.push({ type: 'Command', deviceId: draft.actDevice, set: { [draft.actCap]: false } });
     }
 
-    const rule: NewRule = { name: draft.name.trim(), description: null, status: 'Active', triggers, conditions, actions };
+    const rule: NewRule = { name: draft.name.trim(), description: null, status: draft.status, triggers, conditions, actions };
     try {
       await automationsApi.createRule(rule);
       setDraft(null);
@@ -169,7 +178,7 @@ export default function Automations() {
                           <Chip size="small" icon={<ShieldRoundedIcon />} label="Protected" color="warning" variant="outlined" />
                         )}
                         <Chip size="small" label={rule.status}
-                          color={rule.status === 'Active' ? 'success' : 'default'} variant="outlined" />
+                          color={statusColor(rule.status)} variant="outlined" />
                       </Stack>
                       <Typography variant="body2" color="text.secondary">
                         <b>When</b> {rule.triggers.map(triggerText).join(' or ')}
@@ -183,19 +192,23 @@ export default function Automations() {
                         <b>Then</b> {rule.actions.map(actionText).join(' → ')}
                       </Typography>
                     </Box>
-                    <Stack direction="row" alignItems="center">
+                    <Stack direction="row" alignItems="center" spacing={0.5}>
+                      <Tooltip title="Dry-run over history">
+                        <IconButton onClick={() => setSimulateFor(rule)}><ScienceRoundedIcon /></IconButton>
+                      </Tooltip>
                       <Tooltip title="Run history">
                         <IconButton onClick={() => setHistoryFor(rule)}><HistoryRoundedIcon /></IconButton>
                       </Tooltip>
-                      <Tooltip title={rule.isProtected ? 'Protected rules are always active' : 'Enable / disable'}>
-                        <span>
-                          <Switch
-                            checked={rule.isProtected || rule.status === 'Active'}
-                            disabled={rule.isProtected}
-                            onChange={() => toggle(rule)}
-                          />
-                        </span>
-                      </Tooltip>
+                      {rule.isProtected ? (
+                        <Chip size="small" label="Always on" variant="outlined" />
+                      ) : (
+                        <TextField
+                          select size="small" value={rule.status} sx={{ minWidth: 110 }}
+                          onChange={(e) => changeStatus(rule, e.target.value as RuleStatus)}
+                        >
+                          {STATUS_OPTIONS.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+                        </TextField>
+                      )}
                       <Tooltip title={rule.isProtected ? 'Protected rules cannot be deleted' : 'Delete'}>
                         <span>
                           <IconButton onClick={() => remove(rule)} disabled={rule.isProtected}>
@@ -214,6 +227,7 @@ export default function Automations() {
 
       <CreateDialog draft={draft} devices={devices} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} />
       <HistoryDrawer target={historyFor} onClose={() => setHistoryFor(null)} />
+      <SimulateDialog rule={simulateFor} onClose={() => setSimulateFor(null)} />
     </Container>
   );
 }
@@ -236,8 +250,16 @@ function CreateDialog({
       <DialogContent>
         {draft && (
           <Stack spacing={2.5} mt={1}>
-            <TextField label="Name" value={draft.name} autoFocus required fullWidth
-              onChange={(e) => onChange({ ...draft, name: e.target.value })} />
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+              <TextField label="Name" value={draft.name} autoFocus required fullWidth
+                onChange={(e) => onChange({ ...draft, name: e.target.value })} />
+              <TextField select label="Status" value={draft.status} sx={{ minWidth: 140 }}
+                helperText={draft.status === 'Shadow' ? 'logs, never acts' : ' '}
+                onChange={(e) => onChange({ ...draft, status: e.target.value as RuleStatus })}>
+                <MenuItem value="Active">Active</MenuItem>
+                <MenuItem value="Shadow">Shadow</MenuItem>
+              </TextField>
+            </Stack>
 
             <Box>
               <Typography variant="overline" color="text.secondary">When (trigger)</Typography>
@@ -293,6 +315,76 @@ function CreateDialog({
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" onClick={onSave} disabled={!valid}>Create</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+const DAYS_OPTIONS = [1, 7, 30];
+
+/** Dry-run a rule over history (roadmap Epic 1F) — shows when it would have fired, without acting. */
+function SimulateDialog({ rule, onClose }: { rule: AutomationRule | null; onClose: () => void }) {
+  const [days, setDays] = useState(7);
+  const [result, setResult] = useState<ReplayResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  const run = useCallback(async (r: AutomationRule, d: number) => {
+    setLoading(true); setError(false); setResult(null);
+    try { setResult(await replayApi.run(r, d)); }
+    catch { setError(true); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (rule) run(rule, days);
+    else { setResult(null); setError(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rule]);
+
+  return (
+    <Dialog open={rule !== null} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>Simulate · {rule?.name}</DialogTitle>
+      <DialogContent>
+        <Stack direction="row" spacing={1} alignItems="center" mb={2} mt={1}>
+          <TextField select size="small" label="Window" value={days} sx={{ width: 160 }}
+            onChange={(e) => { const d = Number(e.target.value); setDays(d); if (rule) run(rule, d); }}>
+            {DAYS_OPTIONS.map((d) => <MenuItem key={d} value={d}>last {d} day{d > 1 ? 's' : ''}</MenuItem>)}
+          </TextField>
+          {result && (
+            <Typography variant="body2" color="text.secondary">
+              {result.fires} would fire · {result.hits.length} trigger match(es) · {result.eventsScanned} events scanned
+            </Typography>
+          )}
+        </Stack>
+
+        {loading && <LinearProgress sx={{ mb: 2 }} />}
+        {error && <Alert severity="warning">Simulation failed — is the AutomationService reachable?</Alert>}
+
+        {result?.notes.map((n, i) => (
+          <Alert key={i} severity="info" sx={{ mb: 1 }}>{n}</Alert>
+        ))}
+
+        {result && !loading && result.hits.length === 0 && !error && (
+          <Typography variant="body2" color="text.secondary">
+            This rule would not have triggered in the selected window.
+          </Typography>
+        )}
+
+        <Stack spacing={1} mt={1}>
+          {result?.hits.map((h, i) => (
+            <Stack key={`${h.timestamp}-${i}`} direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+              <Chip size="small" variant="outlined" color={h.conditionsMet ? 'success' : 'default'}
+                label={h.conditionsMet ? 'would fire' : 'trigger only'} />
+              <Typography variant="body2" color="text.secondary">{h.triggerSummary}</Typography>
+              <Box flex={1} />
+              <Typography variant="caption" color="text.secondary">{new Date(h.timestamp).toLocaleString()}</Typography>
+            </Stack>
+          ))}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
       </DialogActions>
     </Dialog>
   );

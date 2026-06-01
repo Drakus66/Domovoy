@@ -40,8 +40,15 @@ public class AutomationRule
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>
+/// Rule lifecycle / staged rollout (roadmap Epics 1A + 1F). Only <see cref="Active"/> rules execute
+/// commands. <see cref="Shadow"/> rules ARE evaluated and their would-be actions are logged to run
+/// history, but no commands are published — the "log what it would have done" stage before going live
+/// (ML proposals from Phase 2 land here first). <see cref="Proposed"/>/<see cref="Approved"/>/<see cref="Disabled"/>
+/// are not evaluated.
+/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
-public enum RuleStatus { Proposed, Approved, Active, Disabled }
+public enum RuleStatus { Proposed, Approved, Active, Disabled, Shadow }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum TriggerType { DeviceState, Time, Sun }

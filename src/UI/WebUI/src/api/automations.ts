@@ -1,6 +1,6 @@
 import apiClient from './client';
 
-export type RuleStatus = 'Proposed' | 'Approved' | 'Active' | 'Disabled';
+export type RuleStatus = 'Proposed' | 'Approved' | 'Active' | 'Disabled' | 'Shadow';
 export type TriggerType = 'DeviceState' | 'Time' | 'Sun';
 export type ConditionType = 'DeviceState' | 'TimeOfDay' | 'Sun' | 'Mode';
 export type ActionType = 'Command' | 'Delay' | 'Notify';

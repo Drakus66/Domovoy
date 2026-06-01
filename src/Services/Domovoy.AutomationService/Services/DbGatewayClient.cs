@@ -86,11 +86,46 @@ public sealed class DbGatewayClient
         }
     }
 
+    /// <summary>
+    /// Fetch device-state deltas from the P0-5 event-log for replay/simulation (roadmap Epic 1F).
+    /// Returns oldest-first; null on a gateway failure.
+    /// </summary>
+    public async Task<List<EventLogEntry>?> GetStateEventsAsync(DateTime fromUtc, DateTime toUtc, int limit, CancellationToken ct)
+    {
+        try
+        {
+            var url = $"api/events?kind=state_change&from={fromUtc:o}&to={toUtc:o}&limit={limit}";
+            var events = await _http.GetFromJsonAsync<List<EventLogEntry>>(url, Json, ct);
+            // The endpoint returns newest-first; replay needs chronological order.
+            events?.Reverse();
+            return events;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load event-log for replay from DbGateway");
+            return null;
+        }
+    }
+
     /// <summary>Subset of the capability-device read-model the engine needs (zone + current state).</summary>
     public sealed class DeviceSnapshot
     {
         public string Id { get; set; } = string.Empty;
         public string ZoneId { get; set; } = string.Empty;
         public Dictionary<string, JsonElement> State { get; set; } = new();
+    }
+
+    /// <summary>One event-log delta as served by <c>GET /api/events</c> (mirrors DbGateway EventLogDto).</summary>
+    public sealed class EventLogEntry
+    {
+        public DateTime Timestamp { get; set; }
+        public string DeviceId { get; set; } = string.Empty;
+        public string ZoneId { get; set; } = string.Empty;
+        public string Kind { get; set; } = string.Empty;
+        public string CapabilityId { get; set; } = string.Empty;
+        public JsonElement? OldValue { get; set; }
+        public JsonElement? NewValue { get; set; }
+        public string TriggerSource { get; set; } = string.Empty;
+        public string? Mode { get; set; }
     }
 }

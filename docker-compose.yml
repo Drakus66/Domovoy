@@ -99,6 +99,7 @@ services:
       - RABBITMQ__PORT=5672
       - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      - AUTOMATIONSERVICE__BASEURL=http://automation-service:8080
     restart: unless-stopped
 
   # Deterministic automation engine (Epic 1A): subscribes to device state, fires trigger→condition→action
