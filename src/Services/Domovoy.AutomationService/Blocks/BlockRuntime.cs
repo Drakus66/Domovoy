@@ -130,6 +130,30 @@ public sealed class BlockRuntime : BackgroundService
                 data: new DeviceStateReportV1(rb.DeviceId, emitted),
                 subject: rb.DeviceId.ToString());
             await _bus.PublishAsync(BusTopology.StateExchange, BusTopology.DeviceStateUpdatedKey, envelope, ct);
+
+            // Actuation (roadmap Epic 1D): a bound output drives a real device — command it on change.
+            await ActuateOutputs(rb, emitted, ct);
+        }
+    }
+
+    // Publish a DeviceCommandV1 to the bound target whenever a wired output's value changes (Epic 1D).
+    // Dedup on value so we don't re-command the actuator every tick.
+    private async Task ActuateOutputs(RunningBlock rb, Dictionary<string, object?> emitted, CancellationToken ct)
+    {
+        foreach (var (capId, binding) in rb.Config.Outputs)
+        {
+            if (!emitted.TryGetValue(capId, out var value)) continue;
+            if (!Guid.TryParse(binding.DeviceId, out var target) || string.IsNullOrEmpty(binding.CapabilityId)) continue;
+
+            if (rb.LastCommanded.TryGetValue(capId, out var prev) && ValueOps.ValuesEqual(prev, value)) continue;
+            rb.LastCommanded[capId] = value;
+
+            var envelope = Envelope<DeviceCommandV1>.Create(
+                MessageTypes.DeviceCommand,
+                source: $"block:{rb.Config.Id}",
+                data: new DeviceCommandV1(target, new Dictionary<string, object?> { [binding.CapabilityId] = value }),
+                subject: target.ToString());
+            await _bus.PublishAsync(BusTopology.CommandsExchange, BusTopology.DeviceCommandKey, envelope, ct);
         }
     }
 
@@ -192,6 +216,8 @@ public sealed class BlockRuntime : BackgroundService
         public DateTime ConfigStamp { get; }
         public Dictionary<string, object?> State { get; } = new();
         public Dictionary<string, object?> Commanded { get; } = new();
+        /// <summary>Last value sent to each bound output's target (actuation dedup, Epic 1D).</summary>
+        public Dictionary<string, object?> LastCommanded { get; } = new();
     }
 
     /// <summary>Per-tick view handed to a block: inputs from the blackboard, params, commands, state.</summary>

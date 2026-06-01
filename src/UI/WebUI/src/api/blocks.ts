@@ -16,11 +16,12 @@ export interface ControlBlock {
   enabled: boolean;
   params: Record<string, number>;
   inputs: Record<string, PortBinding>;
+  outputs: Record<string, PortBinding>;
   createdAt: string;
   updatedAt: string;
 }
 
-export type NewBlock = Pick<ControlBlock, 'name' | 'typeId' | 'enabled' | 'params' | 'inputs'> & {
+export type NewBlock = Pick<ControlBlock, 'name' | 'typeId' | 'enabled' | 'params' | 'inputs' | 'outputs'> & {
   zoneId?: string | null;
 };
 
