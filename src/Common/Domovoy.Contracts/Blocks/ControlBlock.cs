@@ -40,6 +40,14 @@ public class ControlBlock
     /// <summary>Input port name → the device+capability it reads from (composition / wiring).</summary>
     public Dictionary<string, PortBinding> Inputs { get; set; } = new();
 
+    /// <summary>
+    /// Output capability id → the real device+capability it actuates (roadmap Epic 1D). When a bound
+    /// output changes, the runtime publishes a <see cref="Domovoy.Contracts.Messaging.DeviceCommandV1"/>
+    /// to the target (e.g. a thermostat block's <c>on_off</c> demand drives a boiler relay). Unbound
+    /// outputs are still published as the block's own virtual-device state for visibility/composition.
+    /// </summary>
+    public Dictionary<string, PortBinding> Outputs { get; set; } = new();
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

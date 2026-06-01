@@ -22,6 +22,7 @@ interface BlockDraft {
   typeId: string;
   params: Record<string, number>;
   inputs: Record<string, PortBinding>;
+  outputs: Record<string, PortBinding>;
 }
 
 export default function Blocks() {
@@ -67,17 +68,21 @@ export default function Blocks() {
       typeId: entry.typeId,
       params: Object.fromEntries(entry.params.map((p) => [p.name, p.default])),
       inputs: Object.fromEntries(entry.inputs.map((p) => [p.name, { deviceId: '', capabilityId: '' }])),
+      outputs: Object.fromEntries(entry.outputs.map((o) => [o.id, { deviceId: '', capabilityId: '' }])),
     });
   };
 
   const save = async () => {
     if (!draft || !draft.name.trim()) return;
-    // Drop unbound input ports (optional bindings).
+    // Drop unbound input/output ports (bindings are optional).
     const inputs = Object.fromEntries(
       Object.entries(draft.inputs).filter(([, b]) => b.deviceId && b.capabilityId),
     );
+    const outputs = Object.fromEntries(
+      Object.entries(draft.outputs).filter(([, b]) => b.deviceId && b.capabilityId),
+    );
     const payload: NewBlock = {
-      name: draft.name.trim(), typeId: draft.typeId, enabled: true, params: draft.params, inputs,
+      name: draft.name.trim(), typeId: draft.typeId, enabled: true, params: draft.params, inputs, outputs,
     };
     try {
       await blocksApi.createBlock(payload);
@@ -156,6 +161,13 @@ export default function Blocks() {
                             ? Object.entries(vdev.state).map(([k, v]) => `${k}=${fmt(v)}`).join(' · ')
                             : <em>no samples yet</em>}
                         </Typography>
+                        {Object.keys(b.outputs).length > 0 && (
+                          <Typography variant="body2" color="text.secondary">
+                            <b>Drives</b>{' '}
+                            {Object.entries(b.outputs).map(([cap, bind]) =>
+                              `${cap} → ${deviceById.get(bind.deviceId)?.name ?? bind.deviceId}.${bind.capabilityId}`).join(' · ')}
+                          </Typography>
+                        )}
                       </Box>
                       <Tooltip title="Delete">
                         <IconButton onClick={() => remove(b)}><DeleteOutlineRoundedIcon /></IconButton>
@@ -222,6 +234,35 @@ function CreateDialog({
                           inputs: { ...draft.inputs, [port.name]: { ...bind, capabilityId: e.target.value } },
                         })}>
                         {capsOf(bind.deviceId).map((c) => <MenuItem key={c.id} value={c.id}>{c.id}</MenuItem>)}
+                      </TextField>
+                    </Stack>
+                  );
+                })}
+              </Box>
+            )}
+
+            {type.outputs.length > 0 && (
+              <Box>
+                <Typography variant="overline" color="text.secondary">Outputs (actuate — optional)</Typography>
+                {type.outputs.map((out) => {
+                  const bind = draft.outputs[out.id] ?? { deviceId: '', capabilityId: '' };
+                  return (
+                    <Stack key={out.id} direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mt={1}>
+                      <TextField select label={`${out.id} → device`} value={bind.deviceId} fullWidth
+                        helperText="Leave empty to only report (no actuation)"
+                        onChange={(e) => onChange({
+                          ...draft,
+                          outputs: { ...draft.outputs, [out.id]: { deviceId: e.target.value, capabilityId: '' } },
+                        })}>
+                        <MenuItem value=""><em>None</em></MenuItem>
+                        {devices.map((d) => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
+                      </TextField>
+                      <TextField select label="capability" value={bind.capabilityId} fullWidth disabled={!bind.deviceId}
+                        onChange={(e) => onChange({
+                          ...draft,
+                          outputs: { ...draft.outputs, [out.id]: { ...bind, capabilityId: e.target.value } },
+                        })}>
+                        {capsOf(bind.deviceId).filter((c) => c.writable).map((c) => <MenuItem key={c.id} value={c.id}>{c.id}</MenuItem>)}
                       </TextField>
                     </Stack>
                   );

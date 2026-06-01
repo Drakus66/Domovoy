@@ -15,6 +15,8 @@ public sealed class BlockCatalog
         {
             new EwmaFilterType(),
             new ThermostatType(),
+            new Co2VentilationType(),
+            new IrrigationSequencerType(),
         };
         _types = types.ToDictionary(t => t.TypeId, StringComparer.OrdinalIgnoreCase);
     }
