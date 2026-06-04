@@ -108,14 +108,6 @@ Domovoy/
 
 ## 📚 Documentation
 
-### Wiki & Guides
-- **🌐 Project Wiki**: [`.qoder/repowiki/en/`](.qoder/repowiki/en/) - Comprehensive documentation
-  - [Wiki Index](.qoder/repowiki/en/Wiki_Index.md) - Navigation and quick links
-  - [Domovoy Wiki](.qoder/repowiki/en/Domovoy_Wiki.md) - Complete project overview
-  - [Getting Started](.qoder/repowiki/en/Getting_Started.md) - Setup and installation guide
-  - [Development Standards](.qoder/repowiki/en/Development_Standards.md) - Coding guidelines
-  - [Architecture Decisions](.qoder/repowiki/en/Architecture_Decisions.md) - Design rationale
-
 ### Technical Documentation
 - **Architecture**: [docs/architecture/](docs/architecture/)
   - [Architecture Diagrams](docs/architecture/architecture_diagrams.md)
@@ -179,28 +171,6 @@ dotnet test /p:CollectCoverage=true
 - Deployment automation
 - Complete documentation
 
-## 🤝 Contributing
-
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
-
-## 📄 License
-
-[Specify your license here]
-
-## 📞 Contact
-
-[Your contact information]
-
 ---
 
 **Status**: Active Development | **Last Updated**: March 3, 2026
-
----
-
-## 🔗 Quick Links
-
-- **🌐 Start Here**: [Wiki Index](.qoder/repowiki/en/Wiki_Index.md)
-- **📖 Full Documentation**: [Domovoy Wiki](.qoder/repowiki/en/Domovoy_Wiki.md)
-- **⚙️ Setup Guide**: [Getting Started](.qoder/repowiki/en/Getting_Started.md)
-- **💻 Development**: [Development Standards](.qoder/repowiki/en/Development_Standards.md)
-- **🏛️ Architecture**: [Architecture Decisions](.qoder/repowiki/en/Architecture_Decisions.md)
