@@ -5,6 +5,7 @@ import {
 import ModelTrainingRoundedIcon from '@mui/icons-material/ModelTrainingRounded';
 import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
 import { mlApi, MlModel } from '../api/ml';
+import ScorecardChart from '../components/charts/ScorecardChart';
 
 const fmt = (iso: string) => {
   const d = new Date(iso);
@@ -87,13 +88,27 @@ export default function Models() {
                       {m.algorithm && <Chip size="small" variant="outlined" label={m.algorithm} />}
                     </Stack>
                     <Typography variant="caption" color="text.secondary">
-                      target {m.targetCapability} · {m.sampleCount} samples · RMSE {m.rmse.toFixed(3)} · trained {fmt(m.trainedAt)}
+                      target {m.targetCapability} · {m.sampleCount} samples · RMSE {m.rmse.toFixed(3)}
+                      {m.holdoutSampleCount > 0 && ` · backtest MAE ${m.holdoutMae.toFixed(3)}`} · trained {fmt(m.trainedAt)}
                     </Typography>
                   </Box>
                 </CardContent>
               </Card>
             ))}
           </Stack>
+        )}
+
+        {models.length > 0 && (
+          <Card variant="outlined" sx={{ mt: 3 }}>
+            <CardContent>
+              <Typography fontWeight={700} gutterBottom>Backtest scorecard</Typography>
+              <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
+                The loaded model's prediction vs actual telemetry — the signal to read before promoting an ML
+                block from Shadow to an active stage (Epic 2B).
+              </Typography>
+              <ScorecardChart days={7} />
+            </CardContent>
+          </Card>
         )}
       </Box>
     </Container>

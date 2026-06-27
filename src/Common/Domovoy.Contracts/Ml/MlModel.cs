@@ -31,6 +31,15 @@ public class MlModel
     /// <summary>Training error (root mean squared error) — for the approval/scorecard view (2C).</summary>
     public double Rmse { get; set; }
 
+    /// <summary>
+    /// Held-out backtest error (mean absolute error on the most recent window, excluded from training).
+    /// The honest "prediction vs fact" signal for the approval scorecard (Epic 2B). 0 if not evaluated.
+    /// </summary>
+    public double HoldoutMae { get; set; }
+
+    /// <summary>Number of held-out samples the backtest MAE was computed on (provenance).</summary>
+    public int HoldoutSampleCount { get; set; }
+
     /// <summary>Training algorithm, for provenance.</summary>
     public string? Algorithm { get; set; }
 }

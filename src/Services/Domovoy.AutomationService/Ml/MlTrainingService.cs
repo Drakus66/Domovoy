@@ -36,6 +36,35 @@ public sealed class MlTrainingService : BackgroundService
     /// <summary>Outcome of a training attempt for the API.</summary>
     public sealed record TrainResult(bool Trained, string Message, MlModel? Model);
 
+    /// <summary>One backtest point for the scorecard chart (roadmap Epic 2B): model prediction vs reality.</summary>
+    public sealed record BacktestPoint(DateTime Timestamp, double Predicted, double Actual);
+
+    /// <summary>The scorecard payload: the loaded model's metadata + a predicted-vs-actual series.</summary>
+    public sealed record Backtest(MlModel? Model, IReadOnlyList<BacktestPoint> Points);
+
+    /// <summary>
+    /// Score the currently loaded model against recent telemetry (roadmap Epic 2B) — "prediction vs fact".
+    /// Returns the loaded model's metadata plus a point series the WebUI overlays. Empty series if no model
+    /// is loaded or telemetry is unavailable.
+    /// </summary>
+    public async Task<Backtest> BacktestAsync(int days, CancellationToken ct)
+    {
+        var model = _models.Current;
+        if (model is null) return new Backtest(null, Array.Empty<BacktestPoint>());
+
+        var from = DateTime.UtcNow.AddDays(-Math.Max(1, days));
+        var samples = await _db.GetTelemetryAsync(_options.TrainCapability, from, 5000, ct);
+        if (samples is null || samples.Count == 0) return new Backtest(model, Array.Empty<BacktestPoint>());
+
+        var points = new List<BacktestPoint>(samples.Count);
+        foreach (var s in samples.OrderBy(s => s.Timestamp))
+        {
+            if (_models.TryPredict(new DateTimeOffset(s.Timestamp, TimeSpan.Zero), out var predicted))
+                points.Add(new BacktestPoint(s.Timestamp, Math.Round(predicted, 2), Math.Round(s.Value, 2)));
+        }
+        return new Backtest(model, points);
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await _models.RefreshAsync(stoppingToken); // pick up any pre-existing model
@@ -76,6 +105,8 @@ public sealed class MlTrainingService : BackgroundService
             TargetCapability = _options.TrainCapability,
             SampleCount = result.SampleCount,
             Rmse = result.Rmse,
+            HoldoutMae = result.HoldoutMae,
+            HoldoutSampleCount = result.HoldoutCount,
             Algorithm = MlTrainer.Algorithm,
         };
         var registered = await _db.RegisterModelAsync(model, result.Artifact, ct);

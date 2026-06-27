@@ -25,6 +25,11 @@ public class MlController : ControllerBase
     public Task<IActionResult> Train(CancellationToken ct)
         => Forward("automation-service", HttpMethod.Post, "api/ml/train", ct);
 
+    /// <summary>Backtest scorecard (Epic 2B): the loaded model's prediction vs actual telemetry.</summary>
+    [HttpGet("backtest")]
+    public Task<IActionResult> Backtest([FromQuery] int days, CancellationToken ct)
+        => Forward("automation-service", HttpMethod.Get, $"api/ml/backtest?days={(days > 0 ? days : 7)}", ct);
+
     private async Task<IActionResult> Forward(string client, HttpMethod method, string path, CancellationToken ct)
     {
         var http = _httpClientFactory.CreateClient(client);

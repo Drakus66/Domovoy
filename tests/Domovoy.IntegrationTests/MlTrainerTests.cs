@@ -29,6 +29,10 @@ public sealed class MlTrainerTests
         Assert.Equal(samples.Count, result!.SampleCount);
         Assert.True(result.Artifact.Length > 0, "model artifact should be non-empty");
         Assert.True(result.Rmse >= 0 && !double.IsNaN(result.Rmse), "RMSE should be a finite non-negative number");
+
+        // Backtest scorecard (Epic 2B): a chronological holdout MAE is computed on unseen samples.
+        Assert.True(result.HoldoutCount > 0, "should hold out a recent slice for the backtest");
+        Assert.True(result.HoldoutMae >= 0 && !double.IsNaN(result.HoldoutMae), "holdout MAE should be finite and non-negative");
     }
 
     [Fact]

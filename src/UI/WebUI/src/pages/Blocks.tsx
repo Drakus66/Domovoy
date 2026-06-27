@@ -275,14 +275,30 @@ function CreateDialog({
                 <Typography variant="overline" color="text.secondary">Parameters</Typography>
                 <Stack spacing={1.5} mt={1}>
                   {type.params.map((p) => (
-                    <TextField
-                      key={p.name} type="number" label={`${p.name}${p.unit ? ` (${p.unit})` : ''}`}
-                      value={draft.params[p.name] ?? p.default}
-                      helperText={p.description}
-                      onChange={(e) => onChange({
-                        ...draft, params: { ...draft.params, [p.name]: Number(e.target.value) },
-                      })}
-                    />
+                    p.name === 'stage' ? (
+                      // ML authority stage (Epic 2B): a friendly selector over the numeric 0/1/2 param.
+                      <TextField
+                        key={p.name} select label="authority stage"
+                        value={draft.params[p.name] ?? p.default}
+                        helperText={p.description}
+                        onChange={(e) => onChange({
+                          ...draft, params: { ...draft.params, [p.name]: Number(e.target.value) },
+                        })}
+                      >
+                        <MenuItem value={0}>Shadow (observe only, no commands)</MenuItem>
+                        <MenuItem value={1}>Bounded-Active (clamped band)</MenuItem>
+                        <MenuItem value={2}>Full</MenuItem>
+                      </TextField>
+                    ) : (
+                      <TextField
+                        key={p.name} type="number" label={`${p.name}${p.unit ? ` (${p.unit})` : ''}`}
+                        value={draft.params[p.name] ?? p.default}
+                        helperText={p.description}
+                        onChange={(e) => onChange({
+                          ...draft, params: { ...draft.params, [p.name]: Number(e.target.value) },
+                        })}
+                      />
+                    )
                   ))}
                 </Stack>
               </Box>

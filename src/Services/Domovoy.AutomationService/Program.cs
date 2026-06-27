@@ -85,6 +85,10 @@ internal static class Program
             app.MapPost("/api/ml/train", async (MlTrainingService ml, CancellationToken ct) =>
                 Results.Ok(await ml.TrainOnceAsync(ct)));
 
+            // Backtest scorecard (roadmap Epic 2B): the loaded model's prediction vs actual telemetry.
+            app.MapGet("/api/ml/backtest", async (MlTrainingService ml, int? days, CancellationToken ct) =>
+                Results.Ok(await ml.BacktestAsync(days ?? 7, ct)));
+
             // Control-block catalog (roadmap Epic 1H): the built-in types' schema for the authoring UI.
             app.MapGet("/api/blocks/catalog", (BlockCatalog catalog) => Results.Ok(
                 catalog.Types.Select(t => new

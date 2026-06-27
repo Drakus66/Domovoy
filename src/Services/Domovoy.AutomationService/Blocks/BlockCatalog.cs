@@ -24,6 +24,7 @@ public sealed class BlockCatalog
             new Co2VentilationType(),
             new IrrigationSequencerType(),
             new MlSetpointType(models, o.SetpointMin, o.SetpointMax), // Epic 2A: ML-driven setpoint
+            new MlThermostatType(models, o.SetpointMin, o.SetpointMax), // Epic 2B: staged ML setpoint governor
         };
         _types = types.ToDictionary(t => t.TypeId, StringComparer.OrdinalIgnoreCase);
     }
