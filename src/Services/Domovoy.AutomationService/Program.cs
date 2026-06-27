@@ -3,6 +3,7 @@ namespace Domovoy.AutomationService;
 using Blocks;
 using Configuration;
 using Ml;
+using Ml.Templates;
 using Services;
 
 using Domovoy.Common.Logging;
@@ -53,8 +54,11 @@ internal static class Program
             builder.Services.AddSingleton<RuleRunner>();
             builder.Services.AddSingleton<HomeModeState>();
             builder.Services.AddSingleton<ReplayService>();   // 1F: dry-run a rule over history
-            builder.Services.AddSingleton<MlTrainer>();        // 2A: ML.NET training
-            builder.Services.AddSingleton<MlModelService>();   // 2A: load/serve latest model for inference
+            // 2I: registry of model templates; the trainer selects the best applicable cell by holdout.
+            builder.Services.AddSingleton<IModelTemplate, ScheduleRegressionTemplate>();
+            builder.Services.AddSingleton<ModelTemplateRegistry>();
+            builder.Services.AddSingleton<ZoneCache>();        // 2I: zone id→kind for model-scope chains
+            builder.Services.AddSingleton<MlModelService>();   // 2A/2I: load/serve per-scope models for inference
             builder.Services.AddSingleton<BlockCatalog>();    // 1H: built-in control-block types (incl. ml_setpoint)
             builder.Services.AddSingleton<BlockStore>();
 

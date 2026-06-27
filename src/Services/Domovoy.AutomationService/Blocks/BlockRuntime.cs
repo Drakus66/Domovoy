@@ -26,6 +26,7 @@ public sealed class BlockRuntime : BackgroundService
     private readonly DeviceRegistry _registry;
     private readonly BlockCatalog _catalog;
     private readonly BlockStore _store;
+    private readonly ZoneCache _zones;
     private readonly ILogger<BlockRuntime> _logger;
 
     private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(15);
@@ -33,12 +34,13 @@ public sealed class BlockRuntime : BackgroundService
 
     public BlockRuntime(
         IMessageBus bus, DeviceRegistry registry, BlockCatalog catalog, BlockStore store,
-        ILogger<BlockRuntime> logger)
+        ZoneCache zones, ILogger<BlockRuntime> logger)
     {
         _bus = bus;
         _registry = registry;
         _catalog = catalog;
         _store = store;
+        _zones = zones;
         _logger = logger;
     }
 
@@ -59,6 +61,7 @@ public sealed class BlockRuntime : BackgroundService
         {
             try
             {
+                await _zones.RefreshAsync(stoppingToken); // 2I: keep zone-kind lookup fresh for model-scope chains
                 await SyncInstances(stoppingToken);
                 await TickAll(stoppingToken);
             }
@@ -110,7 +113,7 @@ public sealed class BlockRuntime : BackgroundService
             var emitted = new Dictionary<string, object?>();
             try
             {
-                rb.Block.Tick(new BlockContext(rb, _registry, now, emitted, _logger));
+                rb.Block.Tick(new BlockContext(rb, _registry, _zones, now, emitted, _logger));
             }
             catch (Exception ex)
             {
@@ -225,20 +228,26 @@ public sealed class BlockRuntime : BackgroundService
     {
         private readonly RunningBlock _rb;
         private readonly DeviceRegistry _registry;
+        private readonly ZoneCache _zones;
         private readonly Dictionary<string, object?> _emitted;
         private readonly ILogger _logger;
 
-        public BlockContext(RunningBlock rb, DeviceRegistry registry, DateTimeOffset now,
+        public BlockContext(RunningBlock rb, DeviceRegistry registry, ZoneCache zones, DateTimeOffset now,
             Dictionary<string, object?> emitted, ILogger logger)
         {
             _rb = rb;
             _registry = registry;
+            _zones = zones;
             Now = now;
             _emitted = emitted;
             _logger = logger;
         }
 
         public DateTimeOffset Now { get; }
+
+        public string? ZoneId => string.IsNullOrEmpty(_rb.Config.ZoneId) ? null : _rb.Config.ZoneId;
+
+        public string? ZoneKind => _zones.KindOf(_rb.Config.ZoneId);
 
         public object? Read(string inputPort)
         {

@@ -1,4 +1,5 @@
 using Domovoy.AutomationService.Configuration;
+using Domovoy.AutomationService.Ml.Templates;
 using Domovoy.AutomationService.Services;
 using Domovoy.Contracts.Ml;
 
@@ -15,20 +16,22 @@ namespace Domovoy.AutomationService.Ml;
 public sealed class MlTrainingService : BackgroundService
 {
     private readonly DbGatewayClient _db;
-    private readonly MlTrainer _trainer;
+    private readonly ModelTemplateRegistry _templates;
     private readonly MlModelService _models;
+    private readonly ZoneCache _zones;
     private readonly AutomationOptions _options;
     private readonly ILogger<MlTrainingService> _logger;
 
     private DateTime _lastTrain = DateTime.MinValue;
 
     public MlTrainingService(
-        DbGatewayClient db, MlTrainer trainer, MlModelService models,
+        DbGatewayClient db, ModelTemplateRegistry templates, MlModelService models, ZoneCache zones,
         IOptions<AutomationOptions> options, ILogger<MlTrainingService> logger)
     {
         _db = db;
-        _trainer = trainer;
+        _templates = templates;
         _models = models;
+        _zones = zones;
         _options = options.Value;
         _logger = logger;
     }
@@ -83,38 +86,143 @@ public sealed class MlTrainingService : BackgroundService
         }
     }
 
-    /// <summary>Train once on recent telemetry, register the model and reload it for inference.</summary>
+    /// <summary>
+    /// Train once on recent telemetry and register models, then reload them for inference. Always fits the
+    /// global model; when <see cref="AutomationOptions.TrainZoneModels"/> is on, also fits shared per-zone-kind
+    /// models and, where a zone's own data beats its fallback by the promotion margin, per-zone models
+    /// (roadmap Epic 2I). The returned <see cref="TrainResult.Model"/> is the global model (the always-present
+    /// one); zone scopes are best-effort and never fail the global train.
+    /// </summary>
     public async Task<TrainResult> TrainOnceAsync(CancellationToken ct)
     {
         _lastTrain = DateTime.UtcNow;
         var from = DateTime.UtcNow.AddDays(-_options.TrainWindowDays);
-        var samples = await _db.GetTelemetryAsync(_options.TrainCapability, from, 5000, ct);
-        if (samples is null)
-            return new TrainResult(false, "telemetry unavailable", null);
-        if (samples.Count < _options.MinSamples)
-            return new TrainResult(false, $"not enough data ({samples.Count}/{_options.MinSamples})", null);
 
-        var result = _trainer.Train(samples.Select(s => (s.Timestamp, s.Value)).ToList(), _options.MinSamples);
-        if (result is null)
+        var candidates = _templates.ForTarget(CapabilityKindResolver.KindOf(_options.TrainCapability));
+        if (candidates.Count == 0)
+            return new TrainResult(false, $"no template for {_options.TrainCapability}", null);
+
+        // 1) Global model — always trained; its absence fails the whole run.
+        var global = await _db.GetTelemetryAsync(_options.TrainCapability, from, 5000, ct);
+        if (global is null)
+            return new TrainResult(false, "telemetry unavailable", null);
+        if (global.Count < _options.MinSamples)
+            return new TrainResult(false, $"not enough data ({global.Count}/{_options.MinSamples})", null);
+
+        var selected = SelectBest(candidates, ToLabeled(global));
+        if (selected is null)
             return new TrainResult(false, "training produced no model", null);
 
-        var model = new MlModel
-        {
-            Name = $"{_options.TrainCapability} schedule",
-            Kind = MlModelKinds.ScheduleRegression,
-            TargetCapability = _options.TrainCapability,
-            SampleCount = result.SampleCount,
-            Rmse = result.Rmse,
-            HoldoutMae = result.HoldoutMae,
-            HoldoutSampleCount = result.HoldoutCount,
-            Algorithm = MlTrainer.Algorithm,
-        };
-        var registered = await _db.RegisterModelAsync(model, result.Artifact, ct);
-        if (registered is null)
+        var registeredGlobal = await RegisterAsync(selected.Value, ModelScope.Global, ct);
+        if (registeredGlobal is null)
             return new TrainResult(false, "could not register model", null);
 
+        // 2) Per-zone scopes (Epic 2I) — best-effort.
+        var zoneModels = _options.TrainZoneModels
+            ? await TrainZoneScopesAsync(candidates, from, selected.Value.Result.HoldoutScore, ct)
+            : 0;
+
         await _models.RefreshAsync(ct);
-        _logger.LogInformation("Trained {Name} on {Count} samples (rmse {Rmse:0.###})", model.Name, result.SampleCount, result.Rmse);
-        return new TrainResult(true, "ok", registered);
+        _logger.LogInformation(
+            "Trained {Name} on {Count} samples ({Metric} {Score:0.###}); +{Zones} zone model(s)",
+            registeredGlobal.Name, selected.Value.Result.SampleCount, registeredGlobal.Metric,
+            registeredGlobal.HoldoutScore, zoneModels);
+        return new TrainResult(true, zoneModels > 0 ? $"ok (+{zoneModels} zone models)" : "ok", registeredGlobal);
     }
+
+    // Fit shared zone-kind models (the fallbacks) and per-zone models that beat their fallback by the margin.
+    private async Task<int> TrainZoneScopesAsync(
+        IReadOnlyList<IModelTemplate> candidates, DateTime from, double globalScore, CancellationToken ct)
+    {
+        var registered = 0;
+        var kindFallbackScore = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+        // Shared per-zone-kind models (always registered when they train — they are the fallbacks).
+        foreach (var kind in _zones.Kinds())
+        {
+            var samples = await CollectZoneTelemetry(_zones.ZonesOfKind(kind), from, ct);
+            if (samples.Count < _options.MinSamples) continue;
+
+            var sel = SelectBest(candidates, samples);
+            if (sel is null) continue;
+
+            if (await RegisterAsync(sel.Value, ModelScope.ZoneKind(kind), ct) is not null)
+            {
+                kindFallbackScore[kind] = sel.Value.Result.HoldoutScore;
+                registered++;
+            }
+        }
+
+        // Per-zone models — promoted only when they beat their fallback (zone_kind, else global).
+        foreach (var zoneId in _zones.AllZoneIds())
+        {
+            var samples = await CollectZoneTelemetry(new[] { zoneId }, from, ct);
+            if (samples.Count < _options.MinSamples) continue;
+
+            var sel = SelectBest(candidates, samples);
+            if (sel is null) continue;
+
+            var kind = _zones.KindOf(zoneId);
+            var fallback = kind is not null && kindFallbackScore.TryGetValue(kind, out var f) ? f : globalScore;
+            if (!ModelTemplateRegistry.ShouldPromote(sel.Value.Template, sel.Value.Result.HoldoutScore, fallback, _options.ZonePromotionMargin))
+                continue;
+
+            if (await RegisterAsync(sel.Value, ModelScope.Zone(zoneId), ct) is not null)
+                registered++;
+        }
+
+        return registered;
+    }
+
+    // Best applicable template by honest holdout (model selection, Epic 2I), or null if none trains.
+    private (IModelTemplate Template, TemplateResult Result)? SelectBest(
+        IReadOnlyList<IModelTemplate> candidates, IReadOnlyList<LabeledSample> labeled)
+    {
+        (IModelTemplate Template, TemplateResult Result)? best = null;
+        foreach (var template in candidates)
+        {
+            var r = template.Train(labeled, _options.MinSamples);
+            if (r is null) continue;
+            if (best is null || ModelTemplateRegistry.IsBetter(template, r.HoldoutScore, best.Value.Result.HoldoutScore))
+                best = (template, r);
+        }
+        return best;
+    }
+
+    private async Task<MlModel?> RegisterAsync(
+        (IModelTemplate Template, TemplateResult Result) selected, ModelScope scope, CancellationToken ct)
+    {
+        var (template, r) = selected;
+        var model = new MlModel
+        {
+            Name = $"{_options.TrainCapability} {template.Kind} [{scope}]",
+            Kind = template.Kind,
+            TargetCapability = _options.TrainCapability,
+            Scope = scope,
+            SampleCount = r.SampleCount,
+            Rmse = r.InSampleError,
+            HoldoutMae = template.Metric == "MAE" ? r.HoldoutScore : 0, // back-compat (regression only)
+            HoldoutScore = r.HoldoutScore,
+            HoldoutSampleCount = r.HoldoutCount,
+            Metric = template.Metric,
+            Features = "time",
+            Algorithm = template.Algorithm,
+        };
+        return await _db.RegisterModelAsync(model, r.Artifact, ct);
+    }
+
+    private async Task<List<LabeledSample>> CollectZoneTelemetry(
+        IReadOnlyList<string> zoneIds, DateTime from, CancellationToken ct)
+    {
+        var all = new List<LabeledSample>();
+        foreach (var zoneId in zoneIds)
+        {
+            var s = await _db.GetTelemetryAsync(_options.TrainCapability, from, 5000, ct, zoneId);
+            if (s is not null) all.AddRange(ToLabeled(s));
+        }
+        return all;
+    }
+
+    private static List<LabeledSample> ToLabeled(IEnumerable<DbGatewayClient.TelemetrySample> samples) =>
+        samples.Select(s => new LabeledSample(s.Timestamp, s.Value)).ToList();
 }

@@ -8,10 +8,12 @@ using Microsoft.ML;
 namespace Domovoy.AutomationService.Ml;
 
 /// <summary>
-/// Loads and serves the latest registered model for inference (roadmap Epic 2A). Downloads the model
-/// artifact from the DbGateway registry, holds a cached ML.NET <see cref="PredictionEngine{TSrc,TDst}"/>,
-/// and offers a synchronous <see cref="TryPredict"/> for the (single-threaded) block tick. The ML block
-/// (1H) calls this; refresh happens in the background, so the block emits nothing until a model is loaded.
+/// Loads and serves registered models for inference (roadmap Epic 2A; per-zone scoping Epic 2I). It holds a
+/// cached ML.NET <see cref="PredictionEngine{TSrc,TDst}"/> <b>per scope</b> (zone / zone-kind / global) of the
+/// configured (kind, target), refreshed in the background, and offers a synchronous
+/// <see cref="TryPredict(DateTimeOffset, IReadOnlyList{ModelScope}, out float)"/> for the (single-threaded)
+/// block tick that resolves a model along the instance's fallback chain — the bedroom model if trained, else
+/// the shared "living rooms" model, else the house-wide one. Emits nothing until some model is loaded.
 /// </summary>
 public sealed class MlModelService
 {
@@ -21,8 +23,11 @@ public sealed class MlModelService
 
     private readonly MLContext _ml = new(seed: 0);
     private readonly object _lock = new();
-    private PredictionEngine<MlSample, MlPrediction>? _engine;
-    private string? _loadedId;
+
+    // scope key (level:key) → loaded engine for the configured (kind, target).
+    private readonly Dictionary<string, Loaded> _byScope = new(StringComparer.Ordinal);
+
+    private sealed record Loaded(string ModelId, PredictionEngine<MlSample, MlPrediction> Engine, MlModel Meta);
 
     public MlModelService(DbGatewayClient db, IOptions<AutomationOptions> options, ILogger<MlModelService> logger)
     {
@@ -31,51 +36,85 @@ public sealed class MlModelService
         _logger = logger;
     }
 
-    /// <summary>Metadata of the currently loaded model, if any.</summary>
+    /// <summary>Metadata of the loaded global model, if any (back-compat: scorecard / status).</summary>
     public MlModel? Current { get; private set; }
 
-    /// <summary>Pull the latest registered model and (re)load its engine if the version changed.</summary>
+    private string Kind => MlModelKinds.ScheduleRegression;
+
+    /// <summary>
+    /// (Re)load the per-scope engines for the configured (kind, target) from the registry. Loads the latest
+    /// version of each scope that has a model and drops scopes whose model disappeared.
+    /// </summary>
     public async Task RefreshAsync(CancellationToken ct)
     {
-        var latest = await _db.GetLatestModelAsync(MlModelKinds.ScheduleRegression, _options.TrainCapability, ct);
-        if (latest is null || latest.Id == _loadedId) return;
+        var all = await _db.GetModelsAsync(ct);
+        if (all is null) return;
 
-        var bytes = await _db.GetModelArtifactAsync(latest.Id, ct);
-        if (bytes is null) return;
+        // Latest version per scope, for our (kind, target) only.
+        var latestByScope = all
+            .Where(m => string.Equals(m.Kind, Kind, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(m.TargetCapability, _options.TrainCapability, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(m => (m.Scope ?? ModelScope.Global).AsKey(), StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(m => m.Version).First(), StringComparer.Ordinal);
 
-        try
+        foreach (var (scopeKey, meta) in latestByScope)
         {
-            using var stream = new MemoryStream(bytes);
-            var model = _ml.Model.Load(stream, out _);
-            var engine = _ml.Model.CreatePredictionEngine<MlSample, MlPrediction>(model);
             lock (_lock)
             {
-                _engine = engine;
-                _loadedId = latest.Id;
-                Current = latest;
+                if (_byScope.TryGetValue(scopeKey, out var loaded) && loaded.ModelId == meta.Id)
+                    continue; // already current
             }
-            _logger.LogInformation("Loaded ML model {Name} v{Version} (rmse {Rmse:0.###})", latest.Name, latest.Version, latest.Rmse);
+
+            var bytes = await _db.GetModelArtifactAsync(meta.Id, ct);
+            if (bytes is null) continue;
+
+            try
+            {
+                using var stream = new MemoryStream(bytes);
+                var model = _ml.Model.Load(stream, out _);
+                var engine = _ml.Model.CreatePredictionEngine<MlSample, MlPrediction>(model);
+                lock (_lock) _byScope[scopeKey] = new Loaded(meta.Id, engine, meta);
+                _logger.LogInformation(
+                    "Loaded ML model {Name} v{Version} scope {Scope} ({Metric} {Score:0.###})",
+                    meta.Name, meta.Version, meta.Scope, meta.Metric, meta.HoldoutScore);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to load ML model {Id}", meta.Id);
+            }
         }
-        catch (Exception ex)
+
+        lock (_lock)
         {
-            _logger.LogError(ex, "Failed to load ML model {Id}", latest.Id);
+            // Drop scopes whose model is gone, and refresh the back-compat Current pointer.
+            foreach (var stale in _byScope.Keys.Where(k => !latestByScope.ContainsKey(k)).ToList())
+                _byScope.Remove(stale);
+            Current = _byScope.TryGetValue(ModelScope.Global.AsKey(), out var g) ? g.Meta
+                : _byScope.Values.FirstOrDefault()?.Meta;
         }
     }
 
-    /// <summary>Predict the target value for <paramref name="now"/>; false if no model is loaded.</summary>
-    public bool TryPredict(DateTimeOffset now, out float value)
+    /// <summary>Predict for <paramref name="now"/> using the global model (back-compat for Epic 2A blocks).</summary>
+    public bool TryPredict(DateTimeOffset now, out float value) =>
+        TryPredict(now, new[] { ModelScope.Global }, out value);
+
+    /// <summary>
+    /// Predict for <paramref name="now"/> resolving the model along <paramref name="chain"/> (most specific
+    /// first); false if no scope in the chain has a loaded model.
+    /// </summary>
+    public bool TryPredict(DateTimeOffset now, IReadOnlyList<ModelScope> chain, out float value)
     {
         value = 0;
+        var sample = new MlSample { Hour = (float)(now.Hour + now.Minute / 60.0), Dow = (float)(int)now.DayOfWeek };
         lock (_lock)
         {
-            if (_engine is null) return false;
-            var p = _engine.Predict(new MlSample
+            foreach (var scope in chain)
             {
-                Hour = (float)(now.Hour + now.Minute / 60.0),
-                Dow = (float)(int)now.DayOfWeek,
-            });
-            value = p.Value;
-            return true;
+                if (!_byScope.TryGetValue(scope.AsKey(), out var loaded)) continue;
+                value = loaded.Engine.Predict(sample).Value;
+                return true;
+            }
         }
+        return false;
     }
 }

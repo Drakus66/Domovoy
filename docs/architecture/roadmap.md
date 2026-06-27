@@ -460,9 +460,115 @@ E2 (композит) и конфигом-инстансом на уровне E
 > итерацией. **Дальше:** очередь апрува/промоута со scorecard+провенансом и выбор модели на инстанс — Эпик 2C;
 > фичи mode/presence. **Не проверено вживую** против RabbitMQ/Mongo.
 
-### Эпик 2C. Очередь предложений + апрув ⬜
+### Эпик 2I. Обобщённые ML-шаблоны + зональный scoping моделей 🚧 (план зафиксирован 2026-06-28)
+**Мотивация.** 2B-термостат — частный случай «лежащего на поверхности» применения ML. По основной идее
+такие реализации должны не рождаться из кода под каждую величину, а собираться из **обобщённых шаблонов**
+(по размерности/типу данных), и подбираться по данным. Этот эпик «разворачивает наизнанку» 2A/2B: вытащить
+generic-губернатор (он уже почти весь написан в `MlThermostatBlock`) и сделать тренер **реестром шаблонов**.
+
+- **Реестр шаблонов.** Шаблон = `{ targetKind, featureSet, mlTask }`. `MlTrainer` → `IModelTemplate`
+  (`Kind`, `CapabilityKind Target`, `Metric`, `Train(LabeledSeries,FeatureSpec)→(artifact,holdoutScore)`).
+  Начальный набор по `CapabilityKind` цели: **Number → регрессия** (SDCA, MAE) → Setpoint governor *(есть)*;
+  **Boolean → бинарная** (FastTree, AUC) → Toggle governor; **Enum → мультикласс** (LightGbm/SDCA, macro-F1)
+  → Selector governor. Ось B (размерность фич) — поле `Features` модели (`time` → `time+mode+occupancy`),
+  не отдельный `Kind`. «Подбор модели» = обучить применимых кандидатов и взять лучшего по honest-holdout.
+- **Generic-губернаторы вместо классов-копий.** `MlThermostat*` → база `MlGovernorBase`
+  (Shadow/Bounded/Full + дрейф + авто-демоут — общие) с hook-методами `Predict/Clamp/Disagreement`;
+  `MlSetpointGovernor`/`MlToggleGovernor`/`MlSelectorGovernor` отличаются лишь клампом и смыслом «дрейфа».
+  `ml_thermostat` остаётся как **каталожный инстанс** Setpoint-губернатора над temperature; `BlockCatalog`
+  регистрирует governor-инстансы из конфиг-списка (по управляемой капабилити), а не классами.
+- **Параметры — только числовые (контракты НЕ трогаем).** Губернаторам хватает числовых params
+  (`stage`/`band`/`probThreshold`/`minDwellMin`/`maxClassStep`); категориальная привязка течёт через
+  `PortBinding.CapabilityId` и дескриптор `Capability` (`Values`/`Min`/`Max`). Полиморфные
+  `ControlBlock.Params`/UI **остаются в 2C** — этот эпик их не требует.
+- **Per-instance модель через зональную цепочку scope.** Резолюция = пройти цепочку от частного к общему,
+  взять **первую существующую** модель: `zone:<id>` → `zone_kind:<Kind>` → `global`. Переиспускаем
+  существующую модель зоны (`Zone.Kind` = «тип помещения»; `Zone.ParentZoneId` — на будущее доп-уровни),
+  **новых полей в `Zone` нет**. Пример: спальня и гостиная (обе `room`) делят `zone_kind:room`; теплица
+  (`greenhouse`) — свою; если у спальни накопилась своя `zone:bedroom` — берёт её. Механизм — generic
+  ordered fallback chain (уровни — открытый упорядоченный словарь).
+- **Два независимых «своё» у помещения.** Параметры губернатора (baseline/band/stage) — уже per-instance
+  в `ControlBlock.Params` (1H). Обученное расписание/уставки — per-zone модель по цепочке.
+- **Авто-формирование zone-модели.** Всегда тренируются фолбэки `global`+`zone_kind`; для зоны с достаточными
+  данными тренируется кандидат `zone:<id>` и **регистрируется/обслуживает только если честно бьёт фолбэк
+  на holdout своей зоны** (порог). Иначе шум — инстанс остаётся на общей. «Отпочкование» по факту расхождения.
+- **Фич-локальность (та же цепочка scope-ит входы модели).** Для модели в `zone:Z (kind K)`:
+  глобально-окружающие фичи (время, наружная T/погода, режим) — всегда; зонально-локальные — датчики Z и зон
+  того же `K` по цепочке (вес по удалённости); **через границу `zone_kind` — жёсткая стена** (домовые датчики
+  не кормят теплицу и наоборот, даже при in-sample корреляции). Гостиная→спальня — мягко (тот же `room`),
+  дом→теплица — исключение a priori. Вторичная защита от случайной корреляции — holdout-гейт.
+
+> **Фазы (каждая отдельно собирается/тестируется).**
+> **Фаза 0** — реестр шаблонов + generic Setpoint governor + зональная цепочка scope + scoped-тренировка с
+> авто-промоушеном по holdout. Меняет `MlModel` (+`Scope{Level,Key}`, +`Metric`, +`HoldoutScore`, +`Features`),
+> `MlModelService` (мульти-движковый кэш по `(Kind,Capability,Level,Key)` + резолюция цепочкой),
+> `AutomationOptions.TrainTargets[]`, `DbGatewayClient`/телеметрию (фильтр по зоне/типу; проверить разметку
+> зоны в `sensor_readings`), `IBlockContext.Scope` (из `ControlBlock.ZoneId`+`Zone.Kind`, кэш зон). Поведение
+> при одной `global`-модели идентично текущему (8 ML-тестов зелёные) + тесты на резолюцию цепочки и гейт.
+> **Фаза 1** — категориальные ряды из `device_events` (state_change) для классификаторов + резолвер
+> `CapabilityKind` цели. **Фаза 2** — `schedule_binary` + Toggle governor (порог + min-dwell, дрейф = доля
+> расхождений). **Фаза 3** — `schedule_multiclass` + Selector governor (Bounded = соседний класс по `Values`).
+> **Фаза 4** — мультивариант/`+context` с фич-локальностью (жёсткая стена `zone_kind`). **Фаза 5** — WebUI
+> `/models` (Scope/Metric, scorecard по задаче); `/blocks` — без изменений (scope из зоны инстанса).
+>
+> **Отношение к 2C.** Этот эпик даёт автоматический выбор модели **по зоне** (не требует параметров). 2C
+> остаётся для явного пиннинга версии (`model_version`) и очереди апрува промоутов/предложений — слои
+> ортогональны: цепочка выбирает scope/семейство, 2C-пиннинг — конкретную версию внутри него. **Вне scope:**
+> авто-авторинг шаблон-кандидата движком (2F); полиморфные params/UI (2C).
+>
+> **✅ Фаза 0 реализована (2026-06-28, ветка `epic-2b`).** Реестр шаблонов `IModelTemplate`/`ModelTemplateRegistry`
+> (+`ScheduleRegressionTemplate` оборачивает `MlTrainer`; `CapabilityKindResolver`); тренер **подбирает** модель
+> по типу цели через honest-holdout. Generic-губернатор `MlGovernorBase`/`MlSetpointGovernor`/`MlSetpointGovernorType`
+> заменил `MlThermostatBlock`; `ml_thermostat` — каталожный инстанс. **Зональный scope:** `MlModel.Scope{Level,Key}`
+> + `ModelScope` (цепочка `zone→zone_kind→global`); `MlModelService` — мульти-движковый кэш по scope + резолюция
+> цепочкой; `ctx.ZoneId/ZoneKind` из `ZoneCache`; scoped-тренировка (`TrainTargets` авто из зон, фильтр телеметрии
+> по зоне — `/api/telemetry?zoneId` уже был) с авто-промоушеном per-zone по `ZonePromotionMargin`; `MlModel`
+> +`HoldoutScore`/`Metric`/`Features`; DbGateway latest-by-scope + версия per (kind,target,scope). **Тесты:** 13 ML
+> юнит (вкл. построение цепочки scope и гейт промоушена) — 33/33 .NET; полное решение собирается. **Гейт
+> промоушена v1** сравнивает honest-holdout кандидата и фолбэка (прокси; точный бэктест фолбэка на holdout зоны —
+> уточнение). **Дальше:** Фазы 1–5 (категориальные ряды → Boolean/Toggle → Enum/Selector → +context/фич-локальность
+> → WebUI Scope/Metric).
+
+### Эпик 2C. Очередь предложений + апрув 🚧 (план зафиксирован 2026-06-27)
 - Единый UI: промоут ML-блоков (Shadow→Active со scorecard/провенансом) + ML-**предложения правил** (`Proposed`, валидируются реплеем 1F — объяснимый дискретный путь, напр. «свет по присутствию»).
 - **DoD:** пользователь видит очередь, смотрит обоснование (реплей/scorecard, модель/версия/`decisionId`), апрувит/реджектит; активированное действие трассируется к `decisionId`.
+
+> **План реализации (зафиксировано 2026-06-27, после 2B; код не начат).** Единая коллекция **`proposals`
+> в DbGateway** (источник истины по паттерну `automations`/`ml_models`; та же коллекция позже наполняется
+> движком 2F). Один контракт `Proposal` ([`Domovoy.Contracts/Proposals/Proposal.cs`]) с дискриминатором
+> `Kind`, покрывающий **три потока апрува**, технически готовых в 1F/2B:
+> - **`rule`** — `Proposed` `AutomationRule` → `Active`; обоснование = **реплей 1F** (`POST /api/replay`:
+>   когда бы сработало, lift); апрув ставит правилу статус `Active`.
+> - **`block_promotion`** — ML-блок `stage` 0→1→2 (Shadow→Bounded→Full); обоснование = **scorecard 2B**
+>   (`HoldoutMae`/RMSE/версия, overlay `ScorecardChart`); апрув патчит `Params["stage"]` блока.
+> - **`model_selection`** — привязка версии модели к инстансу блока; апрув патчит `Params["model_version"]`.
+>
+> **Выбор модели на инстанс (снимает блокер 2A/2B без нарушения инварианта):** `ControlBlock.Params`
+> числовой-only → версию кодируем как **числовой param `model_version`** (0/нет = latest, текущее поведение);
+> `MlModelService` резолвит конкретную `Version` вместо latest; `MlSetpointBlock`/`MlThermostatBlock` читают
+> param и пробрасывают `DecisionId` модели в `triggerSource=ml`-команды (замыкает трассировку DoD).
+>
+> **Апрув — операция в DbGateway** (владеет всеми тремя коллекциями): мутация цели + перевод предложения в
+> `Approved` атомарны в одной БД; стампит `DecisionId` в применённую цель; AutomationService подхватывает
+> через `RefreshLoop`. Reject цель не трогает. **Новый сервис не вводим.**
+>
+> **Слои:** (1) контракт `Proposal`; (2) DbGateway `ProposalsEndpoints` (`GET ?status=&kind=`, `POST`,
+> `POST /{id}/approve`, `/reject`) + side-effects по `Kind`; (3) ApiGateway `ProposalsController` (прокси
+> `db-gateway`, калька `AutomationsController`); (4) AutomationService — резолв модели по `model_version` +
+> проброс `DecisionId`; (4.5) **минимальный ML→rule предложитель** (по паттерну `MlTrainingService`:
+> BackgroundService + ручной `POST /api/proposals/suggest`, читает `device_events` по HTTP) — **сознательно
+> один тип паттерна** (ко-встречаемость переходов, напр. «присутствие после заката → свет в пределах T»,
+> пороги support/confidence), **явная заглушка-предтеча 2F** (полную воронку MI/Granger/FDR/rule-mining
+> строит 2F; здесь — одна эвристика → очередь, кандидат всё равно валидируется реплеем 1F перед апрувом);
+> (5) WebUI `/proposals` (rule-поток через реплей + block_promotion через scorecard + model_selection;
+> `/blocks` промоут ML-блока идёт через очередь, не прямым редактированием `stage`); (6) тесты (DbGateway
+> approve side-effects, resolve версии модели, WebUI очередь) + roadmap 2C ✅.
+>
+> **Переиспользуется (не пишем заново):** реплей 1F, scorecard/backtest 2B (`GET /api/ml/backtest`,
+> `HoldoutMae`, `ScorecardChart.tsx`), `PUT /api/automations/{id}/status`, прокси-инфраструктура HttpClient.
+> **Вне scope 2C:** полноценная генерация предложений (поиск закономерностей) — **Эпик 2F**; enforcement прав
+> на апрув — роли 2E / auth Фазы 3. **Инвариант:** ни один кандидат не активируется без человека (принцип 1);
+> предложитель — только поставщик гипотез, не актуатор.
 
 ### Эпик 2D. Обнаружение + семантическая типизация устройств ✅
 - Классификатор архетипа (свет/термостат/датчик/замок/…) из набора capability + метаданных Z2M (`definition`/модель); **native-тип приоритетен**; поле `archetype` в read-модель `capability_devices`; UI использует для иконок/группировки/контролов; ручная коррекция. Эвристики v1 → ML.NET-классификатор (эмпирически из поведения) позже.

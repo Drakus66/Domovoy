@@ -29,13 +29,16 @@ public static class MlEndpoints
             return Results.Ok(docs.Select(ToMetadata));
         });
 
-        // Latest registered model for a (kind, target), or 404.
-        group.MapGet("/models/latest", async (string? kind, string? target, IMongoDatabase db) =>
+        // Latest registered model for a (kind, target, scope), or 404. Scope (Epic 2I) defaults to global;
+        // a caller resolving the zone→zone_kind→global chain queries each level until one returns a model.
+        group.MapGet("/models/latest", async (string? kind, string? target, string? level, string? key, IMongoDatabase db) =>
         {
             var b = Builders<MlModelDocument>.Filter;
             var filters = new List<FilterDefinition<MlModelDocument>>();
             if (!string.IsNullOrEmpty(kind)) filters.Add(b.Eq(x => x.Kind, kind));
             if (!string.IsNullOrEmpty(target)) filters.Add(b.Eq(x => x.TargetCapability, target));
+            if (!string.IsNullOrEmpty(level)) filters.Add(b.Eq(x => x.Scope.Level, level));
+            if (!string.IsNullOrEmpty(key)) filters.Add(b.Eq(x => x.Scope.Key, key));
             var filter = filters.Count == 0 ? FilterDefinition<MlModelDocument>.Empty : b.And(filters);
 
             var doc = await Models(db).Find(filter).SortByDescending(x => x.Version).FirstOrDefaultAsync();
@@ -60,19 +63,27 @@ public static class MlEndpoints
             var model = req.Model;
             model.Id = Guid.NewGuid().ToString();
             model.TrainedAt = DateTime.UtcNow;
+            model.Scope ??= ModelScope.Global;
 
-            // Monotonic version per (kind, target).
+            // Monotonic version per (kind, target, scope) — each scope has its own version line (Epic 2I).
             var b = Builders<MlModelDocument>.Filter;
             var prev = await Models(db)
-                .Find(b.And(b.Eq(x => x.Kind, model.Kind), b.Eq(x => x.TargetCapability, model.TargetCapability)))
+                .Find(b.And(
+                    b.Eq(x => x.Kind, model.Kind),
+                    b.Eq(x => x.TargetCapability, model.TargetCapability),
+                    b.Eq(x => x.Scope.Level, model.Scope.Level),
+                    b.Eq(x => x.Scope.Key, model.Scope.Key)))
                 .SortByDescending(x => x.Version).FirstOrDefaultAsync();
             model.Version = (prev?.Version ?? 0) + 1;
 
             var doc = new MlModelDocument
             {
                 Id = model.Id, Name = model.Name, Kind = model.Kind, TargetCapability = model.TargetCapability,
-                Version = model.Version, TrainedAt = model.TrainedAt, SampleCount = model.SampleCount,
-                Rmse = model.Rmse, Algorithm = model.Algorithm,
+                Scope = model.Scope, Version = model.Version, TrainedAt = model.TrainedAt,
+                SampleCount = model.SampleCount, Rmse = model.Rmse,
+                HoldoutMae = model.HoldoutMae, HoldoutSampleCount = model.HoldoutSampleCount,
+                HoldoutScore = model.HoldoutScore, Metric = model.Metric, Features = model.Features,
+                Algorithm = model.Algorithm,
                 Artifact = Convert.FromBase64String(req.ArtifactBase64),
             };
             await Models(db).InsertOneAsync(doc);
@@ -83,8 +94,11 @@ public static class MlEndpoints
     private static MlModel ToMetadata(MlModelDocument d) => new()
     {
         Id = d.Id, Name = d.Name, Kind = d.Kind, TargetCapability = d.TargetCapability,
-        Version = d.Version, TrainedAt = d.TrainedAt, SampleCount = d.SampleCount,
-        Rmse = d.Rmse, Algorithm = d.Algorithm,
+        Scope = d.Scope ?? ModelScope.Global, Version = d.Version, TrainedAt = d.TrainedAt,
+        SampleCount = d.SampleCount, Rmse = d.Rmse,
+        HoldoutMae = d.HoldoutMae, HoldoutSampleCount = d.HoldoutSampleCount,
+        HoldoutScore = d.HoldoutScore, Metric = d.Metric, Features = d.Features,
+        Algorithm = d.Algorithm,
     };
 
     private static IMongoCollection<MlModelDocument> Models(IMongoDatabase db) =>

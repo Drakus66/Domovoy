@@ -56,4 +56,20 @@ public class AutomationOptions
     /// <summary>Safety clamp on the ML-predicted setpoint (°C).</summary>
     public double SetpointMin { get; set; } = 16;
     public double SetpointMax { get; set; } = 26;
+
+    // --- Per-zone model scoping (roadmap Epic 2I) ---
+
+    /// <summary>
+    /// When true, training also fits shared per-zone-kind models and, where they earn it, per-zone models —
+    /// so a thermostat resolves its model along the zone → zone_kind → global chain. The global model is
+    /// always trained; this only adds the more specific scopes.
+    /// </summary>
+    public bool TrainZoneModels { get; set; } = true;
+
+    /// <summary>
+    /// How much a per-zone candidate must beat its fallback (zone_kind/global) on holdout to be registered
+    /// (auto-promotion gate, in the template's metric units). Keeps a zone on the shared model until its own
+    /// behaviour genuinely diverges, instead of splintering on noise.
+    /// </summary>
+    public double ZonePromotionMargin { get; set; } = 0.25;
 }

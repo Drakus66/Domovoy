@@ -125,17 +125,36 @@ public sealed class DbGatewayClient
 
     // ===== ML substrate (Epic 2A) =====
 
-    /// <summary>Numeric telemetry for training (Epic 2A); null on failure.</summary>
-    public async Task<List<TelemetrySample>?> GetTelemetryAsync(string capabilityId, DateTime fromUtc, int limit, CancellationToken ct)
+    /// <summary>
+    /// Numeric telemetry for training (Epic 2A). Optionally scoped to a zone (Epic 2I) so a zone- or
+    /// zone-kind-scoped model trains only on its own readings. Null on failure.
+    /// </summary>
+    public async Task<List<TelemetrySample>?> GetTelemetryAsync(
+        string capabilityId, DateTime fromUtc, int limit, CancellationToken ct, string? zoneId = null)
     {
         try
         {
             var url = $"api/telemetry?capabilityId={Uri.EscapeDataString(capabilityId)}&from={fromUtc:o}&limit={limit}";
+            if (!string.IsNullOrEmpty(zoneId)) url += $"&zoneId={Uri.EscapeDataString(zoneId)}";
             return await _http.GetFromJsonAsync<List<TelemetrySample>>(url, Json, ct);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not load telemetry for {Capability}", capabilityId);
+            return null;
+        }
+    }
+
+    /// <summary>Zones read-model (id, kind) for ML scope resolution (Epic 2I), or null if unreachable.</summary>
+    public async Task<List<ZoneSnapshot>?> GetZonesAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<List<ZoneSnapshot>>("api/zones", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load zones from DbGateway");
             return null;
         }
     }
@@ -157,12 +176,27 @@ public sealed class DbGatewayClient
         }
     }
 
-    /// <summary>Latest registered model metadata for a (kind, target), or null.</summary>
-    public async Task<MlModel?> GetLatestModelAsync(string kind, string target, CancellationToken ct)
+    /// <summary>All registered model metadata (artifact projected out), newest first, or null (Epic 2I).</summary>
+    public async Task<List<MlModel>?> GetModelsAsync(CancellationToken ct)
     {
         try
         {
-            var url = $"api/ml/models/latest?kind={Uri.EscapeDataString(kind)}&target={Uri.EscapeDataString(target)}";
+            return await _http.GetFromJsonAsync<List<MlModel>>("api/ml/models", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load ML model list");
+            return null;
+        }
+    }
+
+    /// <summary>Latest registered model metadata for a (kind, target, scope), or null (Epic 2A/2I).</summary>
+    public async Task<MlModel?> GetLatestModelAsync(string kind, string target, ModelScope scope, CancellationToken ct)
+    {
+        try
+        {
+            var url = $"api/ml/models/latest?kind={Uri.EscapeDataString(kind)}&target={Uri.EscapeDataString(target)}"
+                + $"&level={Uri.EscapeDataString(scope.Level)}&key={Uri.EscapeDataString(scope.Key)}";
             var response = await _http.GetAsync(url, ct);
             return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<MlModel>(Json, ct) : null;
         }
@@ -194,6 +228,13 @@ public sealed class DbGatewayClient
         public DateTime Timestamp { get; set; }
         public string CapabilityId { get; set; } = string.Empty;
         public double Value { get; set; }
+    }
+
+    /// <summary>Subset of the zones read-model for ML scope resolution (Epic 2I): id + kind.</summary>
+    public sealed class ZoneSnapshot
+    {
+        public string Id { get; set; } = string.Empty;
+        public string? Kind { get; set; }
     }
 
     /// <summary>Subset of the capability-device read-model the engine needs (zone + current state).</summary>

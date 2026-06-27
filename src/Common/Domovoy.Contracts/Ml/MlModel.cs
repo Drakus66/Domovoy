@@ -20,7 +20,13 @@ public class MlModel
     /// <summary>Capability the model predicts (e.g. <c>temperature</c>).</summary>
     public string TargetCapability { get; set; } = string.Empty;
 
-    /// <summary>Monotonic version per (kind, target) — bumped on each retrain.</summary>
+    /// <summary>
+    /// Spatial scope the model serves (Epic 2I): a specific zone, a zone kind ("living rooms"), or global.
+    /// Instances resolve a model along the zone→zone_kind→global chain; null/absent means global (back-compat).
+    /// </summary>
+    public ModelScope Scope { get; set; } = ModelScope.Global;
+
+    /// <summary>Monotonic version per (kind, target, scope) — bumped on each retrain.</summary>
     public int Version { get; set; } = 1;
 
     public DateTime TrainedAt { get; set; } = DateTime.UtcNow;
@@ -34,11 +40,25 @@ public class MlModel
     /// <summary>
     /// Held-out backtest error (mean absolute error on the most recent window, excluded from training).
     /// The honest "prediction vs fact" signal for the approval scorecard (Epic 2B). 0 if not evaluated.
+    /// Kept for back-compat; <see cref="HoldoutScore"/> generalizes it across template metrics (Epic 2I).
     /// </summary>
     public double HoldoutMae { get; set; }
 
-    /// <summary>Number of held-out samples the backtest MAE was computed on (provenance).</summary>
+    /// <summary>Number of held-out samples the backtest score was computed on (provenance).</summary>
     public int HoldoutSampleCount { get; set; }
+
+    /// <summary>
+    /// Honest holdout score in the template's own <see cref="Metric"/> (Epic 2I) — the signal both the
+    /// approval scorecard and the model-selection / zone auto-promotion compare on. For regression equals
+    /// <see cref="HoldoutMae"/>; classification templates report AUC / macro-F1 here.
+    /// </summary>
+    public double HoldoutScore { get; set; }
+
+    /// <summary>Name of the holdout metric (<c>MAE</c>, <c>AUC</c>, <c>MacroF1</c>) — disambiguates <see cref="HoldoutScore"/>.</summary>
+    public string Metric { get; set; } = "MAE";
+
+    /// <summary>Feature set the model was trained on (Epic 2I), e.g. <c>time</c> or <c>time+mode+occupancy</c>.</summary>
+    public string Features { get; set; } = "time";
 
     /// <summary>Training algorithm, for provenance.</summary>
     public string? Algorithm { get; set; }

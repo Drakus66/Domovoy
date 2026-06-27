@@ -1,5 +1,8 @@
 using Domovoy.AutomationService.Configuration;
 using Domovoy.AutomationService.Ml;
+using Domovoy.AutomationService.Ml.Governors;
+using Domovoy.Contracts.Capabilities;
+using Domovoy.Contracts.Ml;
 
 using Microsoft.Extensions.Options;
 
@@ -17,16 +20,38 @@ public sealed class BlockCatalog
     public BlockCatalog(MlModelService models, IOptions<AutomationOptions> options)
     {
         var o = options.Value;
-        var types = new IBlockType[]
+        var types = new List<IBlockType>
         {
             new EwmaFilterType(),
             new ThermostatType(),
             new Co2VentilationType(),
             new IrrigationSequencerType(),
             new MlSetpointType(models, o.SetpointMin, o.SetpointMax), // Epic 2A: ML-driven setpoint
-            new MlThermostatType(models, o.SetpointMin, o.SetpointMax), // Epic 2B: staged ML setpoint governor
         };
+
+        // Epic 2I: ML setpoint governors are catalog-driven instances of one generic type — a new ML-governed
+        // setpoint is a config entry here, not a bespoke class. The flagship `ml_thermostat` (Epic 2B) is the
+        // (temperature → temperature_setpoint) instance; CO₂/humidity/etc. governors slot in alongside.
+        types.AddRange(SetpointGovernors(models, o));
+
         _types = types.ToDictionary(t => t.TypeId, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The configured ML setpoint-governor instances (Epic 2I).</summary>
+    private static IEnumerable<IBlockType> SetpointGovernors(MlModelService models, AutomationOptions o)
+    {
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, double?> predict =
+            (now, chain) => models.TryPredict(now, chain, out var v) ? v : null;
+
+        yield return new MlSetpointGovernorType(
+            typeId: "ml_thermostat",
+            title: "ML thermostat (setpoint governor)",
+            description: "Proposes a learned temperature setpoint to a deterministic thermostat loop, staged Shadow → Bounded → Full under the safety floor (Epic 2B/2I).",
+            measuredInput: CapabilityIds.Temperature,
+            output: WellKnownCapabilities.TemperatureSetpoint(min: o.SetpointMin, max: o.SetpointMax, step: 0.5),
+            floorMin: o.SetpointMin,
+            floorMax: o.SetpointMax,
+            predict: predict);
     }
 
     public IReadOnlyCollection<IBlockType> Types => _types.Values;

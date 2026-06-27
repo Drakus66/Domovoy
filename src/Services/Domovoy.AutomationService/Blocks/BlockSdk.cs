@@ -49,6 +49,12 @@ public interface IBlockContext
 {
     DateTimeOffset Now { get; }
 
+    /// <summary>The instance's assigned zone id, or null if unassigned (Epic 2I: drives model-scope resolution).</summary>
+    string? ZoneId { get; }
+
+    /// <summary>The kind/type of the instance's zone (e.g. "room", "greenhouse"), or null if unknown (Epic 2I).</summary>
+    string? ZoneKind { get; }
+
     /// <summary>Current (normalized) value of a bound input port, or null if unbound/unknown.</summary>
     object? Read(string inputPort);
 
