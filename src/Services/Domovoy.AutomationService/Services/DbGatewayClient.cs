@@ -123,6 +123,30 @@ public sealed class DbGatewayClient
         }
     }
 
+    /// <summary>
+    /// State-change events for one capability (roadmap Epic 2I, Phase 1) — the label source for boolean/enum
+    /// ML targets, mirroring how telemetry is the source for numeric ones. Oldest-first; optionally zone-scoped;
+    /// null on a gateway failure.
+    /// </summary>
+    public async Task<List<EventLogEntry>?> GetCapabilityEventsAsync(
+        string capabilityId, DateTime fromUtc, int limit, CancellationToken ct, string? zoneId = null)
+    {
+        try
+        {
+            var url = $"api/events?kind=state_change&capabilityId={Uri.EscapeDataString(capabilityId)}"
+                + $"&from={fromUtc:o}&limit={limit}";
+            if (!string.IsNullOrEmpty(zoneId)) url += $"&zoneId={Uri.EscapeDataString(zoneId)}";
+            var events = await _http.GetFromJsonAsync<List<EventLogEntry>>(url, Json, ct);
+            events?.Reverse(); // endpoint returns newest-first; training needs chronological order
+            return events;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load events for {Capability}", capabilityId);
+            return null;
+        }
+    }
+
     // ===== ML substrate (Epic 2A) =====
 
     /// <summary>

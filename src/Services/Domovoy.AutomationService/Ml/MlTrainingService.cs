@@ -1,6 +1,7 @@
 using Domovoy.AutomationService.Configuration;
 using Domovoy.AutomationService.Ml.Templates;
 using Domovoy.AutomationService.Services;
+using Domovoy.Contracts.Capabilities;
 using Domovoy.Contracts.Ml;
 
 using Microsoft.Extensions.Options;
@@ -98,18 +99,19 @@ public sealed class MlTrainingService : BackgroundService
         _lastTrain = DateTime.UtcNow;
         var from = DateTime.UtcNow.AddDays(-_options.TrainWindowDays);
 
-        var candidates = _templates.ForTarget(CapabilityKindResolver.KindOf(_options.TrainCapability));
+        var targetKind = CapabilityKindResolver.KindOf(_options.TrainCapability);
+        var candidates = _templates.ForTarget(targetKind);
         if (candidates.Count == 0)
             return new TrainResult(false, $"no template for {_options.TrainCapability}", null);
 
         // 1) Global model — always trained; its absence fails the whole run.
-        var global = await _db.GetTelemetryAsync(_options.TrainCapability, from, 5000, ct);
+        var global = await LoadSeriesAsync(targetKind, from, null, ct);
         if (global is null)
-            return new TrainResult(false, "telemetry unavailable", null);
+            return new TrainResult(false, "training data unavailable", null);
         if (global.Count < _options.MinSamples)
             return new TrainResult(false, $"not enough data ({global.Count}/{_options.MinSamples})", null);
 
-        var selected = SelectBest(candidates, ToLabeled(global));
+        var selected = SelectBest(candidates, global);
         if (selected is null)
             return new TrainResult(false, "training produced no model", null);
 
@@ -119,7 +121,7 @@ public sealed class MlTrainingService : BackgroundService
 
         // 2) Per-zone scopes (Epic 2I) — best-effort.
         var zoneModels = _options.TrainZoneModels
-            ? await TrainZoneScopesAsync(candidates, from, selected.Value.Result.HoldoutScore, ct)
+            ? await TrainZoneScopesAsync(candidates, targetKind, from, selected.Value.Result.HoldoutScore, ct)
             : 0;
 
         await _models.RefreshAsync(ct);
@@ -132,7 +134,7 @@ public sealed class MlTrainingService : BackgroundService
 
     // Fit shared zone-kind models (the fallbacks) and per-zone models that beat their fallback by the margin.
     private async Task<int> TrainZoneScopesAsync(
-        IReadOnlyList<IModelTemplate> candidates, DateTime from, double globalScore, CancellationToken ct)
+        IReadOnlyList<IModelTemplate> candidates, CapabilityKind targetKind, DateTime from, double globalScore, CancellationToken ct)
     {
         var registered = 0;
         var kindFallbackScore = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
@@ -140,7 +142,7 @@ public sealed class MlTrainingService : BackgroundService
         // Shared per-zone-kind models (always registered when they train — they are the fallbacks).
         foreach (var kind in _zones.Kinds())
         {
-            var samples = await CollectZoneTelemetry(_zones.ZonesOfKind(kind), from, ct);
+            var samples = await CollectZoneSeries(_zones.ZonesOfKind(kind), targetKind, from, ct);
             if (samples.Count < _options.MinSamples) continue;
 
             var sel = SelectBest(candidates, samples);
@@ -156,7 +158,7 @@ public sealed class MlTrainingService : BackgroundService
         // Per-zone models — promoted only when they beat their fallback (zone_kind, else global).
         foreach (var zoneId in _zones.AllZoneIds())
         {
-            var samples = await CollectZoneTelemetry(new[] { zoneId }, from, ct);
+            var samples = await CollectZoneSeries(new[] { zoneId }, targetKind, from, ct);
             if (samples.Count < _options.MinSamples) continue;
 
             var sel = SelectBest(candidates, samples);
@@ -211,18 +213,38 @@ public sealed class MlTrainingService : BackgroundService
         return await _db.RegisterModelAsync(model, r.Artifact, ct);
     }
 
-    private async Task<List<LabeledSample>> CollectZoneTelemetry(
-        IReadOnlyList<string> zoneIds, DateTime from, CancellationToken ct)
+    private async Task<List<LabeledSample>> CollectZoneSeries(
+        IReadOnlyList<string> zoneIds, CapabilityKind targetKind, DateTime from, CancellationToken ct)
     {
         var all = new List<LabeledSample>();
         foreach (var zoneId in zoneIds)
         {
-            var s = await _db.GetTelemetryAsync(_options.TrainCapability, from, 5000, ct, zoneId);
-            if (s is not null) all.AddRange(ToLabeled(s));
+            var s = await LoadSeriesAsync(targetKind, from, zoneId, ct);
+            if (s is not null) all.AddRange(s);
         }
         return all;
     }
 
-    private static List<LabeledSample> ToLabeled(IEnumerable<DbGatewayClient.TelemetrySample> samples) =>
-        samples.Select(s => new LabeledSample(s.Timestamp, s.Value)).ToList();
+    /// <summary>
+    /// Load the labeled training series for the target (roadmap Epic 2I, Phase 1): numeric targets read
+    /// telemetry (sensor_readings); boolean targets read state-change events and encode them 0/1. Optionally
+    /// zone-scoped. Null only when the source is unreachable.
+    /// </summary>
+    private async Task<List<LabeledSample>?> LoadSeriesAsync(
+        CapabilityKind targetKind, DateTime from, string? zoneId, CancellationToken ct)
+    {
+        if (targetKind == CapabilityKind.Number)
+        {
+            var telemetry = await _db.GetTelemetryAsync(_options.TrainCapability, from, 5000, ct, zoneId);
+            return telemetry?.Select(s => new LabeledSample(s.Timestamp, s.Value)).ToList();
+        }
+
+        // Boolean (and, in Phase 3, enum) targets are labeled from the event-log.
+        var events = await _db.GetCapabilityEventsAsync(_options.TrainCapability, from, 5000, ct, zoneId);
+        return events
+            ?.Select(e => (e.Timestamp, Label: EventLabelEncoder.ToLabel(e.NewValue)))
+            .Where(x => x.Label is not null)
+            .Select(x => new LabeledSample(x.Timestamp, x.Label!.Value))
+            .ToList();
+    }
 }
