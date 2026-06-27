@@ -239,10 +239,19 @@ public sealed class MlTrainingService : BackgroundService
             return telemetry?.Select(s => new LabeledSample(s.Timestamp, s.Value)).ToList();
         }
 
-        // Boolean (and, in Phase 3, enum) targets are labeled from the event-log.
+        // Boolean/enum targets are labeled from the event-log: booleans encode to 0/1, enums keep the class.
         var events = await _db.GetCapabilityEventsAsync(_options.TrainCapability, from, 5000, ct, zoneId);
+        if (events is null) return null;
+
+        if (targetKind == CapabilityKind.Enum)
+            return events
+                .Select(e => (e.Timestamp, Class: EventLabelEncoder.ToClass(e.NewValue)))
+                .Where(x => x.Class is not null)
+                .Select(x => new LabeledSample(x.Timestamp, 0, x.Class))
+                .ToList();
+
         return events
-            ?.Select(e => (e.Timestamp, Label: EventLabelEncoder.ToLabel(e.NewValue)))
+            .Select(e => (e.Timestamp, Label: EventLabelEncoder.ToLabel(e.NewValue)))
             .Where(x => x.Label is not null)
             .Select(x => new LabeledSample(x.Timestamp, x.Label!.Value))
             .ToList();

@@ -35,6 +35,23 @@ public static class EventLabelEncoder
         };
     }
 
+    /// <summary>
+    /// Map a JSON event value to a categorical class label for a multiclass (enum) target (Epic 2I, Phase 3):
+    /// the string value as-is, or a number/bool rendered to a stable token. Null/empty → null (drop the sample).
+    /// </summary>
+    public static string? ToClass(JsonElement? value)
+    {
+        if (value is not { } v) return null;
+        return v.ValueKind switch
+        {
+            JsonValueKind.String => string.IsNullOrWhiteSpace(v.GetString()) ? null : v.GetString()!.Trim(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.Number => v.TryGetDouble(out var d) ? d.ToString(CultureInfo.InvariantCulture) : null,
+            _ => null,
+        };
+    }
+
     private static double? FromString(string? s)
     {
         if (string.IsNullOrWhiteSpace(s)) return null;

@@ -3,11 +3,11 @@ using Domovoy.Contracts.Capabilities;
 namespace Domovoy.AutomationService.Ml.Templates;
 
 /// <summary>
-/// A labeled training row: a numeric/encoded observation at a point in time (roadmap Epic 2I). For the v1
-/// schedule templates the label is the observed value (Number) or its 0/1 encoding (Boolean); richer
-/// categorical/contextual encodings arrive with the classification + <c>+context</c> feature axes (Phases 1–4).
+/// A labeled training row at a point in time (roadmap Epic 2I). <see cref="Value"/> carries numeric and
+/// boolean (0/1) targets so they train the way telemetry does; <see cref="Class"/> carries the string label
+/// for enum/categorical targets (Phase 3). A row uses one or the other depending on the template.
 /// </summary>
-public readonly record struct LabeledSample(DateTime Timestamp, double Value);
+public readonly record struct LabeledSample(DateTime Timestamp, double Value, string? Class = null);
 
 /// <summary>Outcome of training a template: the serialized artifact plus its honest holdout score.</summary>
 /// <param name="Artifact">Serialized ML.NET model bytes.</param>

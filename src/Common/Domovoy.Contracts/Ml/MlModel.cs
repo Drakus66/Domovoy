@@ -72,4 +72,7 @@ public static class MlModelKinds
 
     /// <summary>Binary classification of a boolean target from time features — a learned on/off schedule (Epic 2I).</summary>
     public const string ScheduleBinary = "schedule_binary";
+
+    /// <summary>Multiclass classification of an enum target from time features — a learned mode/level schedule (Epic 2I).</summary>
+    public const string ScheduleMulticlass = "schedule_multiclass";
 }
