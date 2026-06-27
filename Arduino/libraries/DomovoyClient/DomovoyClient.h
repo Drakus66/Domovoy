@@ -8,16 +8,26 @@
 // One physical board / shield fronts MANY logical devices over a single MQTT connection
 // (like a Zigbee2MQTT bridge). Each DomovoyDevice has its own deviceId, capabilities and topics:
 //   domovoy/native/<deviceId>/{announce,state,set,availability}
-// The board's MQTT client id is just the connection identifier — NOT a logical device.
+// The board's MQTT client id ("hubId") is just the connection identifier — NOT a logical device.
+// Board reachability lives at domovoy/hub/<hubId>/status, where the single MQTT Last-Will fires
+// "offline" on an ungraceful drop; the server then marks every device of that hub offline (MQTT
+// allows only one will per connection, so it can't be attached per-device).
+//
+// MEMORY (AVR / Arduino Nano has ~2 KB SRAM): announcements are streamed straight to the MQTT
+// socket — no JSON document is ever buffered — and every fixed JSON fragment is kept in flash via
+// F(). The only transient RAM buffers are the two below; shrink them with -D flags if RAM is tight.
 
 #ifndef DOMOVOY_MAX_CAPS
 #define DOMOVOY_MAX_CAPS 8       // max capabilities per device
 #endif
 #ifndef DOMOVOY_MAX_DEVICES
-#define DOMOVOY_MAX_DEVICES 16   // max devices per board
+#define DOMOVOY_MAX_DEVICES 8    // max devices per board
 #endif
-#ifndef DOMOVOY_ANNOUNCE_DOC_SIZE
-#define DOMOVOY_ANNOUNCE_DOC_SIZE 768  // per-device announce JSON document
+#ifndef DOMOVOY_CMD_DOC_SIZE
+#define DOMOVOY_CMD_DOC_SIZE 192 // transient parse buffer for one inbound /set payload
+#endif
+#ifndef DOMOVOY_MQTT_BUFFER
+#define DOMOVOY_MQTT_BUFFER 256  // PubSubClient packet buffer (bounds inbound /set + state publishes)
 #endif
 
 // Receives the capability set { "<capabilityId>": <value>, ... } the server sent to this device.
@@ -58,7 +68,9 @@ private:
   uint8_t _capCount = 0;
   DeviceCommandCallback _cb = nullptr;
 
-  void writeAnnounce(JsonDocument &doc) const;
+  // Streams the announce JSON directly to `out` (nothing is buffered). `hub` is the board's
+  // connection id so the server can map device→hub for offline-on-crash handling.
+  void streamAnnounce(Print &out, const char *hub) const;
 };
 
 /// <summary>Owns the MQTT connection for one board and routes to/from its devices.</summary>

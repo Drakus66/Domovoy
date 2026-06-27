@@ -21,6 +21,13 @@ public sealed record NativeAnnounceV1
     /// <summary>Optional firmware version.</summary>
     public string? Firmware { get; init; }
 
+    /// <summary>
+    /// Id of the board ("hub") fronting this device — the board's MQTT connection id. Lets the adapter
+    /// map device→hub so it can mark every device of a hub offline when the board's Last-Will fires
+    /// (<see cref="NativeProtocol.HubStatusTopic"/>). Null for single-device boards / legacy firmware.
+    /// </summary>
+    public string? Hub { get; init; }
+
     /// <summary>Capabilities the device exposes (on_off, brightness, temperature, …).</summary>
     public IReadOnlyList<Capability> Capabilities { get; init; } = [];
 }

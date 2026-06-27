@@ -34,6 +34,10 @@ public class DomovoyNativeAdapter : IProtocolAdapter
     // Logical device id -> hardware id, to build the device's /set topic when a command arrives.
     private readonly ConcurrentDictionary<Guid, string> _hwIdByDeviceId = new();
 
+    // hubId -> hardware ids it fronts, so a hub Last-Will can offline every device on that board.
+    // (MQTT permits one will per connection, so the board wills its hub topic, not each device.)
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _hwIdsByHub = new();
+
     public string Name => NativeProtocol.AdapterSource;
 
     public DomovoyNativeAdapter(ILogger<DomovoyNativeAdapter> logger, IMessageBus messageBus)
@@ -50,6 +54,7 @@ public class DomovoyNativeAdapter : IProtocolAdapter
             .WithTopicFilter(NativeProtocol.AnnounceFilter)
             .WithTopicFilter(NativeProtocol.StateFilter)
             .WithTopicFilter(NativeProtocol.AvailabilityFilter)
+            .WithTopicFilter(NativeProtocol.HubStatusFilter)
             .Build();
         await _mqttClient.SubscribeAsync(options, token);
 
@@ -73,13 +78,20 @@ public class DomovoyNativeAdapter : IProtocolAdapter
 
     public Task StopAsync(CancellationToken token) => Task.CompletedTask;
 
-    public bool CanHandleTopic(string topic) => topic.StartsWith(NativeProtocol.Root + "/", StringComparison.Ordinal);
+    public bool CanHandleTopic(string topic) =>
+        topic.StartsWith(NativeProtocol.Root + "/", StringComparison.Ordinal) ||
+        topic.StartsWith(NativeProtocol.HubRoot + "/", StringComparison.Ordinal);
 
     public async Task HandleMessageAsync(string topic, string payload)
     {
         try
         {
-            if (topic.EndsWith("/announce", StringComparison.Ordinal))
+            if (topic.StartsWith(NativeProtocol.HubRoot + "/", StringComparison.Ordinal))
+            {
+                if (topic.EndsWith("/status", StringComparison.Ordinal))
+                    await HandleHubStatusAsync(topic, payload);
+            }
+            else if (topic.EndsWith("/announce", StringComparison.Ordinal))
                 await HandleAnnounceAsync(payload);
             else if (topic.EndsWith("/state", StringComparison.Ordinal))
                 await HandleStateAsync(topic, payload);
@@ -103,6 +115,8 @@ public class DomovoyNativeAdapter : IProtocolAdapter
 
         var deviceId = DeviceIdFactory.Derive(Name, announce.DeviceId);
         _hwIdByDeviceId[deviceId] = announce.DeviceId;
+        if (!string.IsNullOrWhiteSpace(announce.Hub))
+            _hwIdsByHub.GetOrAdd(announce.Hub, _ => new()).TryAdd(announce.DeviceId, 0);
 
         var descriptor = new DeviceDescriptor(
             Id: deviceId,
@@ -162,6 +176,37 @@ public class DomovoyNativeAdapter : IProtocolAdapter
             subject: deviceId.ToString());
 
         await _messageBus.PublishAsync(BusTopology.EventsExchange, BusTopology.DeviceOnlineChangedKey, envelope);
+    }
+
+    private async Task HandleHubStatusAsync(string topic, string payload)
+    {
+        var hubId = NativeProtocol.HubIdFromStatusTopic(topic);
+        if (string.IsNullOrEmpty(hubId)) return;
+
+        var isOnline = string.Equals(payload?.Trim().Trim('"'), NativeProtocol.Online, StringComparison.OrdinalIgnoreCase);
+        // Recovery is driven by each device re-announcing (which republishes its own availability=online),
+        // so we only act on the board dropping — fan the offline out to every device the hub fronts.
+        if (isOnline) return;
+
+        if (!_hwIdsByHub.TryGetValue(hubId, out var hwIds) || hwIds.IsEmpty)
+        {
+            _logger.LogWarning("Hub '{Hub}' went offline but no devices are mapped to it yet", hubId);
+            return;
+        }
+
+        foreach (var hwId in hwIds.Keys)
+        {
+            var deviceId = DeviceIdFactory.Derive(Name, hwId);
+            var envelope = Envelope<DeviceOnlineChangedV1>.Create(
+                MessageTypes.DeviceOnlineChanged,
+                source: $"connectivity/{Name}",
+                data: new DeviceOnlineChangedV1(deviceId, false),
+                subject: deviceId.ToString());
+
+            await _messageBus.PublishAsync(BusTopology.EventsExchange, BusTopology.DeviceOnlineChangedKey, envelope);
+        }
+
+        _logger.LogInformation("Hub '{Hub}' offline → marked {Count} device(s) offline", hubId, hwIds.Count);
     }
 
     private async Task HandleCapabilityCommandAsync(Envelope<DeviceCommandV1> envelope)

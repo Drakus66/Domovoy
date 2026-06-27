@@ -49,9 +49,12 @@
 5. ✅ Legacy снят полностью: старый device-type путь (UnifiedDeviceManager + IDeviceTypeHandler + handlers + IdentityResolver), legacy `IProtocolAdapter` события и dual-publish, старый `POST /command` + `ZigbeeController.SetDeviceState`, легаси-подписки `EventInterceptor`/`EventRelayService`, Common-модели (`Device`/`Light`/`Sensor`/`MqttDevice`/`BaseEntity`/events/enums/commands/`BaseService`/`IDeviceService`/`OrchestrationCommand`/`AdminController`), DbGateway legacy (`Device`+repo+`MapDeviceEndpoints`) + Ocelot маршруты `/api/devices|locations|sensors`, WebUI legacy (`Dashboard`/`api/devices`/store/types/components), `MessageBusConfiguration` урезан, `RabbitMQConnection.ConfigureMqttExchanges` убран. Все 7 .NET-проектов + `tsc` фронтенда — зелёные.
 
 **Native-трек (DIY/Arduino, ~50% устройств):** определён capability-native протокол **Domovoy.Native v1**
-(`Native/NativeProtocol` + `NativeAnnounceV1`, топики `domovoy/native/<id>/{announce,state,set,availability}`).
+(`Native/NativeProtocol` + `NativeAnnounceV1`, топики `domovoy/native/<id>/{announce,state,set,availability}`,
+broadcast `domovoy/native/discover` для пере-анонса после рестарта сервера, и `domovoy/hub/<hubId>/status`
+для доступности борда: один MQTT-LWT на соединение → адаптер гасит все устройства хаба при падении борда).
 `DomovoyNativeAdapter` мигрирован (near-identity — без codec, значения уже нормализованы) и кормит тот же
-`DeviceDiscoveredV1`/`DeviceStateReportV1`. Эмулятор пересобран на native v1 + встроенный веб-UI (:5080).
-⬜ Прошивка `Arduino/libraries/DomovoyClient` — привести к v1. ⬜ Потребитель `DeviceOnlineChangedV1` (availability).
+`DeviceDiscoveredV1`/`DeviceStateReportV1`/`DeviceOnlineChangedV1`. Эмулятор пересобран на native v1 +
+встроенный веб-UI (:5080). ✅ Прошивка `Arduino/libraries/DomovoyClient` приведена к v1 (потоковый announce
+без буфера JSON, подписка на `discover`, hub-LWT; настроена под малый SRAM Arduino Nano).
 
 См. [docs/architecture/roadmap.md](../../../docs/architecture/roadmap.md).
