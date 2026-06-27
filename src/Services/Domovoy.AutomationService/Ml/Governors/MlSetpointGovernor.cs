@@ -12,18 +12,30 @@ namespace Domovoy.AutomationService.Ml.Governors;
 ///
 /// <para>Bounded-Active clamps the proposal to <c>baseline±band</c>, where the baseline tracks the loop's live
 /// commanded setpoint (falling back to the <c>baseline</c> param). Full passes the proposal through; the safety
-/// floor clamps on every active stage (inherited from <see cref="MlGovernorBase"/>).</para>
+/// floor clamps on every active stage.</para>
 /// </summary>
 public sealed class MlSetpointGovernor : MlGovernorBase
 {
+    private readonly double _floorMin;
+    private readonly double _floorMax;
+
     public MlSetpointGovernor(
         Func<DateTimeOffset, IReadOnlyList<ModelScope>, double?> predict, double floorMin, double floorMax,
         string measuredInput, string boundOutput)
-        : base(predict, floorMin, floorMax, measuredInput, boundOutput)
+        : base(predict, measuredInput, boundOutput)
     {
+        _floorMin = floorMin;
+        _floorMax = floorMax;
     }
 
-    protected override double ApplyBoundedClamp(double proposed, IBlockContext ctx)
+    protected override void EmitBound(IBlockContext ctx, double proposed, bool bounded)
+    {
+        var target = bounded ? Clamp(proposed, ctx) : proposed;
+        target = Math.Round(Math.Clamp(target, _floorMin, _floorMax), 2);
+        ctx.Emit(BoundOutput, target); // bound → commands the deterministic loop (1D actuation)
+    }
+
+    private double Clamp(double proposed, IBlockContext ctx)
     {
         var baseline = AsDouble(ctx.Commanded(BoundOutput)) ?? ctx.Param("baseline", 21);
         var band = Math.Max(0.1, ctx.Param("band", 1.5));

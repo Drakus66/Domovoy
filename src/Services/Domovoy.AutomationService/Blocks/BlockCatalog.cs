@@ -29,16 +29,16 @@ public sealed class BlockCatalog
             new MlSetpointType(models, o.SetpointMin, o.SetpointMax), // Epic 2A: ML-driven setpoint
         };
 
-        // Epic 2I: ML setpoint governors are catalog-driven instances of one generic type — a new ML-governed
-        // setpoint is a config entry here, not a bespoke class. The flagship `ml_thermostat` (Epic 2B) is the
-        // (temperature → temperature_setpoint) instance; CO₂/humidity/etc. governors slot in alongside.
-        types.AddRange(SetpointGovernors(models, o));
+        // Epic 2I: ML governors are catalog-driven instances of generic types — a new ML-governed output is a
+        // config entry here, not a bespoke class. The flagship `ml_thermostat` (Epic 2B) is the
+        // (temperature → temperature_setpoint) setpoint instance; toggle/other governors slot in alongside.
+        types.AddRange(MlGovernors(models, o));
 
         _types = types.ToDictionary(t => t.TypeId, StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>The configured ML setpoint-governor instances (Epic 2I).</summary>
-    private static IEnumerable<IBlockType> SetpointGovernors(MlModelService models, AutomationOptions o)
+    /// <summary>The configured ML governor instances (Epic 2I). They share one predictor over the loaded model.</summary>
+    private static IEnumerable<IBlockType> MlGovernors(MlModelService models, AutomationOptions o)
     {
         Func<DateTimeOffset, IReadOnlyList<ModelScope>, double?> predict =
             (now, chain) => models.TryPredict(now, chain, out var v) ? v : null;
@@ -51,6 +51,14 @@ public sealed class BlockCatalog
             output: WellKnownCapabilities.TemperatureSetpoint(min: o.SetpointMin, max: o.SetpointMax, step: 0.5),
             floorMin: o.SetpointMin,
             floorMax: o.SetpointMax,
+            predict: predict);
+
+        yield return new MlToggleGovernorType(
+            typeId: "ml_switch",
+            title: "ML switch (on/off governor)",
+            description: "Proposes a learned on/off schedule to a deterministic switch, staged Shadow → Bounded → Full with a probability threshold + anti-chatter dwell (Epic 2I). Use when the trained target is a boolean capability.",
+            measuredInput: CapabilityIds.OnOff,
+            output: WellKnownCapabilities.OnOff(writable: true),
             predict: predict);
     }
 
