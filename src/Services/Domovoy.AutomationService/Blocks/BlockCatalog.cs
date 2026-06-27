@@ -42,6 +42,7 @@ public sealed class BlockCatalog
     {
         Func<DateTimeOffset, IReadOnlyList<ModelScope>, double?> predict =
             (now, chain) => models.TryPredict(now, chain, out var v) ? v : null;
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, string?> predictClass = models.TryPredictClass;
 
         yield return new MlSetpointGovernorType(
             typeId: "ml_thermostat",
@@ -60,6 +61,15 @@ public sealed class BlockCatalog
             measuredInput: CapabilityIds.OnOff,
             output: WellKnownCapabilities.OnOff(writable: true),
             predict: predict);
+
+        const string hvacMode = "hvac_mode";
+        yield return new MlSelectorGovernorType(
+            typeId: "ml_selector",
+            title: "ML mode selector",
+            description: "Proposes a learned enum schedule (e.g. an HVAC mode) to a deterministic loop, staged Shadow → Bounded → Full, Bounded limited to adjacent values (Epic 2I). Use when the trained target is an enum capability.",
+            measuredInput: hvacMode,
+            output: WellKnownCapabilities.Enum(hvacMode, new[] { "off", "eco", "comfort", "boost" }, writable: true),
+            predict: predictClass);
     }
 
     public IReadOnlyCollection<IBlockType> Types => _types.Values;

@@ -29,7 +29,10 @@ public sealed class MlModelService
     // scope key (level:key) → loaded predictor for the configured target.
     private readonly Dictionary<string, Loaded> _byScope = new(StringComparer.Ordinal);
 
-    private sealed record Loaded(string ModelId, Func<DateTimeOffset, double> Predict, MlModel Meta);
+    // A scope's loaded model exposes whichever predictor matches its kind: a scalar (regression value / binary
+    // probability) for setpoint/toggle governors, or a class (enum label) for the selector governor.
+    private sealed record Loaded(
+        string ModelId, Func<DateTimeOffset, double>? Scalar, Func<DateTimeOffset, string?>? Class, MlModel Meta);
 
     public MlModelService(DbGatewayClient db, IOptions<AutomationOptions> options, ILogger<MlModelService> logger)
     {
@@ -71,13 +74,13 @@ public sealed class MlModelService
             {
                 using var stream = new MemoryStream(bytes);
                 var model = _ml.Model.Load(stream, out _);
-                var predict = BuildPredictor(model, meta.Kind);
-                if (predict is null)
+                var (scalar, klass) = BuildPredictors(model, meta.Kind);
+                if (scalar is null && klass is null)
                 {
                     _logger.LogWarning("No inference for model kind {Kind} ({Id})", meta.Kind, meta.Id);
                     continue;
                 }
-                lock (_lock) _byScope[scopeKey] = new Loaded(meta.Id, predict, meta);
+                lock (_lock) _byScope[scopeKey] = new Loaded(meta.Id, scalar, klass, meta);
                 _logger.LogInformation(
                     "Loaded ML model {Name} v{Version} scope {Scope} ({Metric} {Score:0.###})",
                     meta.Name, meta.Version, meta.Scope, meta.Metric, meta.HoldoutScore);
@@ -98,31 +101,43 @@ public sealed class MlModelService
         }
     }
 
-    // Build a scalar predictor for a loaded model by kind: regression → value, binary → probability.
-    private Func<DateTimeOffset, double>? BuildPredictor(ITransformer model, string kind)
+    // Build the predictor matching a model's kind: regression → scalar value, binary → scalar probability,
+    // multiclass → class label.
+    private (Func<DateTimeOffset, double>? Scalar, Func<DateTimeOffset, string?>? Class) BuildPredictors(
+        ITransformer model, string kind)
     {
         switch (kind)
         {
             case MlModelKinds.ScheduleRegression:
             {
                 var engine = _ml.Model.CreatePredictionEngine<MlSample, MlPrediction>(model);
-                return now =>
+                return (now =>
                 {
                     var (hour, dow) = Features(now);
                     return engine.Predict(new MlSample { Hour = hour, Dow = dow }).Value;
-                };
+                }, null);
             }
             case MlModelKinds.ScheduleBinary:
             {
                 var engine = _ml.Model.CreatePredictionEngine<MlBinarySample, MlBinaryPrediction>(model);
-                return now =>
+                return (now =>
                 {
                     var (hour, dow) = Features(now);
                     return engine.Predict(new MlBinarySample { Hour = hour, Dow = dow }).Probability;
-                };
+                }, null);
+            }
+            case MlModelKinds.ScheduleMulticlass:
+            {
+                var engine = _ml.Model.CreatePredictionEngine<MlMulticlassSample, MlMulticlassPrediction>(model);
+                return (null, now =>
+                {
+                    var (hour, dow) = Features(now);
+                    var label = engine.Predict(new MlMulticlassSample { Hour = hour, Dow = dow }).PredictedLabel;
+                    return string.IsNullOrEmpty(label) ? null : label;
+                });
             }
             default:
-                return null;
+                return (null, null);
         }
     }
 
@@ -145,11 +160,28 @@ public sealed class MlModelService
         {
             foreach (var scope in chain)
             {
-                if (!_byScope.TryGetValue(scope.AsKey(), out var loaded)) continue;
-                value = (float)loaded.Predict(now);
+                if (!_byScope.TryGetValue(scope.AsKey(), out var loaded) || loaded.Scalar is null) continue;
+                value = (float)loaded.Scalar(now);
                 return true;
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// Predict the class label for <paramref name="now"/> along the scope <paramref name="chain"/> (multiclass
+    /// models, Epic 2I Phase 3); null if no scope in the chain has a loaded class model.
+    /// </summary>
+    public string? TryPredictClass(DateTimeOffset now, IReadOnlyList<ModelScope> chain)
+    {
+        lock (_lock)
+        {
+            foreach (var scope in chain)
+            {
+                if (!_byScope.TryGetValue(scope.AsKey(), out var loaded) || loaded.Class is null) continue;
+                return loaded.Class(now);
+            }
+        }
+        return null;
     }
 }
