@@ -1,11 +1,19 @@
 import apiClient from './client';
 
-/** Registered ML model metadata (matches Domovoy.Contracts MlModel, Epic 2A). */
+/** Spatial scope a model serves (Epic 2I): a zone, a zone kind, or global. */
+export interface ModelScope {
+  level: string; // "zone" | "zone_kind" | "global"
+  key: string;   // zone id / zone kind; empty for global
+}
+
+/** Registered ML model metadata (matches Domovoy.Contracts MlModel, Epic 2A/2I). */
 export interface MlModel {
   id: string;
   name: string;
   kind: string;
   targetCapability: string;
+  /** Spatial scope along the zone → zone_kind → global chain (Epic 2I). */
+  scope?: ModelScope | null;
   version: number;
   trainedAt: string;
   sampleCount: number;
@@ -13,6 +21,12 @@ export interface MlModel {
   /** Held-out backtest MAE (prediction vs fact on unseen recent data, Epic 2B). */
   holdoutMae: number;
   holdoutSampleCount: number;
+  /** Honest holdout score in the template's metric (Epic 2I). */
+  holdoutScore: number;
+  /** Holdout metric name: MAE / AUC / MacroAccuracy (Epic 2I). */
+  metric: string;
+  /** Feature set the model was trained on, e.g. "time" (Epic 2I). */
+  features: string;
   algorithm?: string | null;
 }
 

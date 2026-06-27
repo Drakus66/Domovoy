@@ -4,13 +4,17 @@ import {
 } from '@mui/material';
 import ModelTrainingRoundedIcon from '@mui/icons-material/ModelTrainingRounded';
 import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
-import { mlApi, MlModel } from '../api/ml';
+import { mlApi, MlModel, ModelScope } from '../api/ml';
 import ScorecardChart from '../components/charts/ScorecardChart';
 
 const fmt = (iso: string) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
 };
+
+// Scope label along the zone → zone_kind → global chain (Epic 2I).
+const scopeLabel = (s?: ModelScope | null): string =>
+  !s || s.level === 'global' || !s.key ? 'global' : `${s.level === 'zone_kind' ? 'kind' : 'zone'}: ${s.key}`;
 
 export default function Models() {
   const [models, setModels] = useState<MlModel[]>([]);
@@ -85,11 +89,23 @@ export default function Models() {
                       <Typography fontWeight={700}>{m.name}</Typography>
                       <Chip size="small" variant="outlined" label={`v${m.version}`} />
                       <Chip size="small" variant="outlined" label={m.kind} />
+                      <Chip
+                        size="small"
+                        color={scopeLabel(m.scope) === 'global' ? 'default' : 'primary'}
+                        variant={scopeLabel(m.scope) === 'global' ? 'outlined' : 'filled'}
+                        label={scopeLabel(m.scope)}
+                      />
+                      {m.features && m.features !== 'time' && (
+                        <Chip size="small" variant="outlined" label={m.features} />
+                      )}
                       {m.algorithm && <Chip size="small" variant="outlined" label={m.algorithm} />}
                     </Stack>
                     <Typography variant="caption" color="text.secondary">
-                      target {m.targetCapability} · {m.sampleCount} samples · RMSE {m.rmse.toFixed(3)}
-                      {m.holdoutSampleCount > 0 && ` · backtest MAE ${m.holdoutMae.toFixed(3)}`} · trained {fmt(m.trainedAt)}
+                      target {m.targetCapability} · {m.sampleCount} samples
+                      {m.holdoutSampleCount > 0
+                        ? ` · backtest ${m.metric || 'MAE'} ${(m.holdoutScore || m.holdoutMae).toFixed(3)}`
+                        : ` · RMSE ${m.rmse.toFixed(3)}`}
+                      {' · trained '}{fmt(m.trainedAt)}
                     </Typography>
                   </Box>
                 </CardContent>
