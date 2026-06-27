@@ -69,4 +69,7 @@ public static class MlModelKinds
 {
     /// <summary>Regression of a numeric target from time-of-day/day-of-week — a learned schedule.</summary>
     public const string ScheduleRegression = "schedule_regression";
+
+    /// <summary>Binary classification of a boolean target from time features — a learned on/off schedule (Epic 2I).</summary>
+    public const string ScheduleBinary = "schedule_binary";
 }
