@@ -20,7 +20,7 @@ public sealed class MlSetpointGovernor : MlGovernorBase
     private readonly double _floorMax;
 
     public MlSetpointGovernor(
-        Func<DateTimeOffset, IReadOnlyList<ModelScope>, double?> predict, double floorMin, double floorMax,
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> predict, double floorMin, double floorMax,
         string measuredInput, string boundOutput)
         : base(predict, measuredInput, boundOutput)
     {

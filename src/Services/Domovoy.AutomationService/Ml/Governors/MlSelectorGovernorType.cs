@@ -11,14 +11,14 @@ namespace Domovoy.AutomationService.Ml.Governors;
 /// </summary>
 public sealed class MlSelectorGovernorType : IBlockType
 {
-    private readonly Func<DateTimeOffset, IReadOnlyList<ModelScope>, string?> _predict;
+    private readonly Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, string?> _predict;
     private readonly string _measuredInput;
     private readonly Capability _output;
     private readonly IReadOnlyList<string> _values;
 
     public MlSelectorGovernorType(
         string typeId, string title, string description, string measuredInput, Capability output,
-        Func<DateTimeOffset, IReadOnlyList<ModelScope>, string?> predict)
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, string?> predict)
     {
         TypeId = typeId;
         Title = title;
@@ -56,6 +56,7 @@ public sealed class MlSelectorGovernorType : IBlockType
         new BlockParamSpec("maxClassStep", 1, null, 1, 10, "Bounded-Active: max positions to move along the value order per change"),
         new BlockParamSpec("driftThreshold", 0.5, null, 0, 1, "Mean misclassification rate that auto-demotes to Shadow"),
         new BlockParamSpec("driftWindowMin", 60, "min", 5, 1440, "Rolling window for the drift mean"),
+        new BlockParamSpec(MlGovernorBase.ModelVersionParam, 0, null, 0, 100000, "Pinned model version (0 = latest); set via the approval queue (2C)"),
     };
 
     public IBlock Create() => new MlSelectorGovernor(_predict, _measuredInput, _output.Id, _values);

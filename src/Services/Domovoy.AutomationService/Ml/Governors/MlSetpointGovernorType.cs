@@ -12,7 +12,7 @@ namespace Domovoy.AutomationService.Ml.Governors;
 /// </summary>
 public sealed class MlSetpointGovernorType : IBlockType
 {
-    private readonly Func<DateTimeOffset, IReadOnlyList<ModelScope>, double?> _predict;
+    private readonly Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> _predict;
     private readonly string _measuredInput;
     private readonly Capability _output;
     private readonly double _floorMin;
@@ -28,7 +28,7 @@ public sealed class MlSetpointGovernorType : IBlockType
     /// <param name="predict">Model predictor (time → value, or null when no model is loaded).</param>
     public MlSetpointGovernorType(
         string typeId, string title, string description, string measuredInput, Capability output,
-        double floorMin, double floorMax, Func<DateTimeOffset, IReadOnlyList<ModelScope>, double?> predict)
+        double floorMin, double floorMax, Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> predict)
     {
         TypeId = typeId;
         Title = title;
@@ -67,6 +67,7 @@ public sealed class MlSetpointGovernorType : IBlockType
         new BlockParamSpec("band", 1.5, null, 0.1, 50, "Bounded-Active: max deviation from baseline the ML may apply"),
         new BlockParamSpec("driftThreshold", 3, null, 0.5, 100, "Mean prediction error that auto-demotes to Shadow"),
         new BlockParamSpec("driftWindowMin", 60, "min", 5, 1440, "Rolling window for the drift mean"),
+        new BlockParamSpec(MlGovernorBase.ModelVersionParam, 0, null, 0, 100000, "Pinned model version (0 = latest); set via the approval queue (2C)"),
     };
 
     public IBlock Create() =>

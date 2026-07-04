@@ -11,13 +11,13 @@ namespace Domovoy.AutomationService.Ml.Governors;
 /// </summary>
 public sealed class MlToggleGovernorType : IBlockType
 {
-    private readonly Func<DateTimeOffset, IReadOnlyList<ModelScope>, double?> _predict;
+    private readonly Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> _predict;
     private readonly string _measuredInput;
     private readonly Capability _output;
 
     public MlToggleGovernorType(
         string typeId, string title, string description, string measuredInput, Capability output,
-        Func<DateTimeOffset, IReadOnlyList<ModelScope>, double?> predict)
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> predict)
     {
         TypeId = typeId;
         Title = title;
@@ -54,6 +54,7 @@ public sealed class MlToggleGovernorType : IBlockType
         new BlockParamSpec("minDwellMin", 10, "min", 0, 1440, "Minimum time to hold a state before flipping (anti-chatter)"),
         new BlockParamSpec("driftThreshold", 0.5, null, 0, 1, "Mean disagreement rate that auto-demotes to Shadow"),
         new BlockParamSpec("driftWindowMin", 60, "min", 5, 1440, "Rolling window for the drift mean"),
+        new BlockParamSpec(MlGovernorBase.ModelVersionParam, 0, null, 0, 100000, "Pinned model version (0 = latest); set via the approval queue (2C)"),
     };
 
     public IBlock Create() => new MlToggleGovernor(_predict, _measuredInput, _output.Id);

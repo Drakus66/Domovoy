@@ -17,7 +17,7 @@ public sealed class MlToggleGovernor : MlGovernorBase
     private DateTimeOffset? _lastFlip;
 
     public MlToggleGovernor(
-        Func<DateTimeOffset, IReadOnlyList<ModelScope>, double?> predict, string measuredInput, string boundOutput)
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> predict, string measuredInput, string boundOutput)
         : base(predict, measuredInput, boundOutput)
     {
     }

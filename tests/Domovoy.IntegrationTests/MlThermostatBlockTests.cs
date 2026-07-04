@@ -18,7 +18,7 @@ public sealed class MlThermostatBlockTests
     private const double FloorMax = 26;
 
     private static MlSetpointGovernor Governor(Func<DateTimeOffset, double?> predict) =>
-        new((now, _) => predict(now), FloorMin, FloorMax,
+        new((now, _, _) => predict(now), FloorMin, FloorMax,
             measuredInput: "temperature", boundOutput: CapabilityIds.TemperatureSetpoint);
 
     [Fact]
@@ -94,7 +94,7 @@ public sealed class MlThermostatBlockTests
         // Epic 2I: a block in a zone of a known kind resolves its model along zone → zone_kind → global.
         IReadOnlyList<ModelScope>? seen = null;
         var block = new MlSetpointGovernor(
-            (_, chain) => { seen = chain; return 22; }, FloorMin, FloorMax,
+            (_, chain, _) => { seen = chain; return 22; }, FloorMin, FloorMax,
             measuredInput: "temperature", boundOutput: CapabilityIds.TemperatureSetpoint);
         var ctx = new FakeContext { ZoneId = "bedroom", ZoneKind = "room", Params = { ["stage"] = 0 } };
 
@@ -108,11 +108,26 @@ public sealed class MlThermostatBlockTests
     }
 
     [Fact]
+    public void Predictor_ReceivesPinnedModelVersion_FromParam()
+    {
+        // Epic 2C: an approved model_selection proposal patches Params["model_version"]; the governor threads it
+        // to the predictor so MlModelService can serve the pinned version instead of latest.
+        var seen = -1;
+        var block = new MlSetpointGovernor(
+            (_, _, version) => { seen = version; return 22; }, FloorMin, FloorMax,
+            measuredInput: "temperature", boundOutput: CapabilityIds.TemperatureSetpoint);
+
+        block.Tick(new FakeContext { Params = { ["stage"] = 0, ["model_version"] = 7 } });
+
+        Assert.Equal(7, seen);
+    }
+
+    [Fact]
     public void Predictor_Chain_IsGlobalOnly_WhenNoZone()
     {
         IReadOnlyList<ModelScope>? seen = null;
         var block = new MlSetpointGovernor(
-            (_, chain) => { seen = chain; return 22; }, FloorMin, FloorMax,
+            (_, chain, _) => { seen = chain; return 22; }, FloorMin, FloorMax,
             measuredInput: "temperature", boundOutput: CapabilityIds.TemperatureSetpoint);
 
         block.Tick(new FakeContext { Params = { ["stage"] = 0 } });

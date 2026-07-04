@@ -72,4 +72,24 @@ public class AutomationOptions
     /// behaviour genuinely diverges, instead of splintering on noise.
     /// </summary>
     public double ZonePromotionMargin { get; set; } = 0.25;
+
+    // --- Heuristic rule proposer (roadmap Epic 2C; explicit stub-precursor to 2F) ---
+
+    /// <summary>How often the heuristic proposer scans the event-log for candidate rules (0 disables the periodic scan).</summary>
+    public int ProposalScanHours { get; set; } = 6;
+
+    /// <summary>History window (days) the proposer mines for trigger→action co-occurrences.</summary>
+    public int ProposalWindowDays { get; set; } = 14;
+
+    /// <summary>Max seconds after a sensor trigger within which a human action counts as "following" it.</summary>
+    public int ProposalCoWindowSeconds { get; set; } = 120;
+
+    /// <summary>Minimum times a pattern must recur (support) before it is proposed.</summary>
+    public int ProposalMinSupport { get; set; } = 3;
+
+    /// <summary>Minimum P(action | trigger) (confidence) before a pattern is proposed.</summary>
+    public double ProposalMinConfidence { get; set; } = 0.6;
+
+    /// <summary>Sensor capabilities whose "became active" transition is treated as a candidate trigger.</summary>
+    public string[] ProposalTriggerCapabilities { get; set; } = { "presence", "occupancy", "motion" };
 }

@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 using Domovoy.AutomationService.Configuration;
 using Domovoy.AutomationService.Ml.Templates;
 using Domovoy.AutomationService.Services;
@@ -26,8 +28,15 @@ public sealed class MlModelService
     private readonly MLContext _ml = new(seed: 0);
     private readonly object _lock = new();
 
-    // scope key (level:key) → loaded predictor for the configured target.
+    // scope key (level:key) → loaded predictor for the configured target (latest version of each scope).
     private readonly Dictionary<string, Loaded> _byScope = new(StringComparer.Ordinal);
+
+    // Version-pinned predictors (Epic 2C model_selection): "{scopeKey}#v{version}" → loaded predictor. Populated
+    // lazily — a tick asking for a version we haven't loaded registers it in _pendingPins, the next background
+    // refresh fetches it, and until then the instance falls back to the scope's latest model. Keeps the sync
+    // block tick allocation-free while the (async) artifact download stays on the refresh thread.
+    private readonly Dictionary<string, Loaded> _byVersion = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<(string ScopeKey, int Version), byte> _pendingPins = new();
 
     // A scope's loaded model exposes whichever predictor matches its kind: a scalar (regression value / binary
     // probability) for setpoint/toggle governors, or a class (enum label) for the selector governor.
@@ -99,7 +108,52 @@ public sealed class MlModelService
             Current = _byScope.TryGetValue(ModelScope.Global.AsKey(), out var g) ? g.Meta
                 : _byScope.Values.FirstOrDefault()?.Meta;
         }
+
+        await LoadPendingPinsAsync(all, ct);
     }
+
+    // Fetch any version pins a block tick has requested (Epic 2C). A pin for a version that doesn't exist in the
+    // registry is dropped (the instance keeps using latest); a transient artifact-fetch failure is retried next
+    // refresh. Loaded pins persist across refreshes (the set is tiny — one per pinned instance).
+    private async Task LoadPendingPinsAsync(List<MlModel> all, CancellationToken ct)
+    {
+        foreach (var pin in _pendingPins.Keys.ToList())
+        {
+            var versionKey = VersionKey(pin.ScopeKey, pin.Version);
+            lock (_lock)
+            {
+                if (_byVersion.ContainsKey(versionKey)) { _pendingPins.TryRemove(pin, out _); continue; }
+            }
+
+            var meta = all.FirstOrDefault(m =>
+                string.Equals(m.TargetCapability, _options.TrainCapability, StringComparison.OrdinalIgnoreCase)
+                && (m.Scope ?? ModelScope.Global).AsKey() == pin.ScopeKey
+                && m.Version == pin.Version);
+            if (meta is null) { _pendingPins.TryRemove(pin, out _); continue; } // no such version — keep using latest
+
+            var bytes = await _db.GetModelArtifactAsync(meta.Id, ct);
+            if (bytes is null) continue; // transient — retry next refresh
+
+            try
+            {
+                using var stream = new MemoryStream(bytes);
+                var model = _ml.Model.Load(stream, out _);
+                var (scalar, klass) = BuildPredictors(model, meta.Kind);
+                if (scalar is null && klass is null) { _pendingPins.TryRemove(pin, out _); continue; }
+                lock (_lock) _byVersion[versionKey] = new Loaded(meta.Id, scalar, klass, meta);
+                _pendingPins.TryRemove(pin, out _);
+                _logger.LogInformation("Pinned ML model {Name} v{Version} scope {Scope} loaded (Epic 2C)",
+                    meta.Name, meta.Version, meta.Scope);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to load pinned ML model v{Version}", pin.Version);
+                _pendingPins.TryRemove(pin, out _);
+            }
+        }
+    }
+
+    private static string VersionKey(string scopeKey, int version) => $"{scopeKey}#v{version}";
 
     // Build the predictor matching a model's kind: regression → scalar value, binary → scalar probability,
     // multiclass → class label.
@@ -146,42 +200,68 @@ public sealed class MlModelService
 
     /// <summary>Predict for <paramref name="now"/> using the global model (back-compat for Epic 2A blocks).</summary>
     public bool TryPredict(DateTimeOffset now, out float value) =>
-        TryPredict(now, new[] { ModelScope.Global }, out value);
+        TryPredict(now, new[] { ModelScope.Global }, 0, out value);
+
+    /// <summary>Predict along <paramref name="chain"/> using each scope's latest model (back-compat overload).</summary>
+    public bool TryPredict(DateTimeOffset now, IReadOnlyList<ModelScope> chain, out float value) =>
+        TryPredict(now, chain, 0, out value);
 
     /// <summary>
     /// Predict for <paramref name="now"/> resolving the model along <paramref name="chain"/> (most specific
     /// first); false if no scope in the chain has a loaded model. The returned scalar is the model's natural
-    /// output (regression value or binary probability).
+    /// output (regression value or binary probability). When <paramref name="pinnedVersion"/> &gt; 0 the serving
+    /// scope's pinned version is used if loaded (Epic 2C model_selection); otherwise the pin is queued for the
+    /// next refresh and the scope's latest model is used meanwhile.
     /// </summary>
-    public bool TryPredict(DateTimeOffset now, IReadOnlyList<ModelScope> chain, out float value)
+    public bool TryPredict(DateTimeOffset now, IReadOnlyList<ModelScope> chain, int pinnedVersion, out float value)
     {
         value = 0;
         lock (_lock)
         {
             foreach (var scope in chain)
             {
-                if (!_byScope.TryGetValue(scope.AsKey(), out var loaded) || loaded.Scalar is null) continue;
-                value = (float)loaded.Scalar(now);
+                var scopeKey = scope.AsKey();
+                if (!_byScope.TryGetValue(scopeKey, out var latest) || latest.Scalar is null) continue;
+                var predictor = ResolvePinned(scopeKey, pinnedVersion, latest)?.Scalar ?? latest.Scalar;
+                value = (float)predictor(now);
                 return true;
             }
         }
         return false;
     }
 
+    /// <summary>Predict the class label along <paramref name="chain"/> using each scope's latest model.</summary>
+    public string? TryPredictClass(DateTimeOffset now, IReadOnlyList<ModelScope> chain) =>
+        TryPredictClass(now, chain, 0);
+
     /// <summary>
     /// Predict the class label for <paramref name="now"/> along the scope <paramref name="chain"/> (multiclass
-    /// models, Epic 2I Phase 3); null if no scope in the chain has a loaded class model.
+    /// models, Epic 2I Phase 3); null if no scope in the chain has a loaded class model. Honors a version pin
+    /// (Epic 2C) exactly like <see cref="TryPredict(DateTimeOffset, IReadOnlyList{ModelScope}, int, out float)"/>.
     /// </summary>
-    public string? TryPredictClass(DateTimeOffset now, IReadOnlyList<ModelScope> chain)
+    public string? TryPredictClass(DateTimeOffset now, IReadOnlyList<ModelScope> chain, int pinnedVersion)
     {
         lock (_lock)
         {
             foreach (var scope in chain)
             {
-                if (!_byScope.TryGetValue(scope.AsKey(), out var loaded) || loaded.Class is null) continue;
-                return loaded.Class(now);
+                var scopeKey = scope.AsKey();
+                if (!_byScope.TryGetValue(scopeKey, out var latest) || latest.Class is null) continue;
+                var predictor = ResolvePinned(scopeKey, pinnedVersion, latest)?.Class ?? latest.Class;
+                return predictor(now);
             }
         }
+        return null;
+    }
+
+    // Resolve the version-pinned predictor for a scope, or null to signal "use latest". A pin of 0 (or one that
+    // already equals the latest version) means latest; an unloaded pin is queued for the next refresh. Caller
+    // holds _lock.
+    private Loaded? ResolvePinned(string scopeKey, int pinnedVersion, Loaded latest)
+    {
+        if (pinnedVersion <= 0 || latest.Meta.Version == pinnedVersion) return null;
+        if (_byVersion.TryGetValue(VersionKey(scopeKey, pinnedVersion), out var pinned)) return pinned;
+        _pendingPins.TryAdd((scopeKey, pinnedVersion), 0);
         return null;
     }
 }

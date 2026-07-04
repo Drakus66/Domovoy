@@ -16,7 +16,7 @@ public sealed class MlSelectorGovernorTests
     private static readonly string[] Values = { "off", "eco", "comfort", "boost" };
 
     private static MlSelectorGovernor Governor(Func<DateTimeOffset, string?> predict) =>
-        new((now, _) => predict(now), measuredInput: "mode", boundOutput: Out, values: Values);
+        new((now, _, _) => predict(now), measuredInput: "mode", boundOutput: Out, values: Values);
 
     [Fact]
     public void Shadow_EmitsProposal_ButNoBoundCommand()

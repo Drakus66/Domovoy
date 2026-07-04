@@ -23,6 +23,11 @@ public sealed class MlTrainingService : BackgroundService
     private readonly AutomationOptions _options;
     private readonly ILogger<MlTrainingService> _logger;
 
+    // The gateway serves at most 5000 rows per request, newest-first — training pages through the
+    // window instead of silently truncating dense telemetry (e.g. per-minute sensors over 30 days).
+    private const int PageSize = 5000;
+    private const int MaxTrainSamples = 100_000;
+
     private DateTime _lastTrain = DateTime.MinValue;
 
     public MlTrainingService(
@@ -235,12 +240,16 @@ public sealed class MlTrainingService : BackgroundService
     {
         if (targetKind == CapabilityKind.Number)
         {
-            var telemetry = await _db.GetTelemetryAsync(_options.TrainCapability, from, 5000, ct, zoneId);
+            var telemetry = await LoadPagedAsync(
+                (hi, token) => _db.GetTelemetryAsync(_options.TrainCapability, from, PageSize, token, zoneId, hi),
+                s => s.Timestamp, ct);
             return telemetry?.Select(s => new LabeledSample(s.Timestamp, s.Value)).ToList();
         }
 
         // Boolean/enum targets are labeled from the event-log: booleans encode to 0/1, enums keep the class.
-        var events = await _db.GetCapabilityEventsAsync(_options.TrainCapability, from, 5000, ct, zoneId);
+        var events = await LoadPagedAsync(
+            (hi, token) => _db.GetCapabilityEventsAsync(_options.TrainCapability, from, PageSize, token, zoneId, hi),
+            e => e.Timestamp, ct);
         if (events is null) return null;
 
         if (targetKind == CapabilityKind.Enum)
@@ -255,5 +264,40 @@ public sealed class MlTrainingService : BackgroundService
             .Where(x => x.Label is not null)
             .Select(x => new LabeledSample(x.Timestamp, x.Label!.Value))
             .ToList();
+    }
+
+    /// <summary>
+    /// Pages a newest-first gateway endpoint by walking the upper time bound down until a short page.
+    /// Returns oldest-first. Null only when the very first page fails (source unreachable); a failure
+    /// mid-pagination keeps the newest pages already fetched — same data the pre-paging code trained on.
+    /// </summary>
+    private async Task<List<T>?> LoadPagedAsync<T>(
+        Func<DateTime?, CancellationToken, Task<List<T>?>> fetch, Func<T, DateTime> timestamp, CancellationToken ct)
+    {
+        var all = new List<T>();
+        DateTime? hi = null;
+        while (all.Count < MaxTrainSamples)
+        {
+            var page = await fetch(hi, ct);
+            if (page is null)
+            {
+                if (all.Count == 0) return null;
+                _logger.LogWarning("Training fetch failed mid-pagination; continuing with {Count} samples", all.Count);
+                break;
+            }
+
+            all.AddRange(page);
+            if (page.Count < PageSize) break;
+
+            // Step past the oldest sample of the page; sub-millisecond ties at the boundary are lost,
+            // which is negligible for training data.
+            hi = page.Min(timestamp).AddMilliseconds(-1);
+        }
+
+        if (all.Count >= MaxTrainSamples)
+            _logger.LogWarning("Training fetch capped at {Max} samples; oldest data in the window was skipped", MaxTrainSamples);
+
+        all.Sort((a, b) => timestamp(a).CompareTo(timestamp(b)));
+        return all;
     }
 }

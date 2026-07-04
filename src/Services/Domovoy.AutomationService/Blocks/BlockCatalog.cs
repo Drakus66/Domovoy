@@ -40,9 +40,11 @@ public sealed class BlockCatalog
     /// <summary>The configured ML governor instances (Epic 2I). They share one predictor over the loaded model.</summary>
     private static IEnumerable<IBlockType> MlGovernors(MlModelService models, AutomationOptions o)
     {
-        Func<DateTimeOffset, IReadOnlyList<ModelScope>, double?> predict =
-            (now, chain) => models.TryPredict(now, chain, out var v) ? v : null;
-        Func<DateTimeOffset, IReadOnlyList<ModelScope>, string?> predictClass = models.TryPredictClass;
+        // Predictors thread the instance's pinned model version (Epic 2C); 0 = latest.
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> predict =
+            (now, chain, version) => models.TryPredict(now, chain, version, out var v) ? v : null;
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, string?> predictClass =
+            (now, chain, version) => models.TryPredictClass(now, chain, version);
 
         yield return new MlSetpointGovernorType(
             typeId: "ml_thermostat",

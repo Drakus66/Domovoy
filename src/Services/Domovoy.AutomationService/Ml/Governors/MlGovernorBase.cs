@@ -32,7 +32,10 @@ public abstract class MlGovernorBase : IBlock
     protected const int Bounded = 1;
     protected const int Full = 2;
 
-    private readonly Func<DateTimeOffset, IReadOnlyList<ModelScope>, double?> _predict;
+    /// <summary>Numeric param pinning the served model version (Epic 2C model_selection; 0 = latest).</summary>
+    public const string ModelVersionParam = "model_version";
+
+    private readonly Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> _predict;
     private readonly string _measuredInput;
 
     /// <summary>The writable capability this governor commands on the deterministic loop.</summary>
@@ -45,7 +48,7 @@ public abstract class MlGovernorBase : IBlock
     /// <param name="measuredInput">Input port carrying the measured signal, for the drift monitor.</param>
     /// <param name="boundOutput">Writable output capability the governor commands when active.</param>
     protected MlGovernorBase(
-        Func<DateTimeOffset, IReadOnlyList<ModelScope>, double?> predict, string measuredInput, string boundOutput)
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> predict, string measuredInput, string boundOutput)
     {
         _predict = predict;
         _measuredInput = measuredInput;
@@ -57,8 +60,9 @@ public abstract class MlGovernorBase : IBlock
         var configuredStage = (int)Math.Round(Math.Clamp(ctx.Param("stage", Shadow), Shadow, Full));
 
         // No model yet → safe default: stay in Shadow, drive nothing, surface the inactive stage. The model is
-        // resolved along the instance's zone → zone_kind → global scope chain (Epic 2I).
-        var raw = _predict(ctx.Now, BuildScopeChain(ctx));
+        // resolved along the instance's zone → zone_kind → global scope chain (Epic 2I), honoring a version pin
+        // (Epic 2C) when the instance has one.
+        var raw = _predict(ctx.Now, BuildScopeChain(ctx), PinnedVersion(ctx));
         if (raw is null)
         {
             ctx.Emit(EffectiveStage, (double)Shadow);
@@ -101,6 +105,10 @@ public abstract class MlGovernorBase : IBlock
 
     /// <summary>Default drift threshold when the instance doesn't set one (value-type scale).</summary>
     protected virtual double DefaultDriftThreshold => 3;
+
+    /// <summary>The instance's pinned model version (Epic 2C), or 0 for latest.</summary>
+    protected static int PinnedVersion(IBlockContext ctx) =>
+        (int)Math.Max(0, Math.Round(ctx.Param(ModelVersionParam, 0)));
 
     /// <summary>
     /// The instance's model-scope fallback chain, most specific first (Epic 2I): zone → zone_kind → global.

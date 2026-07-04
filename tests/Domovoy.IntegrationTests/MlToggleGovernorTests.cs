@@ -16,7 +16,7 @@ public sealed class MlToggleGovernorTests
     private const string Out = CapabilityIds.OnOff;
 
     private static MlToggleGovernor Governor(Func<DateTimeOffset, double?> probability) =>
-        new((now, _) => probability(now), measuredInput: "state", boundOutput: Out);
+        new((now, _, _) => probability(now), measuredInput: "state", boundOutput: Out);
 
     [Fact]
     public void Shadow_EmitsProbability_ButNoBoundCommand()

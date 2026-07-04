@@ -22,7 +22,7 @@ public sealed class MlSelectorGovernor : IBlock
     private const int Bounded = 1;
     private const int Full = 2;
 
-    private readonly Func<DateTimeOffset, IReadOnlyList<ModelScope>, string?> _predict;
+    private readonly Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, string?> _predict;
     private readonly string _measuredInput;
     private readonly string _boundOutput;
     private readonly IReadOnlyList<string> _values;
@@ -30,7 +30,7 @@ public sealed class MlSelectorGovernor : IBlock
     private readonly Queue<(DateTimeOffset At, double Error)> _errors = new();
 
     public MlSelectorGovernor(
-        Func<DateTimeOffset, IReadOnlyList<ModelScope>, string?> predict,
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, string?> predict,
         string measuredInput, string boundOutput, IReadOnlyList<string> values)
     {
         _predict = predict;
@@ -43,7 +43,8 @@ public sealed class MlSelectorGovernor : IBlock
     {
         var configuredStage = (int)Math.Round(Math.Clamp(ctx.Param("stage", Shadow), Shadow, Full));
 
-        var proposed = _predict(ctx.Now, BuildScopeChain(ctx));
+        var pinnedVersion = (int)Math.Max(0, Math.Round(ctx.Param(MlGovernorBase.ModelVersionParam, 0)));
+        var proposed = _predict(ctx.Now, BuildScopeChain(ctx), pinnedVersion);
         if (string.IsNullOrEmpty(proposed))
         {
             ctx.Emit(MlGovernorBase.EffectiveStage, (double)Shadow);
