@@ -4,6 +4,7 @@ using System.Text.Json;
 using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Blocks;
 using Domovoy.Contracts.Ml;
+using Domovoy.Contracts.Proposals;
 
 namespace Domovoy.AutomationService.Services;
 
@@ -129,12 +130,13 @@ public sealed class DbGatewayClient
     /// null on a gateway failure.
     /// </summary>
     public async Task<List<EventLogEntry>?> GetCapabilityEventsAsync(
-        string capabilityId, DateTime fromUtc, int limit, CancellationToken ct, string? zoneId = null)
+        string capabilityId, DateTime fromUtc, int limit, CancellationToken ct, string? zoneId = null, DateTime? toUtc = null)
     {
         try
         {
             var url = $"api/events?kind=state_change&capabilityId={Uri.EscapeDataString(capabilityId)}"
                 + $"&from={fromUtc:o}&limit={limit}";
+            if (toUtc is not null) url += $"&to={toUtc:o}";
             if (!string.IsNullOrEmpty(zoneId)) url += $"&zoneId={Uri.EscapeDataString(zoneId)}";
             var events = await _http.GetFromJsonAsync<List<EventLogEntry>>(url, Json, ct);
             events?.Reverse(); // endpoint returns newest-first; training needs chronological order
@@ -147,6 +149,55 @@ public sealed class DbGatewayClient
         }
     }
 
+    // ===== Approval queue (Epic 2C) =====
+
+    /// <summary>Create a candidate automation rule (Proposed) and return it with its server-assigned id, or null.</summary>
+    public async Task<AutomationRule?> CreateRuleAsync(AutomationRule rule, CancellationToken ct)
+    {
+        try
+        {
+            var response = await _http.PostAsJsonAsync("api/automations", rule, Json, ct);
+            if (!response.IsSuccessStatusCode) return null;
+            return await response.Content.ReadFromJsonAsync<AutomationRule>(Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not create candidate rule {Name}", rule.Name);
+            return null;
+        }
+    }
+
+    /// <summary>Queue a proposal for human approval (Epic 2C). Returns the stored proposal, or null on failure.</summary>
+    public async Task<Proposal?> CreateProposalAsync(Proposal proposal, CancellationToken ct)
+    {
+        try
+        {
+            var response = await _http.PostAsJsonAsync("api/proposals", proposal, Json, ct);
+            if (!response.IsSuccessStatusCode) return null;
+            return await response.Content.ReadFromJsonAsync<Proposal>(Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not create proposal {Title}", proposal.Title);
+            return null;
+        }
+    }
+
+    /// <summary>Existing proposals (optionally filtered by status), for de-duplication; null if unreachable.</summary>
+    public async Task<List<Proposal>?> GetProposalsAsync(CancellationToken ct, string? status = null)
+    {
+        try
+        {
+            var url = string.IsNullOrEmpty(status) ? "api/proposals" : $"api/proposals?status={Uri.EscapeDataString(status)}";
+            return await _http.GetFromJsonAsync<List<Proposal>>(url, Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load proposals from DbGateway");
+            return null;
+        }
+    }
+
     // ===== ML substrate (Epic 2A) =====
 
     /// <summary>
@@ -154,11 +205,12 @@ public sealed class DbGatewayClient
     /// zone-kind-scoped model trains only on its own readings. Null on failure.
     /// </summary>
     public async Task<List<TelemetrySample>?> GetTelemetryAsync(
-        string capabilityId, DateTime fromUtc, int limit, CancellationToken ct, string? zoneId = null)
+        string capabilityId, DateTime fromUtc, int limit, CancellationToken ct, string? zoneId = null, DateTime? toUtc = null)
     {
         try
         {
             var url = $"api/telemetry?capabilityId={Uri.EscapeDataString(capabilityId)}&from={fromUtc:o}&limit={limit}";
+            if (toUtc is not null) url += $"&to={toUtc:o}";
             if (!string.IsNullOrEmpty(zoneId)) url += $"&zoneId={Uri.EscapeDataString(zoneId)}";
             return await _http.GetFromJsonAsync<List<TelemetrySample>>(url, Json, ct);
         }
@@ -265,6 +317,7 @@ public sealed class DbGatewayClient
     public sealed class DeviceSnapshot
     {
         public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
         public string ZoneId { get; set; } = string.Empty;
         public Dictionary<string, JsonElement> State { get; set; } = new();
     }

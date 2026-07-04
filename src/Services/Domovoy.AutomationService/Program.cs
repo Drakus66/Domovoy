@@ -73,6 +73,8 @@ internal static class Program
             builder.Services.AddHostedService<BlockRuntime>();      // 1H: tick control blocks as virtual devices
             builder.Services.AddSingleton<MlTrainingService>();     // 2A: train + keep the model loaded
             builder.Services.AddHostedService(sp => sp.GetRequiredService<MlTrainingService>());
+            builder.Services.AddSingleton<RuleSuggester>();         // 2C: heuristic rule proposer (stub-precursor to 2F)
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<RuleSuggester>());
 
             var app = builder.Build();
 
@@ -94,6 +96,10 @@ internal static class Program
             // Backtest scorecard (roadmap Epic 2B): the loaded model's prediction vs actual telemetry.
             app.MapGet("/api/ml/backtest", async (MlTrainingService ml, int? days, CancellationToken ct) =>
                 Results.Ok(await ml.BacktestAsync(days ?? 7, ct)));
+
+            // Run the heuristic rule proposer now (roadmap Epic 2C): mine the event-log, queue candidates.
+            app.MapPost("/api/proposals/suggest", async (RuleSuggester suggester, CancellationToken ct) =>
+                Results.Ok(await suggester.SuggestOnceAsync(ct)));
 
             // Control-block catalog (roadmap Epic 1H): the built-in types' schema for the authoring UI.
             app.MapGet("/api/blocks/catalog", (BlockCatalog catalog) => Results.Ok(
