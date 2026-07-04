@@ -541,7 +541,7 @@ generic-губернатор (он уже почти весь написан в 
 > **Остаток:** мультивариантный ML-пайплайн, потребляющий admissible-фичи `FeatureLocality` (ждёт контекст-join,
 > без реальных данных умозрителен); descriptor-based `CapabilityKindResolver` для авто-тренировки enum-целей.
 
-### Эпик 2C. Очередь предложений + апрув 🚧 (план зафиксирован 2026-06-27)
+### Эпик 2C. Очередь предложений + апрув ✅ (2026-07-04, ветка `epic-2b`)
 - Единый UI: промоут ML-блоков (Shadow→Active со scorecard/провенансом) + ML-**предложения правил** (`Proposed`, валидируются реплеем 1F — объяснимый дискретный путь, напр. «свет по присутствию»).
 - **DoD:** пользователь видит очередь, смотрит обоснование (реплей/scorecard, модель/версия/`decisionId`), апрувит/реджектит; активированное действие трассируется к `decisionId`.
 
@@ -581,6 +581,34 @@ generic-губернатор (он уже почти весь написан в 
 > **Вне scope 2C:** полноценная генерация предложений (поиск закономерностей) — **Эпик 2F**; enforcement прав
 > на апрув — роли 2E / auth Фазы 3. **Инвариант:** ни один кандидат не активируется без человека (принцип 1);
 > предложитель — только поставщик гипотез, не актуатор.
+
+> **✅ Реализовано (Epic 2C, 2026-07-04, ветка `epic-2b`).** Единый контракт
+> [`Proposal`](../../src/Common/Domovoy.Contracts/Proposals/Proposal.cs) (дискриминатор `Kind`
+> = `Rule`/`BlockPromotion`/`ModelSelection`; `Status` Proposed→Approved/Rejected; `DecisionId` штампуется при
+> апруве) → коллекция **`proposals` в DbGateway**. **Слой 2:** [`ProposalsEndpoints`](../../src/Gateway/Domovoy.DbGateway/Endpoints/ProposalsEndpoints.cs)
+> (`GET ?status=&kind=`, `POST`, `POST /{id}/approve`, `/{id}/reject`); апрув применяет side-effect по типу
+> ([`ProposalApplication`](../../src/Gateway/Domovoy.DbGateway/Endpoints/ProposalsEndpoints.cs) — вынесен для
+> тестируемости): **rule** → правило `Active`, **block_promotion** → патч `Params["stage"]`, **model_selection**
+> → патч `Params["model_version"]`; мутация цели + перевод предложения в `Approved` в одной БД (новый сервис не
+> вводили), reject цель не трогает. **Слой 3:** прокси [`ProposalsController`](../../src/Gateway/Domovoy.ApiGateway/Controllers/ProposalsController.cs)
+> (очередь→db-gateway, suggest→automation-service). **Слой 4 (выбор модели на инстанс):** числовой param
+> `model_version` (0 = latest) пробрасывается через governor-хуки (`MlGovernorBase`/setpoint/toggle/selector)
+> в предиктор; [`MlModelService`](../../src/Services/Domovoy.AutomationService/Ml/MlModelService.cs) резолвит
+> pinned-версию (lazy-load pending-пина в фоновом refresh; до загрузки — фолбэк на latest scope), снимает
+> блокер 2A/2B без нарушения числового инварианта `Params`. **Слой 4.5 (ML→rule предложитель):**
+> [`RuleSuggester`](../../src/Services/Domovoy.AutomationService/Services/RuleSuggester.cs) — BackgroundService
+> + `POST /api/proposals/suggest`; майнит **одну** закономерность из event-log (сенсор→**человеческое**
+> `on_off` в окне; учитель только `triggerSource=user` — без ML-on-ml/self-fulfilling; support/confidence,
+> дедуп против правил+очереди), кладёт `Proposed`-правило + `Proposal` в очередь — **явная заглушка-предтеча 2F**
+> (полную воронку MI/Granger/FDR строит 2F). **Слой 5 (WebUI):** страница `/proposals` (очередь, Pending/All,
+> Approve/Reject, «Simulate» rule-предложения через реплей 1F, «Run proposer»); `/blocks` — промоут ML-блока
+> идёт **через очередь** («Promote» ставит `block_promotion`), не прямым редактированием `stage`. **Тесты:**
+> 6 юнит на майнинг (`RuleSuggester.Mine`: support/confidence, окно, non-user-исключение, self-исключение) +
+> 1 на проброс `model_version` в предиктор — 65/65 оффлайн .NET; 4 infra-теста approve side-effects против
+> реального Mongo (`ProposalApprovalTests`, Docker-gated); WebUI build+lint+26 тестов зелёные. **Переиспользовано:**
+> реплей 1F, scorecard 2B, `PUT /api/automations/{id}/status`, прокси-HttpClient. **Не проверено вживую** против
+> RabbitMQ/Mongo (майнинг/апрув на реальном потоке; infra-тесты требуют Docker). **Дальше:** 2F (движок поиска),
+> роли 2E на апрув.
 
 ### Эпик 2D. Обнаружение + семантическая типизация устройств ✅
 - Классификатор архетипа (свет/термостат/датчик/замок/…) из набора capability + метаданных Z2M (`definition`/модель); **native-тип приоритетен**; поле `archetype` в read-модель `capability_devices`; UI использует для иконок/группировки/контролов; ручная коррекция. Эвристики v1 → ML.NET-классификатор (эмпирически из поведения) позже.
@@ -716,15 +744,180 @@ generic-губернатор (он уже почти весь написан в 
 > цветовая полоса severity, резолв deviceId→имя. 10 .NET-проектов + WebUI `tsc`/lint/26 тестов + 15 .NET-тестов
 > зелёные. **Дальше:** каналы доставки (push/telegram), аномалии из 2B.
 
+### UI-направление: «дух дома» в интерфейсе 🚧 (v1 — 2026-07-04)
+
+> **Идея (одобрено владельцем 2026-07-04):** передать идеологию имени (см. «Идеология имени» в
+> [`positioning_ru.md`](positioning_ru.md)) через сам интерфейс — но **через поведение, а не декор**.
+> Домовой невидим: личность живёт в голосе системы, ощущении присутствия и редких моментах.
+> Анти-принципы (зафиксировано): никаких постоянных маскотов, скевоморфизма (текстуры/орнаменты),
+> звуков, фольклорных названий в навигации, чат-аватара до реального LLM (2H/Фаза 3).
+
+Принятые 7 пунктов и их статус:
+1. **Голос от первого лица** ✅ частично — /proposals («Everything I would like to change…», «I went through
+   the event log…»), empty-states, «новоселье». ⬜ Остаток: единый первочеловеческий пересказ ленты
+   /api/activity (нужен слой маппинга `ActivityEntry`→фраза) + кнопка **«почему?»** на каждом действии
+   ленты поверх атрибуции 1F.
+2. **Стадии ML-авторитета языком доверия** ✅ — селектор и чип стадии на /blocks: Shadow — «watches and
+   learns, never acts», Bounded — «acts within a careful band», Full — «trusted up to the safety floor».
+3. **«Очаг» — индикатор присутствия** ✅ — тлеющий уголёк у логотипа (`HearthIndicator`): «дышит» при
+   полном здоровье (по `/api/metrics/services`), ровный янтарный при деградации, серый без метрик;
+   клик → /status; уважает `prefers-reduced-motion`.
+4. **Дневник домового** ✅ частично — строка под заголовком дашборда (`DomovoyDigest`): ритм дома по
+   режиму 1G + «I've made N adjustments today» (auto_history) + «M suggestions waiting for you» (2C).
+   ⬜ Остаток: метрика тишины «N дней без ручного вмешательства» (нужно определение ручного
+   вмешательства поверх event-log).
+5. **Empty-states/404 с характером** ✅ — devices/automations/blocks/proposals + страница 404
+   («I haven't been in this room yet»). Правило: личность только в редких состояниях.
+6. **Приветствие по ритму дома** ✅ — часть DomovoyDigest («The house is asleep», «Watching over the
+   empty house»…), режимы из 1G.
+7. **«Новоселье»** ✅ — уведомление «A new resident has moved in: …» при появлении нового устройства
+   (diff списка на клиенте; серверный push `DeviceDiscovered` в хабе объявлен, но не транслируется —
+   ⬜ довести relay в ApiGateway, тогда мгновенно).
+
+### UI-направление: мультиязычность (i18n) 🚧 (v1 — 2026-07-04, 2 языка)
+
+> **Задача (владелец 2026-07-04):** переключение языков UI; сейчас 2 языка — **русский (по умолчанию)**
+> и английский. Ключевое требование: **языки подгружаются без пересборки**. Редактор/загрузка новых
+> языков — позже; сейчас готовим инфраструктуру.
+
+**Решение:** `i18next` + `react-i18next` + `i18next-http-backend` + `i18next-browser-languagedetector`.
+Переводы **не бандлятся** — грузятся в рантайме как статические JSON `/locales/{lng}/{ns}.json`
+(`loadPath` у http-backend). nginx уже раздаёт статику (`try_files`). В `docker-compose.yml` смонтирован
+volume `./src/UI/WebUI/public/locales:/usr/share/nginx/html/locales:ro` → **правка перевода = замена
+JSON без `npm run build`**. Русская плюрализация (one/few/many) — из коробки CLDR-правилами i18next.
+
+**Структура:** `src/i18n/` (`languages.ts` — data-driven реестр языков; `config.ts` — namespaces +
+общие опции, типизирован `InitOptions`; `index.ts` — рантайм-инициализация с http-backend + детектором,
+кэш языка в localStorage `domovoy-lang`; `format.ts` — `fmtDateTime/fmtDate/fmtTime`, читают активный
+язык из синглтона i18next). Namespaces: `common` + `nav` (преднагружаются) и по одному на страницу
+(`devices/zones/modes/automations/flow/blocks/models/proposals/plugins/logs/status/zigbee`) —
+лениво. Переключатель — `components/i18n/LanguagePicker.tsx` рядом с ThemePicker/ColorModeToggle.
+`App.tsx` обёрнут в `<Suspense>` (namespaces грузятся асинхронно). Тесты: отдельный инстанс i18n с
+инлайн-ресурсами (glob по `public/locales`), язык фиксирован на `ru`, `useSuspense:false`.
+
+**Готово в v1:** каркас + переключатель + все ~28 файлов страниц/компонентов переведены (ru — первичный,
+en — параллельный); MUI-компонентов со встроенной локалью в приложении нет, поэтому `ruRU`-локаль MUI не
+подключалась (отмечено на будущее). **Отложено (готовим инфраструктуру, не делаем сейчас):** редактор
+переводов в UI, загрузка/добавление НОВОГО языка без пересборки (сейчас список языков `languages.ts`
+бандлится → новый язык в пикере требует пересборки; правка контента существующих — уже без пересборки),
+динамический реестр языков с бэкенда, MUI/`ruRU` + `date-fns`-локали при появлении таких компонентов.
+
 ### Эпик 2H. LLM — коннекторы-заглушки ⬜
 - Точка расширения под будущий LLM (NL-авторинг → `Proposed`-правило через 2C; объяснения «почему» прозой поверх 1F), **без** реальной модели (нет железа — разработка на ноутбуке).
 - **DoD:** интерфейс/коннектор + фича-флаг есть; реальная интеграция — позже.
+
+### Эпик 2J. Адаптер ESPHome (ESP32/ESP8266) через MQTT ✅ (v1)
+
+> **Мотивация (обсуждено с владельцем 2026-07-04).** У платформы появляется **второй массовый DIY-путь**
+> рядом с Zigbee2MQTT — платы ESP32/ESP8266. Для них два способа подключения, оба покрывают потребность:
+> **(1) ESPHome через MQTT** — готовая экосистема (yaml-конфиги, OTA, сотни компонентов) без своей прошивки;
+> **(2) Domovoy Native** — прошить плату нашей `DomovoyClient` (ESP32 Arduino-совместим, см.
+> `docs/architecture/roadmap.md` capability-миграция §4 и memory `domovoy-native-protocol`) и попасть в уже
+> готовый `DomovoyNativeAdapter` **без изменений на сервере**. Этот эпик реализует путь (1): адаптер
+> укладывается в существующий [`IProtocolAdapter`](../../src/Services/Domovoy.Connectivity/Adapters/IProtocolAdapter.cs)
+> (Эпики [1C](#эпик-1c-integration-sdk--внепроцессные-плагины-поверх-шины)/[1D](#эпик-1d-capability-адаптеры-под-целевые-домены))
+> по образцу [`Zigbee2MqttAdapter`](../../src/Services/Domovoy.Connectivity/Adapters/Zigbee2MqttAdapter.cs) —
+> **ядро, контракт, WebUI и ML не трогаются** (устройство поднимается по общему capability-пути автоматически).
+
+**Почему MQTT, а не нативный ESPHome API.** Нативный API (protobuf/TCP :6053) не ложится на MQTT-only
+`Connectivity` и потребовал бы своего TCP-клиента. При этом для нашего сценария (сенсоры + актуаторы +
+ML-уставки + правила) он **почти ничего не добавляет**: HA MQTT Discovery несёт ту же модель сущности
+(`device_class`/единицы/`min`/`max`/`step`/`options`/режимы света), а латентность/availability по MQTT
+эквивалентны. API-only остаются лишь «ESP-как-периферия-хаба» фичи — **Bluetooth-proxy**, стриминг
+голоса/камеры, кастомные сервисы, — не относящиеся к базовой телеметрии/управлению. Нативный API →
+**возможное будущее расширение как внепроцессный плагин (1C)**, вводится точечно под конкретную потребность
+(BLE-proxy/камеры), а не ради метаданных, уже доступных в Discovery.
+
+- **Новый адаптер** `EspHomeMqttAdapter : IProtocolAdapter` в `Domovoy.Connectivity/Adapters/` (по образцу
+  `Zigbee2MqttAdapter`): регистрируется в DI, `AdapterManager` подхватывает автоматически; вся логика
+  publish/subscribe — внутри адаптера (как у Z2M), хост не маршрутизирует шину.
+- **Discovery через HA MQTT Discovery.** ESPHome с компонентом `mqtt:` публикует на каждую сущность
+  retained-конфиг `homeassistant/<component>/[<node>/]<object_id>/config` (component =
+  sensor/binary_sensor/switch/light/number/select/climate/lock/cover/…). Адаптер подписан на
+  `homeassistant/#`, парсит конфиг и через новый **codec `EspHomeCodec`** строит `DeviceDescriptor` +
+  capabilities → публикует `DeviceDiscoveredV1` на канонической топологии. `deviceId =
+  DeviceIdFactory.Derive("EspHome", <mac | device.identifiers | object_id>)` (стабильный hw-id из блока
+  `device` конфига; несколько сущностей одной платы → **одно устройство**, как хаб в Native).
+  `adapterSource = "EspHome"`.
+- **Codec — таблица маппинга** (`component` + `device_class`/`unit` → capability `kind`), по аналогии с
+  `Zigbee2MqttCodec.BuildModel`:
+
+  | ESPHome component | Признак (`device_class`/`unit`) | Capability (kind) | Направление |
+  |---|---|---|---|
+  | `sensor` | temperature/humidity/carbon_dioxide/illuminance/power/… | `temperature`/`humidity`/`co2`/… (numeric) | read |
+  | `binary_sensor` | motion/occupancy/door/window/… | `presence`/`occupancy`/`contact` (boolean) | read |
+  | `switch` | — | `on_off` (boolean) | read/write |
+  | `light` | brightness/color_temp/rgb | `on_off` + `brightness` + `color_temp` | read/write |
+  | `number` | `min`/`max`/`step`/`mode` | writable numeric (напр. `*_setpoint`) | read/write |
+  | `select` | `options[]` | enum (`Capability.Values`) | read/write |
+  | `climate` | modes/target_temp | `temperature_setpoint` (+режим) | read/write |
+  | `lock` | — | `lock` | read/write |
+  | `cover` | position | `cover`/`position` | read/write |
+
+- **State decode.** Из конфига берётся `state_topic` каждой сущности; адаптер подписывается и на каждое
+  сообщение публикует `DeviceStateReportV1` (нормализованные значения). ON/OFF, числа, JSON-состояние света —
+  декодируются codec'ом в capability-значения.
+- **Command encode.** `Envelope<DeviceCommandV1>` (по паттерну Z2M — своя очередь `connectivity-EspHome-commands-v1`,
+  игнор чужих `deviceId`) → `command_topic` из конфига; codec кодирует `Set` в ESPHome-payload (свет —
+  `{"state":"ON","brightness":128}` или plain `ON`; `number`/`select` — значение/опция).
+- **Availability (LWT).** ESPHome шлёт birth/last-will на `<topic_prefix>/status` (`online`/`offline`).
+  Адаптер подписывается и мапит статус платы → `DeviceOnlineChangedV1` для всех её сущностей (как Native по
+  `hub/<id>/status`), чтобы упавшая плата не «висела онлайн».
+- **Развилка по топикам состояния.** `state_topic`/`command_topic` живут под произвольным `topic_prefix` (по
+  умолчанию — имя платы), поэтому статически «забрать» их в `CanHandleTopic` нельзя. Рекомендуемое v1-решение —
+  **конвенция `topic_prefix: domovoy/esphome/<node>`** в yaml → адаптер статически клеймит `homeassistant/#` +
+  `domovoy/esphome/#`. (Альтернатива — динамически `SubscribeAsync` на выученные из discovery `state_topic` +
+  вести set известных топиков для `CanHandleTopic`; сложнее, оставляем на потом.)
+- **Известный риск (retained + wildcard).** RabbitMQ MQTT **не доставляет retained-сообщения на
+  wildcard-подписки** (та же засада, что в Native discovery — см. memory `domovoy-native-protocol`): после
+  рестарта `Connectivity` retained-конфиги ESPHome на `homeassistant/#` могут не прийти. Митигация: ESPHome
+  переопубликовывает discovery на своём реконнекте + birth-message; при необходимости — периодический
+  форс-реконнект/`discover`-широковещание по образцу `NativeProtocol.DiscoverTopic`. Держать в чек-листе
+  живого прогона.
+- **Конфигурация платы (docs).** Раздел с yaml-примером: `mqtt:` → адрес RabbitMQ MQTT-плагина (тот же брокер,
+  что и весь стек), логин/пароль, `topic_prefix` по конвенции, `discovery: true`; включённые сущности
+  (sensor/switch/light/number). OTA/секреты — по гайдам ESPHome.
+- **Тесты.** Юнит на `EspHomeCodec` (discovery-config → capabilities для каждого component; command → payload;
+  state → capability-values), по образцу тестов Z2M-codec. Интеграционный (Testcontainers, реальные
+  RabbitMQ+Mongo): публикация HA-discovery-конфига + state на брокер → `DeviceDiscoveredV1`/`DeviceStateReportV1`
+  → `EventInterceptor` → `capability_devices`/`device_events` (по образцу интеграционного теста 2D/P0-4).
+- **WebUI — без изменений** (устройство приходит по общему capability-пути; архетип назначит `DeviceClassifier`
+  из 2D по набору capability + `adapterSource=EspHome`). Опционально — иконка/лейбл источника «ESPHome».
+
+- **DoD:** ESP32/ESP8266 с ESPHome+MQTT автоматически обнаруживается (сенсоры и актуаторы → capabilities),
+  показывается на `/devices` с корректным архетипом (2D), отдаёт live-состояние и **исполняет команды**
+  (свет/реле/`number`-уставка) сквозным путём команда→MQTT→устройство→подтверждение; падение платы (LWT)
+  переводит её сущности в offline; codec и сквозной путь покрыты юнит- и интеграционным тестом. Путь Domovoy
+  Native на ESP32 (прошивка `DomovoyClient`) работает без изменений сервера.
+
+> **✅ Реализовано (Epic 2J — v1).** Новый [`EspHomeMqttAdapter : IProtocolAdapter`](../../src/Services/Domovoy.Connectivity/Adapters/EspHomeMqttAdapter.cs)
+> в `Domovoy.Connectivity` (регистрируется в DI, `AdapterManager` подхватывает автоматически; вся логика
+> publish/subscribe — внутри адаптера, как у Z2M). **Codec** [`EspHomeCodec`](../../src/Services/Domovoy.Connectivity/Adapters/EspHomeCodec.cs)
+> парсит HA-MQTT-Discovery-конфиг (`homeassistant/<component>/[<node>/]<object_id>/config`) в набор
+> **каналов** (capability + свои state/command-топики + decode/encode): `sensor`→numeric (temp/hum/co2/lux/
+> power/energy/battery по `device_class`), `binary_sensor`→`occupancy`/`contact`, `switch`/`light`→`on_off`
+> (+`brightness` со шкалой 0..`brightness_scale`), `number`→writable numeric (temp→`temperature_setpoint`),
+> `select`→enum по `options`, `lock`→`lock`; неизвестные величины → кастомный capability id из `object_id`
+> (открытая модель); ключи читаются с HA-аббревиатурами (`stat_t`/`cmd_t`/`dev_cla`/…). Несколько сущностей
+> одной платы (общий `device.identifiers`) → **одно устройство** (`deviceId = DeviceIdFactory.Derive("EspHome",
+> <identifier>)`), как хаб в Native. **State:** топики выучиваются из discovery и подписываются динамически
+> (+статически claim `homeassistant/#` и конвенция `domovoy/esphome/#`) → `DeviceStateReportV1`. **Command:**
+> `Envelope<DeviceCommandV1>` (своя очередь `connectivity-EspHome-commands-v1`, игнор чужих) → encode на
+> `command_topic` канала. **Availability (LWT):** топик платы (`payload_available`/`not_available`, дефолт
+> `online`/`offline`) фанится в `DeviceOnlineChangedV1` по всем сущностям. `nan`/`inf` от недоступного сенсора
+> отбрасываются. **Ядро/контракт/WebUI/ML не тронуты** — устройство идёт по общему capability-пути (архетип
+> назначит 2D по `adapterSource=EspHome`). **Тесты:** 13 юнит на codec (маппинг каждого компонента, decode/
+> encode, группировка платы, availability, аббревиатуры) — 82/82 .NET-юнит зелёные. **Известный риск**
+> (retained на wildcard в RabbitMQ MQTT — см. Native) держим в чек-листе живого прогона: митигация — ESPHome
+> переопубликовывает discovery на реконнекте + birth. **Дальше:** `cover`/`climate`/`fan` (многотопиковые),
+> JSON-schema света, нативный ESPHome API как внепроцессный плагин (BLE-proxy/камеры).
 
 > **Порядок (реком.):** Фаза 1.5 → **2D + 2G** рано (фундамент UX/данных, низкая зависимость) + **2A**
 > параллельно (пайплайн ML) → **2B → 2C** дозревают по мере накопления истории (ров «обучающаяся
 > автоматизация») → **2F** следом за 2C (нужны накопленная история + очередь как приёмник предложений) →
 > **2E** (мелкий, в любой момент) → **2H** в конце. 2F можно начинать со Stage 1 (скрининг) как только
-> история достаточна, не дожидаясь 2B.
+> история достаточна, не дожидаясь 2B. **2J (ESPHome-адаптер) — независим от ML-ветки**, можно делать в любой
+> момент параллельно (расширяет фронт устройств и данных для ML → полезно делать раньше, вместе с 2D).
 
 ---
 
@@ -750,7 +943,7 @@ generic-губернатор (он уже почти весь написан в 
 | **0. Фундамент** | ✅ заложен | ядро пригодно к росту | контракт, capability-модель, зоны, event-log (Mongo TS), снятие auth-трения + чистка |
 | **1. Автоматизация** | ✅ функц. закрыта | дом работает по сценариям; копятся данные; действия объяснимы | AutomationService (1A ✅), режимы дома+присутствие (1G ✅), платформа данных телеметрии (1B ✅), объяснимость+реплей (1F ✅), control blocks (1H ✅ E1), climate/heating/irrigation контуры (1D ✅), Integration SDK (1C ✅ супервизор), визуальный flow-редактор (1E ✅) |
 | **1.5 Верификация** | 🚧 в работе | стек проверен вживую | ✅ интеграционный data-path тест (P0-4) против реальных RabbitMQ/Mongo (Testcontainers); 🚧 offline-smoke в CI + живой 3-оконный прогон |
-| **2. Интеллект** | 🚧 начата | дом подсказывает; сам ищет закономерности; умнее распознаёт устройства; читаемый центр активности | типизация устройств (2D ✅), центр активности (2G ✅), ML-субстрат на ML.NET (2A ✅), ML-термостат shadow→bounded→full (2B), очередь предложений (2C), **движок поиска закономерностей (2F)**, роли (2E), LLM-заглушки (2H) |
+| **2. Интеллект** | 🚧 начата | дом подсказывает; сам ищет закономерности; умнее распознаёт устройства; читаемый центр активности | типизация устройств (2D ✅), центр активности (2G ✅), ML-субстрат на ML.NET (2A ✅), ML-термостат shadow→bounded→full (2B ✅), очередь предложений (2C ✅), **движок поиска закономерностей (2F)**, роли (2E), LLM-заглушки (2H), **адаптер ESPHome через MQTT (2J ✅)** |
 | **3. Автономность** | долгосрочно | самоуправление + голос + видео + доступ | видеоаналитика, голосовой ассистент, active-ML, Matter/Thread, **полная безопасность + умные замки** (из Ф2), облачные плагины |
 
 ## Сквозные направления (на всех фазах)
