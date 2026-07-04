@@ -1,0 +1,43 @@
+{
+  "title": "ML models",
+  "caption": "Learned models on the telemetry feature store (ML.NET). An ML control block serves the latest model (e.g. a learned setpoint schedule). Training needs accumulated history.",
+  "actions": {
+    "trainNow": "Train now"
+  },
+  "scope": {
+    "global": "global",
+    "kind": "kind: {{key}}",
+    "zone": "zone: {{key}}"
+  },
+  "card": {
+    "target": "target {{capability}} · {{count}} samples",
+    "backtest": " · backtest {{metric}} {{score}}",
+    "rmse": " · RMSE {{value}}",
+    "trained": " · trained {{when}}"
+  },
+  "scorecard": {
+    "title": "Backtest scorecard",
+    "caption": "The loaded model's prediction vs actual telemetry — the signal to read before promoting an ML block from Shadow to an active stage (Epic 2B)."
+  },
+  "empty": "No models yet. Once enough telemetry has accrued, \"Train now\" registers the first model.",
+  "trained": "Trained \"{{name}}\" v{{version}} on {{count}} samples (RMSE {{rmse}}).",
+  "notTrained": "Not trained: {{message}}.",
+  "errors": {
+    "load": "Failed to load models. Check ApiGateway / DbGateway connection.",
+    "train": "Training request failed — is the AutomationService reachable?"
+  },
+  "chart": {
+    "loadError": "Could not load the backtest.",
+    "noModel": "No model loaded yet — train one first.",
+    "noTelemetry": "No telemetry in the last {{days}}d to score against.",
+    "chip": {
+      "mae": "Backtest MAE {{value}}",
+      "rmse": "Train RMSE {{value}}",
+      "points": "{{count}} points · {{days}}d"
+    },
+    "legend": {
+      "actual": "actual",
+      "predicted": "predicted"
+    }
+  }
+}

@@ -12,6 +12,7 @@ import {
   AlertTitle,
 } from '@mui/material';
 import { Refresh as RefreshIcon, BugReport as BugReportIcon } from '@mui/icons-material';
+import i18n from 'i18next';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -98,18 +99,17 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
               <Box display="flex" alignItems="center" gap={2} mb={2}>
                 <BugReportIcon color="error" sx={{ fontSize: 40 }} />
                 <Typography variant="h5" component="h1">
-                  Something went wrong
+                  {i18n.t('error.title')}
                 </Typography>
               </Box>
 
               <Alert severity="error" sx={{ mb: 3 }}>
-                <AlertTitle>Application Error</AlertTitle>
-                {this.state.error?.message || 'An unexpected error occurred'}
+                <AlertTitle>{i18n.t('error.appError')}</AlertTitle>
+                {this.state.error?.message || i18n.t('error.unexpected')}
               </Alert>
 
               <Typography variant="body2" color="text.secondary" paragraph>
-                We're sorry for the inconvenience. The application encountered an error and
-                couldn't continue. You can try to reload the page or reset the application.
+                {i18n.t('error.body')}
               </Typography>
 
               {import.meta.env.DEV && this.state.errorInfo && (
@@ -137,7 +137,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                   onClick={this.handleReset}
                   fullWidth
                 >
-                  Try Again
+                  {i18n.t('error.tryAgain')}
                 </Button>
                 <Button
                   variant="outlined"
@@ -145,7 +145,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                   onClick={this.handleReload}
                   fullWidth
                 >
-                  Reload Page
+                  {i18n.t('error.reload')}
                 </Button>
               </Box>
             </CardContent>

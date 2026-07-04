@@ -1,0 +1,65 @@
+{
+  "title": "Control blocks",
+  "subtitle": "Stateful loops between rules and devices — filters, thermostats, sequencers. Each block is a virtual device you can chart, wire and command.",
+  "errors": {
+    "load": "Failed to load control blocks. Check ApiGateway / AutomationService connection.",
+    "create": "Failed to create block.",
+    "delete": "Failed to delete block.",
+    "promote": "Failed to queue promotion proposal."
+  },
+  "confirmDelete": "Delete block \"{{name}}\"? Its virtual device disappears.",
+  "empty": "No control loops yet — add one from the catalog above and I will keep it running.",
+  "chip": {
+    "disabled": "disabled",
+    "stage": "stage: {{stage}}"
+  },
+  "stageName": {
+    "shadow": "Shadow",
+    "bounded": "Bounded",
+    "full": "Full"
+  },
+  "stageHint": {
+    "full": "Trusted — its proposals are limited only by the safety floor",
+    "bounded": "Acts carefully — proposals clamped to baseline ± band",
+    "shadow": "Watching only — learns and records proposals, commands nothing"
+  },
+  "stageOption": {
+    "shadow": "Shadow — watches and learns, never acts",
+    "bounded": "Bounded — acts within a careful band",
+    "full": "Full — trusted up to the safety floor"
+  },
+  "labels": {
+    "inputs": "Inputs",
+    "output": "Output",
+    "drives": "Drives",
+    "noSamples": "no samples yet"
+  },
+  "promote": {
+    "tooltip": "Queue a Shadow → Bounded → Full promotion for approval (Epic 2C)",
+    "button": "Promote",
+    "title": "Promote \"{{name}}\" {{from}} → {{to}}",
+    "rationale": "Review the backtest scorecard on /models before approving.",
+    "queued": "Queued a promotion proposal for \"{{name}}\". Approve it on the Proposals page."
+  },
+  "actions": {
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "create": "Create"
+  },
+  "dialog": {
+    "title": "New {{type}}",
+    "blockFallback": "block",
+    "name": "Name",
+    "inputsSection": "Inputs (wiring)",
+    "outputsSection": "Outputs (actuate — optional)",
+    "parametersSection": "Parameters",
+    "deviceSuffix": "{{port}} · device",
+    "outputDeviceSuffix": "{{output}} → device",
+    "capability": "capability",
+    "none": "None",
+    "outputHelper": "Leave empty to only report (no actuation)",
+    "authorityStage": "authority stage",
+    "outputsSummary": "Outputs: {{list}}",
+    "writable": "writable"
+  }
+}

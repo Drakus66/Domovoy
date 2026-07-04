@@ -30,6 +30,7 @@ internal static class Program
             // Register Adapters
             builder.Services.AddSingleton<IProtocolAdapter, DomovoyNativeAdapter>();
             builder.Services.AddSingleton<IProtocolAdapter, Zigbee2MqttAdapter>();
+            builder.Services.AddSingleton<IProtocolAdapter, EspHomeMqttAdapter>(); // Epic 2J: ESP32/ESP8266 via ESPHome + MQTT
 
             // Add Adapter Manager (Connectivity Service)
             builder.Services.AddHostedService<AdapterManager>();

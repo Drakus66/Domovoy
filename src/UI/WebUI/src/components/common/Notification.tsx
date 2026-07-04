@@ -10,6 +10,7 @@ import {
   Box,
 } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { useUIStore, Notification as NotificationData } from '../../store/uiStore';
 
 /**
@@ -21,6 +22,7 @@ interface NotificationItemProps {
 }
 
 const NotificationItem: React.FC<NotificationItemProps> = ({ notification, onClose }) => {
+  const { t } = useTranslation('common');
   const handleClose = (_event?: React.SyntheticEvent | Event, reason?: string) => {
     // Don't close on clickaway
     if (reason === 'clickaway') {
@@ -44,7 +46,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({ notification, onClo
         action={
           <IconButton
             size="small"
-            aria-label="close"
+            aria-label={t('actions.close')}
             color="inherit"
             onClick={handleClose}
           >

@@ -2,10 +2,18 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 
+using Domovoy.Common.Configuration;
+using Domovoy.Common.Models.Events;
 using Domovoy.Contracts.Capabilities;
+using Domovoy.Contracts.Home;
 using Domovoy.Contracts.Messaging;
+using Domovoy.DbGateway.Config;
+using Domovoy.DbGateway.Endpoints;
 using Domovoy.DbGateway.Models;
 using Domovoy.MessageBus;
+
+using Microsoft.Extensions.Options;
+
 using MongoDB.Driver;
 
 namespace Domovoy.DbGateway.Services;
@@ -25,6 +33,7 @@ public class EventInterceptor : BackgroundService
 {
     private readonly IMessageBus _messageBus;
     private readonly IMongoDatabase _database;
+    private readonly TelemetryOptions _telemetry;
     private readonly ILogger<EventInterceptor> _logger;
 
     /// <summary>
@@ -34,22 +43,48 @@ public class EventInterceptor : BackgroundService
     private readonly ConcurrentDictionary<Guid, RecentCommand> _recentCommands = new();
     private static readonly TimeSpan CommandCorrelationWindow = TimeSpan.FromSeconds(15);
 
+    /// <summary>
+    /// Current home mode (roadmap Epic 1G), kept live from <see cref="HomeModeChangedV1"/> and seeded
+    /// from <c>home_state</c> at startup. Stamped onto every event-log record as an ML feature (P0-5).
+    /// </summary>
+    private volatile string _currentMode = WellKnownModes.Default;
+
+    /// <summary>
+    /// Adapter source of Zigbee capability devices (matches <c>Zigbee2MqttAdapter.Name</c>). Used to
+    /// scope the bridge-down offline sweep so only Zigbee devices are marked unreachable.
+    /// </summary>
+    private const string ZigbeeAdapterSource = "Zigbee2Mqtt";
+
+    /// <summary>
+    /// Last observed Zigbee bridge state. The adapter re-publishes the state every ~15s, so we only act
+    /// on the online→offline transition (or the first offline seen) to avoid rewriting the read-model
+    /// on every heartbeat. <c>null</c> until the first bridge event arrives.
+    /// </summary>
+    private bool? _zigbeeBridgeOnline;
+
     private sealed record RecentCommand(DateTime At, string TriggerSource, string? CorrelationId, IReadOnlyDictionary<string, object?> Set);
 
     public EventInterceptor(
         IMessageBus messageBus,
         IMongoDatabase database,
+        IOptions<TelemetryOptions> telemetry,
         ILogger<EventInterceptor> logger)
     {
         _messageBus = messageBus ?? throw new ArgumentNullException(nameof(messageBus));
         _database = database ?? throw new ArgumentNullException(nameof(database));
+        _telemetry = telemetry.Value;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Ensure the append-only feature-store collections exist as time-series before we write.
-        await TimeSeriesInitializer.EnsureCollectionsAsync(_database, _logger, stoppingToken);
+        // Ensure the append-only feature-store collections exist as time-series before we write, and
+        // apply the raw-telemetry retention policy (Epic 1B).
+        await TimeSeriesInitializer.EnsureCollectionsAsync(
+            _database, _logger, _telemetry.RawRetentionDays, stoppingToken);
+
+        // Seed the home mode (1G) so events logged before the first switch carry the right context.
+        await SeedCurrentMode();
 
         _logger.LogInformation("EventInterceptor starting — subscribing to capability contract events");
 
@@ -72,12 +107,36 @@ public class EventInterceptor : BackgroundService
             BusTopology.DeviceOnlineChangedKey,
             HandleCapabilityOnline);
 
+        // Zigbee bridge state (coordinator/stick up-down). The Zigbee2Mqtt adapter never emits a
+        // per-device DeviceOnlineChangedV1, so a disconnected stick would otherwise leave every paired
+        // device stuck as IsOnline=true in the read-model. When the bridge drops we sweep all Zigbee
+        // devices offline so the dashboard agrees with the (staleness-based) Zigbee page.
+        await _messageBus.SubscribeAsync<ZigbeeBridgeStateEvent>(
+            "dbgateway-zigbee-bridge-state",
+            MessageBusConfiguration.ZigbeeBridgeExchange,
+            MessageBusConfiguration.ZigbeeBridgeStateRoutingKey,
+            HandleZigbeeBridgeState);
+
         // Commands are logged for audit and to attribute later state changes to a trigger (P0-5).
         await _messageBus.SubscribeAsync<Envelope<DeviceCommandV1>>(
             "dbgateway-command-log",
             BusTopology.CommandsExchange,
             BusTopology.DeviceCommandKey,
             HandleDeviceCommand);
+
+        // Automation run history (Epic 1A) — persisted from AutomationTriggeredV1.
+        await _messageBus.SubscribeAsync<Envelope<AutomationTriggeredV1>>(
+            "dbgateway-automation-history",
+            BusTopology.EventsExchange,
+            BusTopology.AutomationTriggeredKey,
+            HandleAutomationTriggered);
+
+        // Home mode changes (Epic 1G) — track the current mode and record the change in the event-log.
+        await _messageBus.SubscribeAsync<Envelope<HomeModeChangedV1>>(
+            "dbgateway-home-mode",
+            BusTopology.EventsExchange,
+            BusTopology.HomeModeChangedKey,
+            HandleHomeModeChanged);
 
         _logger.LogInformation("EventInterceptor subscriptions complete");
     }
@@ -103,6 +162,9 @@ public class EventInterceptor : BackgroundService
                 .Set(x => x.Model, device.Model)
                 .Set(x => x.Capabilities, device.Capabilities.Select(ToCapabilityDocument).ToList())
                 .Set(x => x.IsOnline, true)
+                // Semantic archetype (Epic 2D): recompute the auto value each (re)announce; the manual
+                // override field is left untouched so a re-announce never clobbers the user's choice.
+                .Set(x => x.AutoArchetype, DeviceClassifier.Classify(device.Capabilities, device.Identity.AdapterSource, device.Model))
                 .Set(x => x.LastUpdated, DateTime.UtcNow)
                 // ZoneId is a manual, UI-assigned read-model concern (P0-3). Adapters always announce
                 // Guid.Empty, so it is set only on first insert — a re-announce must not wipe the zone.
@@ -168,6 +230,41 @@ public class EventInterceptor : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Marks all Zigbee devices offline when the bridge (coordinator/stick) goes down. Acts only on the
+    /// online→offline transition — the adapter re-emits the state on a ~15s heartbeat, so a naive handler
+    /// would rewrite the collection repeatedly. Devices flip back to online on their own as they re-report
+    /// state/discovery once the bridge returns, so the online transition needs no action here.
+    /// </summary>
+    private async Task HandleZigbeeBridgeState(ZigbeeBridgeStateEvent ev)
+    {
+        var wasOnline = _zigbeeBridgeOnline;
+        _zigbeeBridgeOnline = ev.IsOnline;
+
+        // Only sweep on the first offline we see or a true→false edge. Ignore the online transition
+        // and the repeated offline heartbeats.
+        if (ev.IsOnline || wasOnline == false) return;
+
+        try
+        {
+            var collection = _database.GetCollection<CapabilityDeviceDocument>(CapabilityCollection);
+            var filter = Builders<CapabilityDeviceDocument>.Filter.Eq(x => x.AdapterSource, ZigbeeAdapterSource)
+                & Builders<CapabilityDeviceDocument>.Filter.Eq(x => x.IsOnline, true);
+            var update = Builders<CapabilityDeviceDocument>.Update
+                .Set(x => x.IsOnline, false)
+                .Set(x => x.LastUpdated, DateTime.UtcNow);
+
+            var result = await collection.UpdateManyAsync(filter, update);
+            if (result.ModifiedCount > 0)
+                _logger.LogInformation(
+                    "Zigbee bridge offline — marked {Count} Zigbee device(s) offline", result.ModifiedCount);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sweeping Zigbee devices offline after bridge drop");
+        }
+    }
+
     // ====================================================================
     // Append-only feature store: event-log + telemetry (roadmap P0-5)
     // ====================================================================
@@ -195,6 +292,7 @@ public class EventInterceptor : BackgroundService
                 CapabilityId = kv.Key,
                 NewValue = kv.Value,
                 TriggerSource = trigger,
+                Mode = _currentMode,
                 CorrelationId = correlationId,
             }).ToList();
 
@@ -236,6 +334,7 @@ public class EventInterceptor : BackgroundService
                 OldValue = oldValue,
                 NewValue = newValue,
                 TriggerSource = commanded ? recent!.TriggerSource : TriggerSources.Device,
+                Mode = _currentMode,
                 CorrelationId = commanded ? recent!.CorrelationId : null,
             });
 
@@ -256,6 +355,89 @@ public class EventInterceptor : BackgroundService
 
         if (logs.Count > 0) await EventLog.InsertManyAsync(logs);
         if (readings.Count > 0) await Telemetry.InsertManyAsync(readings);
+    }
+
+    private async Task HandleAutomationTriggered(Envelope<AutomationTriggeredV1> envelope)
+    {
+        var e = envelope.Data;
+        if (e is null) return;
+
+        try
+        {
+            await _database.GetCollection<AutoHistory>(AutomationEndpoints.HistoryCollection).InsertOneAsync(new AutoHistory
+            {
+                Timestamp = e.FiredAt.UtcDateTime,
+                RuleId = e.RuleId,
+                RuleName = e.RuleName,
+                ConditionsMet = e.ConditionsMet,
+                Success = e.Success,
+                TriggerSummary = e.TriggerSummary,
+                ActionsExecuted = e.ActionsExecuted,
+                Detail = e.Detail,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error persisting automation history for rule {RuleId}", e.RuleId);
+        }
+    }
+
+    // ====================================================================
+    // Home mode / presence context (roadmap Epic 1G)
+    // ====================================================================
+
+    private async Task SeedCurrentMode()
+    {
+        try
+        {
+            var state = await _database.GetCollection<HomeState>(ModeEndpoints.Collection)
+                .Find(x => x.Id == HomeState.SingletonId)
+                .FirstOrDefaultAsync();
+            if (state is not null && !string.IsNullOrWhiteSpace(state.Mode))
+                _currentMode = state.Mode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not seed current home mode; defaulting to {Mode}", _currentMode);
+        }
+    }
+
+    private async Task HandleHomeModeChanged(Envelope<HomeModeChangedV1> envelope)
+    {
+        var change = envelope.Data;
+        if (change is null || string.IsNullOrWhiteSpace(change.Mode)) return;
+
+        _currentMode = change.Mode;
+
+        // Record the mode change itself as a feature-store event so history/replay can reconstruct context.
+        try
+        {
+            await EventLog.InsertOneAsync(new DeviceEventLog
+            {
+                Timestamp = change.ChangedAt.UtcDateTime,
+                Meta = new EventMeta { Kind = EventKinds.ModeChange },
+                CapabilityId = ContextCapabilities.HomeMode,
+                OldValue = change.PreviousMode,
+                NewValue = change.Mode,
+                TriggerSource = MapModeSource(change.Source),
+                Mode = change.Mode,
+            });
+            _logger.LogInformation("Home mode changed to {Mode} (was {Previous}, by {Source})",
+                change.Mode, change.PreviousMode ?? "—", change.Source);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error recording home-mode change to {Mode}", change.Mode);
+        }
+    }
+
+    private static string MapModeSource(string? source)
+    {
+        var s = source?.ToLowerInvariant() ?? string.Empty;
+        if (s.Contains("ml")) return TriggerSources.Ml;
+        if (s.Contains("rule") || s.Contains("automation")) return TriggerSources.Rule;
+        if (s.Contains("presence") || s.Contains("device")) return TriggerSources.Device;
+        return TriggerSources.User;
     }
 
     private IMongoCollection<DeviceEventLog> EventLog =>

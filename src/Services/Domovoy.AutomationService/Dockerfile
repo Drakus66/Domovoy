@@ -1,0 +1,24 @@
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+USER $APP_UID
+WORKDIR /app
+EXPOSE 8080
+
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+ARG BUILD_CONFIGURATION=Release
+WORKDIR /src
+# Central package versions live here — must be present before restore so versions stay pinned.
+COPY ["Directory.Packages.props", "./"]
+COPY ["src/Services/Domovoy.AutomationService/Domovoy.AutomationService.csproj", "src/Services/Domovoy.AutomationService/"]
+RUN dotnet restore "./src/Services/Domovoy.AutomationService/Domovoy.AutomationService.csproj"
+COPY . .
+WORKDIR "/src/src/Services/Domovoy.AutomationService"
+RUN dotnet build "./Domovoy.AutomationService.csproj" -c $BUILD_CONFIGURATION -o /app/build
+
+FROM build AS publish
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "./Domovoy.AutomationService.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "Domovoy.AutomationService.dll"]

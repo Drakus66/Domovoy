@@ -25,6 +25,7 @@ services:
       - RABBITMQ__PORT=5672
       - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
     restart: unless-stopped
 
   # Owns the MQTT client; runs Zigbee2MQTT + Domovoy Native adapters and publishes the capability
@@ -47,6 +48,7 @@ services:
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - MQTT__BROKER=rabbitmq
       - MQTT__PORT=1883
+      - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
     restart: unless-stopped
 
   db-gateway:
@@ -71,6 +73,7 @@ services:
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - MONGODB__CONNECTIONSTRING=mongodb://mongodb:27017
       - MONGODB__DATABASENAME=domovoy
+      - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f 'dotnet Domovoy.DbGateway.dll' || exit 1"]
       interval: 15s
@@ -99,6 +102,50 @@ services:
       - RABBITMQ__PORT=5672
       - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      - AUTOMATIONSERVICE__BASEURL=http://automation-service:8080
+      - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
+    restart: unless-stopped
+
+  # Deterministic automation engine (Epic 1A): subscribes to device state, fires trigger→condition→action
+  # rules, runs cron/sun schedules, and the non-disableable safety floor. Loads rules from db-gateway.
+  automation-service:
+    container_name: automation-service
+    image: ${DOCKER_REGISTRY-}automation-service
+    build:
+      context: .
+      dockerfile: src/Services/Domovoy.AutomationService/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      db-gateway:
+        condition: service_started
+    networks:
+      - domovoy-network
+    environment:
+      - RABBITMQ__HOSTNAME=rabbitmq
+      - RABBITMQ__PORT=5672
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      - AUTOMATION__DBGATEWAYBASEURL=http://db-gateway:8080
+      - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
+    restart: unless-stopped
+
+  # Integration SDK supervisor (Epic 1C): discovers plugin manifests under ./plugins, gates each on host
+  # resources, and runs satisfiable ones as isolated processes. Plugins connect to the bus themselves.
+  plugin-supervisor:
+    container_name: plugin-supervisor
+    image: ${DOCKER_REGISTRY-}plugin-supervisor
+    build:
+      context: .
+      dockerfile: src/Services/Domovoy.PluginSupervisor/Dockerfile
+    networks:
+      - domovoy-network
+    volumes:
+      - ./plugins:/app/plugins:ro
+    environment:
+      - SUPERVISOR__GPUAVAILABLE=false
+      - SUPERVISOR__INTERNETAVAILABLE=true
+      - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
     restart: unless-stopped
 
   webui:
@@ -114,6 +161,12 @@ services:
       - domovoy-network
     ports:
       - "80:80"
+    # UI translations are runtime-loaded static JSON (i18next-http-backend). Mounting
+    # the source locales over the served folder means editing a language — or, later,
+    # dropping a new one — takes effect on refresh with NO image rebuild. Read-only:
+    # the container never writes here.
+    volumes:
+      - ./src/UI/WebUI/public/locales:/usr/share/nginx/html/locales:ro
     restart: unless-stopped
 
   # ============ Infrastructure Services ============

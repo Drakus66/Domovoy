@@ -6,3 +6,5 @@
 **/obj/
 *.log
 data/zigbee2mqtt/state.json
+data/zigbee2mqtt/coordinator_backup.json
+data/zigbee2mqtt/database.db

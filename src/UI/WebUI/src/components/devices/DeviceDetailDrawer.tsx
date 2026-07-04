@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
 import {
   Box, Drawer, Stack, Typography, IconButton, Chip, Divider, Button,
-  TextField, MenuItem,
+  TextField, MenuItem, Tooltip,
 } from '@mui/material';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import CircleIcon from '@mui/icons-material/Circle';
 import ArrowRightAltRoundedIcon from '@mui/icons-material/ArrowRightAltRounded';
-import { CapabilityDevice, isUnassignedZone } from '../../api/capabilityDevices';
+import { CapabilityDevice, isUnassignedZone, DEVICE_ARCHETYPES, effectiveArchetype } from '../../api/capabilityDevices';
 import type { Zone } from '../../api/zones';
 import { historyApi, EventLogEntry } from '../../api/history';
+import { automationsApi } from '../../api/automations';
 import CapabilityControl, { type CommandFn } from './CapabilityControls';
 import { describeDevice } from './deviceVisuals';
+import { fmtDateTime } from '../../i18n/format';
+import TelemetryChart from '../charts/TelemetryChart';
 
 const TRIGGER_COLOR: Record<string, 'primary' | 'secondary' | 'default' | 'info'> = {
   user: 'primary', rule: 'secondary', ml: 'info', device: 'default',
@@ -18,15 +23,16 @@ const TRIGGER_COLOR: Record<string, 'primary' | 'secondary' | 'default' | 'info'
 
 const fmtValue = (v: unknown): string => {
   if (v === null || v === undefined || v === '') return '—';
-  if (typeof v === 'boolean') return v ? 'on' : 'off';
+  if (typeof v === 'boolean') return i18n.t(v ? 'devices:status.on' : 'devices:status.off');
   return String(v);
 };
 
 export type AssignZoneFn = (deviceId: string, zoneId: string | null) => void;
+export type SetArchetypeFn = (deviceId: string, archetype: string | null) => void;
 
 /** Sliding panel with the full per-capability control surface for one device. */
 export default function DeviceDetailDrawer({
-  device, zones, open, onClose, onCommand, onAssignZone,
+  device, zones, open, onClose, onCommand, onAssignZone, onSetArchetype,
 }: {
   device: CapabilityDevice | null;
   zones: Zone[];
@@ -34,6 +40,7 @@ export default function DeviceDetailDrawer({
   onClose: () => void;
   onCommand: CommandFn;
   onAssignZone: AssignZoneFn;
+  onSetArchetype: SetArchetypeFn;
 }) {
   return (
     <Drawer
@@ -45,7 +52,7 @@ export default function DeviceDetailDrawer({
       {device && (
         <DrawerBody
           device={device} zones={zones} onClose={onClose}
-          onCommand={onCommand} onAssignZone={onAssignZone}
+          onCommand={onCommand} onAssignZone={onAssignZone} onSetArchetype={onSetArchetype}
         />
       )}
     </Drawer>
@@ -53,14 +60,16 @@ export default function DeviceDetailDrawer({
 }
 
 function DrawerBody({
-  device, zones, onClose, onCommand, onAssignZone,
+  device, zones, onClose, onCommand, onAssignZone, onSetArchetype,
 }: {
   device: CapabilityDevice;
   zones: Zone[];
   onClose: () => void;
   onCommand: CommandFn;
   onAssignZone: AssignZoneFn;
+  onSetArchetype: SetArchetypeFn;
 }) {
+  const { t } = useTranslation('devices');
   const { accent, Icon } = describeDevice(device);
   const offline = !device.isOnline;
   const currentZone = isUnassignedZone(device.zoneId) ? '' : device.zoneId;
@@ -76,8 +85,25 @@ function DrawerBody({
     return () => { cancelled = true; };
   }, [device.id]);
 
+  // Rule id → name, so rule-caused changes can be explained with "why" (roadmap Epic 1F).
+  const [ruleNames, setRuleNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    automationsApi.getRules()
+      .then((rules) => { if (!cancelled) setRuleNames(Object.fromEntries(rules.map((r) => [r.id, r.name]))); })
+      .catch(() => { if (!cancelled) setRuleNames({}); });
+    return () => { cancelled = true; };
+  }, []);
+  const explainRule = (e: EventLogEntry): string | null => {
+    if (e.triggerSource !== 'rule') return null;
+    const id = e.ruleId || e.correlationId || '';
+    return ruleNames[id] ?? (id ? t('aRule') : null);
+  };
+
   const controls = device.capabilities.filter((c) => c.writable || c.kind === 'Action');
   const sensors = device.capabilities.filter((c) => !c.writable && c.kind !== 'Action');
+  // Numeric sensors get a 24h trend chart (roadmap Epic 1B).
+  const numericSensors = sensors.filter((c) => c.kind === 'Number');
 
   const allOff = () => {
     const set: Record<string, unknown> = {};
@@ -104,18 +130,20 @@ function DrawerBody({
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
             <Chip
               size="small"
-              label={zones.find((z) => z.id === currentZone)?.name ?? 'Unassigned'}
+              label={zones.find((z) => z.id === currentZone)?.name ?? t('unassigned')}
               variant="outlined"
             />
+            <Chip size="small" color="info" variant="outlined"
+              label={effectiveArchetype(device).replace(/_/g, ' ')} />
             <Stack direction="row" spacing={0.5} alignItems="center">
               <CircleIcon sx={{ fontSize: 9, color: offline ? 'text.disabled' : 'success.main' }} />
               <Typography variant="caption" color="text.secondary">
-                {offline ? 'Offline' : 'Online'}
+                {offline ? t('status.offline') : t('status.online')}
               </Typography>
             </Stack>
           </Stack>
         </Box>
-        <IconButton onClick={onClose} aria-label="close" edge="end"><CloseRoundedIcon /></IconButton>
+        <IconButton onClick={onClose} aria-label={t('actions.close', { ns: 'common' })} edge="end"><CloseRoundedIcon /></IconButton>
       </Stack>
 
       <Typography variant="caption" color="text.secondary" mb={2}>
@@ -125,23 +153,39 @@ function DrawerBody({
       <TextField
         select
         size="small"
-        label="Zone"
+        label={t('zone')}
         value={currentZone}
         onChange={(e) => onAssignZone(device.id, e.target.value || null)}
         sx={{ mb: 2 }}
         fullWidth
       >
-        <MenuItem value=""><em>Unassigned</em></MenuItem>
+        <MenuItem value=""><em>{t('unassigned')}</em></MenuItem>
         {zones.map((z) => (
           <MenuItem key={z.id} value={z.id}>{z.name}</MenuItem>
         ))}
       </TextField>
 
+      {/* Semantic type (Epic 2D): empty = auto-classified; pick to override. */}
+      <TextField
+        select
+        size="small"
+        label={t('type.label')}
+        value={device.archetype ?? ''}
+        onChange={(e) => onSetArchetype(device.id, e.target.value || null)}
+        sx={{ mb: 2 }}
+        fullWidth
+      >
+        <MenuItem value=""><em>{t('type.auto', { value: device.autoArchetype ?? t('type.unknown') })}</em></MenuItem>
+        {DEVICE_ARCHETYPES.map((a) => (
+          <MenuItem key={a} value={a}>{a.replace(/_/g, ' ')}</MenuItem>
+        ))}
+      </TextField>
+
       <Box sx={{ flex: 1, overflowY: 'auto', mx: -0.5, px: 0.5 }}>
         {controls.length > 0 && (
-          <Section title="Controls" action={
+          <Section title={t('sections.controls')} action={
             controls.some((c) => c.id === 'on_off')
-              ? <Button size="small" onClick={allOff} disabled={offline}>All off</Button>
+              ? <Button size="small" onClick={allOff} disabled={offline}>{t('actions.allOff')}</Button>
               : undefined
           }>
             <Stack spacing={2.25}>
@@ -154,7 +198,7 @@ function DrawerBody({
         )}
 
         {sensors.length > 0 && (
-          <Section title="Sensors">
+          <Section title={t('sections.sensors')}>
             <Stack spacing={2}>
               {sensors.map((cap) => (
                 <CapabilityControl key={cap.id} device={device} cap={cap}
@@ -165,12 +209,27 @@ function DrawerBody({
         )}
 
         {device.capabilities.length === 0 && (
-          <Typography variant="body2" color="text.secondary">No capabilities reported.</Typography>
+          <Typography variant="body2" color="text.secondary">{t('noCapabilities')}</Typography>
         )}
 
-        <Section title="History">
+        {numericSensors.length > 0 && (
+          <Section title={t('sections.trends')}>
+            <Stack spacing={2.5}>
+              {numericSensors.map((cap) => (
+                <Box key={cap.id}>
+                  <Typography variant="body2" fontWeight={600} mb={0.5}>
+                    {cap.id}{cap.unit ? ` (${cap.unit})` : ''}
+                  </Typography>
+                  <TelemetryChart capabilityId={cap.id} deviceId={device.id} unit={cap.unit} height={160} />
+                </Box>
+              ))}
+            </Stack>
+          </Section>
+        )}
+
+        <Section title={t('sections.history')}>
           {history.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">No recorded changes yet.</Typography>
+            <Typography variant="body2" color="text.secondary">{t('noHistory')}</Typography>
           ) : (
             <Stack spacing={1.25}>
               {history.map((e, i) => (
@@ -187,10 +246,16 @@ function DrawerBody({
                     </Stack>
                   )}
                   <Box flex={1} />
-                  <Chip size="small" variant="outlined" label={e.triggerSource}
-                    color={TRIGGER_COLOR[e.triggerSource] ?? 'default'} />
+                  {explainRule(e) ? (
+                    <Tooltip title={t('historyCausedBy', { rule: explainRule(e) })}>
+                      <Chip size="small" variant="outlined" color="secondary" label={t('historyVia', { rule: explainRule(e) })} />
+                    </Tooltip>
+                  ) : (
+                    <Chip size="small" variant="outlined" label={e.triggerSource}
+                      color={TRIGGER_COLOR[e.triggerSource] ?? 'default'} />
+                  )}
                   <Typography variant="caption" color="text.secondary">
-                    {new Date(e.timestamp).toLocaleString()}
+                    {fmtDateTime(e.timestamp)}
                   </Typography>
                 </Stack>
               ))}
@@ -206,7 +271,7 @@ function DrawerBody({
         </Typography>
         {device.lastUpdated && (
           <Typography variant="caption" color="text.secondary">
-            Updated {new Date(device.lastUpdated).toLocaleString()}
+            {t('updated', { when: fmtDateTime(device.lastUpdated) })}
           </Typography>
         )}
       </Stack>

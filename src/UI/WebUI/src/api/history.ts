@@ -36,6 +36,26 @@ export interface HistoryQuery {
   limit?: number;
 }
 
+/** One aggregated time bucket (matches DbGateway AggregateBucket, Epic 1B). */
+export interface AggregateBucket {
+  timestamp: string;
+  value: number; // the requested aggregate (avg | min | max)
+  min: number;
+  max: number;
+  avg: number;
+  count: number;
+}
+
+export interface AggregateQuery {
+  deviceId?: string;
+  capabilityId?: string;
+  zoneId?: string;
+  from?: string;
+  to?: string;
+  bucket?: 'minute' | 'hour' | 'day';
+  agg?: 'avg' | 'min' | 'max';
+}
+
 const params = (q: HistoryQuery) =>
   Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined && v !== ''));
 
@@ -47,4 +67,14 @@ export const historyApi = {
   /** Numeric telemetry samples over a period. */
   getTelemetry: (q: HistoryQuery = {}): Promise<TelemetrySample[]> =>
     apiClient.get<TelemetrySample[]>('/api/telemetry', { params: params(q) }).then((r) => r.data),
+
+  /** Aggregated telemetry rollups (minute/hour/day) for trend charts (Epic 1B). */
+  getAggregate: (q: AggregateQuery = {}): Promise<AggregateBucket[]> =>
+    apiClient.get<AggregateBucket[]>('/api/telemetry/aggregate', { params: params(q) }).then((r) => r.data),
+
+  /** URL for the CSV period export (Epic 1B) — open/download directly. */
+  csvExportUrl: (q: HistoryQuery = {}): string => {
+    const qs = new URLSearchParams({ ...params(q), format: 'csv' } as Record<string, string>).toString();
+    return `${apiClient.defaults.baseURL ?? ''}/api/telemetry?${qs}`;
+  },
 };

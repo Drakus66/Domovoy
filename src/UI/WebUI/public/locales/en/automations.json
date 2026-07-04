@@ -1,0 +1,92 @@
+{
+  "title": "Automations",
+  "subtitle": "Deterministic trigger → condition → action rules. Protected safety-floor rules can't be disabled.",
+  "actions": {
+    "history": "History",
+    "newRule": "New rule",
+    "simulate": "Dry-run over history",
+    "runHistory": "Run history",
+    "cancel": "Cancel",
+    "create": "Create",
+    "close": "Close"
+  },
+  "errors": {
+    "load": "Failed to load automations. Check ApiGateway / DbGateway connection.",
+    "changeStatus": "Failed to change status",
+    "delete": "Failed to delete",
+    "create": "Failed to create rule"
+  },
+  "confirm": {
+    "delete": "Delete automation \"{{name}}\"?"
+  },
+  "empty": {
+    "none": "No standing orders yet — I watch over the house as it is. Add a rule, or let me propose one on the Proposals page."
+  },
+  "status": {
+    "Active": "Active",
+    "Shadow": "Shadow",
+    "Disabled": "Disabled"
+  },
+  "chips": {
+    "protected": "Protected",
+    "alwaysOn": "Always on"
+  },
+  "tooltips": {
+    "cannotDelete": "Protected rules cannot be deleted",
+    "delete": "Delete"
+  },
+  "rule": {
+    "when": "When",
+    "if": "If",
+    "then": "Then"
+  },
+  "trigger": {
+    "any": "any",
+    "schedule": "schedule {{cron}}",
+    "sun": "sun"
+  },
+  "condition": {
+    "whileLight": "while light",
+    "whileDark": "while dark",
+    "mode": "mode {{mode}}"
+  },
+  "action": {
+    "set": "set {{assignments}}",
+    "wait": "wait {{seconds}}s",
+    "notify": "notify \"{{message}}\""
+  },
+  "dialog": {
+    "createTitle": "New automation",
+    "name": "Name",
+    "status": "Status",
+    "shadowHelper": "logs, never acts",
+    "whenTrigger": "When (trigger)",
+    "device": "Device",
+    "capability": "Capability",
+    "operator": "Operator",
+    "value": "Value",
+    "valueHelper": "true / false / number / text",
+    "onlyDark": "Only when dark (after sunset)",
+    "thenAction": "Then (action)",
+    "autoOff": "Auto-off after (s)",
+    "autoOffHelper": "0 = stay on"
+  },
+  "simulate": {
+    "title": "Simulate · {{name}}",
+    "window": "Window",
+    "lastDays_one": "last {{count}} day",
+    "lastDays_other": "last {{count}} days",
+    "summary": "{{fires}} would fire · {{matches}} trigger match(es) · {{scanned}} events scanned",
+    "failed": "Simulation failed — is the AutomationService reachable?",
+    "noTrigger": "This rule would not have triggered in the selected window.",
+    "wouldFire": "would fire",
+    "triggerOnly": "trigger only"
+  },
+  "history": {
+    "allTitle": "All run history",
+    "empty": "No runs recorded yet.",
+    "ran": "ran ({{count}})",
+    "failed": "failed",
+    "skipped": "skipped"
+  }
+}

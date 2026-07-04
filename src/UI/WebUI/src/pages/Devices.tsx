@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
 import {
   Container, Box, Typography, Grid, IconButton, LinearProgress, Alert, Tooltip,
   Stack, TextField, InputAdornment, Chip, Divider,
@@ -14,10 +16,13 @@ import DeviceTile from '../components/devices/DeviceTile';
 import DeviceDetailDrawer from '../components/devices/DeviceDetailDrawer';
 import type { CommandFn } from '../components/devices/CapabilityControls';
 import { asBool, asNum } from '../components/devices/deviceVisuals';
+import DomovoyDigest from '../components/common/DomovoyDigest';
+import { useUIStore } from '../store/uiStore';
 
 const REFRESH_INTERVAL_MS = 20_000;
 
 export default function Devices() {
+  const { t } = useTranslation('devices');
   const [devices, setDevices] = useState<CapabilityDevice[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,17 +32,30 @@ export default function Devices() {
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const hubRef = useRef<HubConnection | null>(null);
+  // Device ids seen by the last successful fetch; null until the baseline load,
+  // so restarts don't announce the whole house as "new residents".
+  const knownIdsRef = useRef<Set<string> | null>(null);
 
   const fetchDevices = useCallback(async () => {
     setError(null);
     try {
-      setDevices(await capabilityDevicesApi.getDevices());
+      const list = await capabilityDevicesApi.getDevices();
+      const known = knownIdsRef.current;
+      if (known) {
+        for (const d of list) {
+          if (!known.has(d.id)) {
+            useUIStore.getState().showNotification('info', i18n.t('newResident', { name: d.name }));
+          }
+        }
+      }
+      knownIdsRef.current = new Set(list.map((d) => d.id));
+      setDevices(list);
     } catch {
-      setError('Failed to load devices. Check ApiGateway / DbGateway connection.');
+      setError(t('errors.loadDevices'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const fetchZones = useCallback(async () => {
     try {
@@ -56,12 +74,13 @@ export default function Devices() {
   }, [fetchDevices, fetchZones]);
 
   // Resolve a device's zone id to its display name; blank/unknown → "Unassigned".
+  const unassignedLabel = t('unassigned');
   const zoneName = useCallback(
     (zoneId?: string | null): string => {
-      if (isUnassignedZone(zoneId)) return 'Unassigned';
-      return zones.find((z) => z.id === zoneId)?.name ?? 'Unassigned';
+      if (isUnassignedZone(zoneId)) return unassignedLabel;
+      return zones.find((z) => z.id === zoneId)?.name ?? unassignedLabel;
     },
-    [zones],
+    [zones, unassignedLabel],
   );
 
   // Live state via SignalR (normalized capability state, keyed by device GUID).
@@ -90,14 +109,19 @@ export default function Devices() {
     setDevices((prev) =>
       prev.map((d) => (d.id === deviceId ? { ...d, state: { ...d.state, ...set } } : d))
     );
-    capabilityDevicesApi.sendCommand(deviceId, set).catch(() => setError('Command failed'));
-  }, []);
+    capabilityDevicesApi.sendCommand(deviceId, set).catch(() => setError(t('errors.command')));
+  }, [t]);
 
   const handleAssignZone = useCallback((deviceId: string, zoneId: string | null) => {
     const normalized = zoneId ?? '';
     setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, zoneId: normalized } : d)));
-    capabilityDevicesApi.assignZone(deviceId, zoneId).catch(() => setError('Failed to assign zone'));
-  }, []);
+    capabilityDevicesApi.assignZone(deviceId, zoneId).catch(() => setError(t('errors.assignZone')));
+  }, [t]);
+
+  const handleSetArchetype = useCallback((deviceId: string, archetype: string | null) => {
+    setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, archetype } : d)));
+    capabilityDevicesApi.setArchetype(deviceId, archetype).catch(() => setError(t('errors.setArchetype')));
+  }, [t]);
 
   const adapters = useMemo(
     () => Array.from(new Set(devices.map((d) => d.adapterSource))).sort(),
@@ -123,9 +147,9 @@ export default function Devices() {
       map.set(key, bucket);
     }
     return Array.from(map.entries())
-      .sort(([a], [b]) => (a === 'Unassigned' ? 1 : b === 'Unassigned' ? -1 : a.localeCompare(b)))
+      .sort(([a], [b]) => (a === unassignedLabel ? 1 : b === unassignedLabel ? -1 : a.localeCompare(b)))
       .map(([zone, items]) => ({ zone, items: items.sort((x, y) => x.name.localeCompare(y.name)) }));
-  }, [filtered, zoneName]);
+  }, [filtered, zoneName, unassignedLabel]);
 
   const onlineCount = devices.filter((d) => d.isOnline).length;
   const lightsOn = devices.filter((d) => 'on_off' in (d.state ?? {}) && asBool(d.state.on_off)
@@ -139,14 +163,15 @@ export default function Devices() {
       <Box py={{ xs: 3, md: 4 }}>
         <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={3} flexWrap="wrap" gap={2}>
           <Box>
-            <Typography variant="h4" component="h1" fontWeight={700}>Devices</Typography>
+            <Typography variant="h4" component="h1" fontWeight={700}>{t('title')}</Typography>
+            <DomovoyDigest />
             <Stack direction="row" spacing={1} mt={0.5} flexWrap="wrap" useFlexGap>
-              <Stat label="online" value={`${onlineCount}/${devices.length}`} />
-              {lightsOn > 0 && <Stat label="lights on" value={String(lightsOn)} />}
-              {totalPower > 0 && <Stat label="power" value={`${Math.round(totalPower)} W`} />}
+              <Stat label={t('stats.online')} value={`${onlineCount}/${devices.length}`} />
+              {lightsOn > 0 && <Stat label={t('stats.lightsOn')} value={String(lightsOn)} />}
+              {totalPower > 0 && <Stat label={t('stats.power')} value={`${Math.round(totalPower)} W`} />}
             </Stack>
           </Box>
-          <Tooltip title="Refresh">
+          <Tooltip title={t('actions.refresh')}>
             <span>
               <IconButton onClick={fetchDevices} disabled={loading}><RefreshIcon /></IconButton>
             </span>
@@ -156,7 +181,7 @@ export default function Devices() {
         <Stack direction="row" spacing={1.5} mb={3} flexWrap="wrap" useFlexGap alignItems="center">
           <TextField
             size="small"
-            placeholder="Search devices or zones…"
+            placeholder={t('filters.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             sx={{ minWidth: 240, flex: { xs: '1 1 100%', sm: '0 1 320px' } }}
@@ -168,7 +193,7 @@ export default function Devices() {
           />
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Chip
-              label="All"
+              label={t('filters.all')}
               variant={adapter === 'all' ? 'filled' : 'outlined'}
               color={adapter === 'all' ? 'primary' : 'default'}
               onClick={() => setAdapter('all')}
@@ -183,7 +208,7 @@ export default function Devices() {
               />
             ))}
             <Chip
-              label="Online only"
+              label={t('filters.onlineOnly')}
               variant={onlineOnly ? 'filled' : 'outlined'}
               color={onlineOnly ? 'success' : 'default'}
               onClick={() => setOnlineOnly((v) => !v)}
@@ -199,8 +224,8 @@ export default function Devices() {
             <DevicesIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
             <Typography color="text.secondary">
               {devices.length === 0
-                ? 'No capability devices yet. Pair a Zigbee device or start the emulator.'
-                : 'No devices match the current filters.'}
+                ? t('empty.noDevices')
+                : t('empty.noMatches')}
             </Typography>
           </Box>
         ) : (
@@ -232,6 +257,7 @@ export default function Devices() {
         onClose={() => setSelectedId(null)}
         onCommand={handleCommand}
         onAssignZone={handleAssignZone}
+        onSetArchetype={handleSetArchetype}
       />
     </Container>
   );

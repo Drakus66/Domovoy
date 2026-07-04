@@ -29,6 +29,12 @@ public class CapabilityDeviceDocument
 
     public bool IsOnline { get; set; }
 
+    /// <summary>Auto-inferred semantic archetype (roadmap Epic 2D) — recomputed by the classifier on each discovery.</summary>
+    public string AutoArchetype { get; set; } = Domovoy.Contracts.Devices.DeviceArchetypes.Unknown;
+
+    /// <summary>User-set archetype override; null ⇒ use <see cref="AutoArchetype"/>. The discovery path never clobbers it.</summary>
+    public string? Archetype { get; set; }
+
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 }
 

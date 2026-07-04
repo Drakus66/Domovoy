@@ -17,9 +17,6 @@
     </ItemGroup>
     <ItemGroup>
         <Content Include=".env"/>
-        <Content Include="grafana\datasources.yaml" />
-        <Content Include="loki-config.yaml" />
         <Content Include="prometheus.yaml" />
-        <Content Include="promtail-config.yaml" />
     </ItemGroup>
     </Project>

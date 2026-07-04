@@ -107,6 +107,22 @@ internal static class Program
                 client.Timeout = TimeSpan.FromSeconds(10);
             });
 
+            // AutomationService hosts the replay/simulation endpoint (roadmap Epic 1F); proxy to it.
+            var automationUrl = builder.Configuration["AutomationService:BaseUrl"] ?? "http://automation-service:8080";
+            builder.Services.AddHttpClient("automation-service", client =>
+            {
+                client.BaseAddress = new Uri(automationUrl);
+                client.Timeout = TimeSpan.FromSeconds(30); // replay scans history; allow headroom
+            });
+
+            // PluginSupervisor hosts the plugin registry + lifecycle API (roadmap Epic 1C); proxy to it.
+            var supervisorUrl = builder.Configuration["PluginSupervisor:BaseUrl"] ?? "http://plugin-supervisor:8080";
+            builder.Services.AddHttpClient("plugin-supervisor", client =>
+            {
+                client.BaseAddress = new Uri(supervisorUrl);
+                client.Timeout = TimeSpan.FromSeconds(10);
+            });
+
             builder.Services.AddSignalR();
             builder.Services.AddSingleton<MessageBus.IMessageBus, MessageBus.RabbitMqConnection>();
             builder.Services.AddHostedService<Services.EventRelayService>();

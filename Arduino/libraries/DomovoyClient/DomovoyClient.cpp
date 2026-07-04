@@ -1,5 +1,16 @@
 #include "DomovoyClient.h"
 
+namespace {
+// A Print sink that only counts the bytes written. Streaming the announce through it gives the
+// exact MQTT payload length for beginPublish() without ever holding the JSON in RAM.
+class CountingPrint : public Print {
+public:
+  size_t count = 0;
+  size_t write(uint8_t) override { count++; return 1; }
+  size_t write(const uint8_t *, size_t n) override { count += n; return n; }
+};
+} // namespace
+
 // ===================== DomovoyDevice =====================
 
 DomovoyDevice::DomovoyDevice(const char *deviceId, const char *name,
@@ -21,23 +32,36 @@ void DomovoyDevice::addNumber(const char *id, const char *unit,
   addCapability(id, "Number", writable, unit, minValue, maxValue);
 }
 
-void DomovoyDevice::writeAnnounce(JsonDocument &doc) const {
-  doc["deviceId"] = _id;
-  doc["name"] = _name;
-  if (_model) doc["model"] = _model;
-  if (_firmware) doc["firmware"] = _firmware;
+// Hand-written so no JsonDocument is buffered. All literals stay in flash (F()); only the
+// user-supplied ids/units (already in RAM) are streamed as-is. ids/units are simple tokens with
+// no quotes/backslashes, so no JSON escaping is needed.
+void DomovoyDevice::streamAnnounce(Print &out, const char *hub) const {
+  out.print(F("{\"deviceId\":\""));
+  out.print(_id);
+  out.print(F("\",\"name\":\""));
+  out.print(_name);
+  out.print(F("\",\"hub\":\""));
+  out.print(hub);
+  out.print('"');
+  if (_model) { out.print(F(",\"model\":\"")); out.print(_model); out.print('"'); }
+  if (_firmware) { out.print(F(",\"firmware\":\"")); out.print(_firmware); out.print('"'); }
 
-  JsonArray caps = doc.createNestedArray("capabilities");
+  out.print(F(",\"capabilities\":["));
   for (uint8_t i = 0; i < _capCount; i++) {
-    JsonObject c = caps.createNestedObject();
-    c["id"] = _caps[i].id;
-    c["kind"] = _caps[i].kind;
-    JsonObject attrs = c.createNestedObject("attributes");
-    attrs["writable"] = _caps[i].writable;
-    if (_caps[i].unit) attrs["unit"] = _caps[i].unit;
-    if (!isnan(_caps[i].minV)) attrs["min"] = _caps[i].minV;
-    if (!isnan(_caps[i].maxV)) attrs["max"] = _caps[i].maxV;
+    if (i) out.print(',');
+    const Cap &c = _caps[i];
+    out.print(F("{\"id\":\""));
+    out.print(c.id);
+    out.print(F("\",\"kind\":\""));
+    out.print(c.kind);
+    out.print(F("\",\"attributes\":{\"writable\":"));
+    out.print(c.writable ? F("true") : F("false"));
+    if (c.unit) { out.print(F(",\"unit\":\"")); out.print(c.unit); out.print('"'); }
+    if (!isnan(c.minV)) { out.print(F(",\"min\":")); out.print(c.minV); }
+    if (!isnan(c.maxV)) { out.print(F(",\"max\":")); out.print(c.maxV); }
+    out.print(F("}}"));
   }
+  out.print(F("]}"));
 }
 
 // ===================== DomovoyHub =====================
@@ -48,8 +72,9 @@ DomovoyHub::DomovoyHub(Client &net) : _mqtt(net) {}
 
 void DomovoyHub::setServer(const char *server, uint16_t port) {
   _mqtt.setServer(server, port);
-  // Headroom for the MQTT header + inbound command payloads. Announcements are streamed.
-  _mqtt.setBufferSize(512);
+  // Bounds inbound /set payloads and non-streamed state publishes. Announcements are streamed, so
+  // they are NOT limited by this. Keep small on RAM-constrained boards (see DOMOVOY_MQTT_BUFFER).
+  _mqtt.setBufferSize(DOMOVOY_MQTT_BUFFER);
 }
 
 void DomovoyHub::setCredentials(const char *user, const char *password) {
@@ -77,7 +102,8 @@ bool DomovoyHub::connect(const char *hubId) {
 
   if (ok) {
     _mqtt.publish(status.c_str(), "online", true);
-    _mqtt.subscribe("domovoy/native/+/set"); // one subscription routes all devices' commands
+    _mqtt.subscribe("domovoy/native/+/set");   // one subscription routes all devices' commands
+    _mqtt.subscribe("domovoy/native/discover"); // server broadcast → re-announce all devices
     announceAll();
   }
   return ok;
@@ -89,12 +115,13 @@ void DomovoyHub::announceAll() {
   for (uint8_t i = 0; i < _deviceCount; i++) {
     DomovoyDevice *d = _devices[i];
 
-    StaticJsonDocument<DOMOVOY_ANNOUNCE_DOC_SIZE> doc;
-    d->writeAnnounce(doc);
+    // First pass measures the exact length; second pass streams the bytes. No JSON is buffered.
+    CountingPrint counter;
+    d->streamAnnounce(counter, _hubId);
 
     String topic = topicFor(d->id(), "announce");
-    if (_mqtt.beginPublish(topic.c_str(), measureJson(doc), true)) {
-      serializeJson(doc, _mqtt); // PubSubClient is a Print
+    if (_mqtt.beginPublish(topic.c_str(), counter.count, true)) {
+      d->streamAnnounce(_mqtt, _hubId); // PubSubClient is a Print
       _mqtt.endPublish();
     }
     setAvailable(*d, true);
@@ -129,6 +156,14 @@ void DomovoyHub::_bridge(char *topic, byte *payload, unsigned int length) {
 }
 
 void DomovoyHub::handleMessage(char *topic, byte *payload, unsigned int length) {
+  // Server broadcast asking every device to re-announce. The server sends this on (re)start because
+  // RabbitMQ does not redeliver retained announces to its wildcard subscription, so without it our
+  // devices would be in the read-model yet unroutable for commands.
+  if (strcmp(topic, "domovoy/native/discover") == 0) {
+    announceAll();
+    return;
+  }
+
   // Expect: domovoy/native/<deviceId>/set
   const char *prefix = "domovoy/native/";
   size_t plen = strlen(prefix);
@@ -147,7 +182,7 @@ void DomovoyHub::handleMessage(char *topic, byte *payload, unsigned int length) 
   DomovoyDevice *device = findDevice(deviceId);
   if (!device || !device->_cb) return;
 
-  StaticJsonDocument<512> doc;
+  StaticJsonDocument<DOMOVOY_CMD_DOC_SIZE> doc;
   if (deserializeJson(doc, payload, length)) return; // ignore malformed
   JsonObject set = doc.as<JsonObject>();
   if (!set.isNull()) device->_cb(set);

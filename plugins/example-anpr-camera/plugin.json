@@ -1,0 +1,21 @@
+{
+  "id": "example-anpr-camera",
+  "name": "Example ANPR camera",
+  "version": "0.1.0",
+  "description": "Sample manifest showing the plugin schema. Requires a GPU, so on a host without one the supervisor marks it Blocked and never launches it (resource-aware gating, roadmap Epic 1C / principle 3). Replace 'command' with a real plugin executable to run it.",
+  "kind": "process",
+  "command": "dotnet",
+  "args": ["anpr-plugin.dll"],
+  "providedCapabilities": ["occupancy"],
+  "subscriptions": ["domovoy.device.command.v1"],
+  "commands": [],
+  "permissions": ["publish:events"],
+  "resources": {
+    "cpuCores": 2,
+    "memoryMb": 1024,
+    "gpu": true,
+    "internet": false
+  },
+  "autoStart": true,
+  "enabled": true
+}

@@ -1,0 +1,93 @@
+{
+  "title": "Устройства",
+  "stats": {
+    "online": "в сети",
+    "lightsOn": "света включено",
+    "power": "мощность"
+  },
+  "actions": {
+    "refresh": "Обновить",
+    "run": "Запустить",
+    "allOff": "Выключить всё"
+  },
+  "filters": {
+    "searchPlaceholder": "Поиск устройств или зон…",
+    "all": "Все",
+    "onlineOnly": "Только в сети"
+  },
+  "status": {
+    "online": "В сети",
+    "offline": "Не в сети",
+    "on": "вкл",
+    "off": "выкл"
+  },
+  "errors": {
+    "loadDevices": "Не удалось загрузить устройства. Проверьте соединение с ApiGateway / DbGateway.",
+    "command": "Не удалось выполнить команду",
+    "assignZone": "Не удалось назначить зону",
+    "setArchetype": "Не удалось задать тип устройства"
+  },
+  "empty": {
+    "noDevices": "В доме пока пусто — ни одного устройства не появилось. Подключите Zigbee-устройство или запустите эмулятор.",
+    "noMatches": "Нет устройств, подходящих под текущие фильтры."
+  },
+  "zone": "Зона",
+  "unassigned": "Без зоны",
+  "type": {
+    "label": "Тип",
+    "auto": "Авто · {{value}}",
+    "unknown": "неизвестно"
+  },
+  "sections": {
+    "controls": "Управление",
+    "sensors": "Датчики",
+    "trends": "Тренды · за 24 ч",
+    "history": "История"
+  },
+  "noCapabilities": "Возможности не заявлены.",
+  "noHistory": "Пока нет записанных изменений.",
+  "historyVia": "через {{rule}}",
+  "historyCausedBy": "Вызвано правилом: {{rule}}",
+  "aRule": "правило",
+  "updated": "Обновлено {{when}}",
+  "capabilities": {
+    "on_off": "Питание",
+    "brightness": "Яркость",
+    "color": "Цвет",
+    "color_temp": "Цветовая температура",
+    "temperature": "Температура",
+    "temperature_setpoint": "Целевая температура",
+    "humidity": "Влажность",
+    "co2": "CO₂",
+    "occupancy": "Присутствие",
+    "contact": "Контакт",
+    "lock": "Замок",
+    "valve": "Клапан",
+    "power": "Потребление",
+    "energy": "Энергия",
+    "battery": "Батарея",
+    "illuminance": "Освещённость",
+    "link_quality": "Качество связи"
+  },
+  "headline": {
+    "on": "Вкл",
+    "onWithBrightness": "Вкл · {{brightness}}%",
+    "off": "Выкл",
+    "locked": "Заперто",
+    "unlocked": "Отперто",
+    "target": "цель {{value}}",
+    "motion": "Движение",
+    "clear": "Тихо",
+    "open": "Открыто",
+    "closed": "Закрыто"
+  },
+  "value": {
+    "yes": "Да",
+    "no": "Нет"
+  },
+  "chart": {
+    "loadError": "Не удалось загрузить историю.",
+    "noSamples": "Нет проб за последние {{hours}} ч.",
+    "avg": "среднее"
+  }
+}

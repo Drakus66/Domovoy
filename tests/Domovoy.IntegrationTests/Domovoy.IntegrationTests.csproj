@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="xunit" />
+        <PackageReference Include="xunit.runner.visualstudio" />
+        <PackageReference Include="Testcontainers.RabbitMq" />
+        <PackageReference Include="Testcontainers.MongoDb" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Common\Domovoy.MessageBus\Domovoy.MessageBus.csproj" />
+        <ProjectReference Include="..\..\src\Common\Domovoy.Contracts\Domovoy.Contracts.csproj" />
+        <ProjectReference Include="..\..\src\Gateway\Domovoy.DbGateway\Domovoy.DbGateway.csproj" />
+        <ProjectReference Include="..\..\src\Services\Domovoy.AutomationService\Domovoy.AutomationService.csproj" />
+        <ProjectReference Include="..\..\src\Services\Domovoy.Connectivity\Domovoy.Connectivity.csproj" />
+    </ItemGroup>
+
+</Project>

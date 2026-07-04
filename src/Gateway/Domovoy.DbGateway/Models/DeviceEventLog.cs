@@ -77,4 +77,12 @@ public static class EventKinds
 {
     public const string StateChange = "state_change";
     public const string Command = "command";
+    /// <summary>A home-mode/context change (roadmap Epic 1G).</summary>
+    public const string ModeChange = "mode_change";
+}
+
+/// <summary>Synthetic capability id used to record a home-mode change in the event-log (Epic 1G).</summary>
+public static class ContextCapabilities
+{
+    public const string HomeMode = "home_mode";
 }

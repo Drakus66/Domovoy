@@ -19,9 +19,17 @@ public class HistoryController : ControllerBase
     [HttpGet("api/events")]
     public Task<IActionResult> Events(CancellationToken ct) => Forward("api/events", ct);
 
-    /// <summary>Numeric telemetry samples over a period.</summary>
+    /// <summary>Unified activity feed: device events + automation runs + ops logs (roadmap Epic 2G).</summary>
+    [HttpGet("api/activity")]
+    public Task<IActionResult> Activity(CancellationToken ct) => Forward("api/activity", ct);
+
+    /// <summary>Numeric telemetry samples over a period (supports <c>?format=csv</c> export).</summary>
     [HttpGet("api/telemetry")]
     public Task<IActionResult> Telemetry(CancellationToken ct) => Forward("api/telemetry", ct);
+
+    /// <summary>Aggregated telemetry rollups (minute/hour/day) for trend charts (roadmap Epic 1B).</summary>
+    [HttpGet("api/telemetry/aggregate")]
+    public Task<IActionResult> TelemetryAggregate(CancellationToken ct) => Forward("api/telemetry/aggregate", ct);
 
     private async Task<IActionResult> Forward(string path, CancellationToken ct)
     {

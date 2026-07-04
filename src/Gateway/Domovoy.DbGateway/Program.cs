@@ -49,11 +49,18 @@ internal static class Program
             builder.Services.AddSingleton<IMongoDatabase>(sp =>
                 sp.GetRequiredService<IMongoClient>().GetDatabase(mongoDbSettings.DatabaseName));
 
+            // Telemetry data-platform options (retention; roadmap Epic 1B).
+            builder.Services.Configure<Config.TelemetryOptions>(
+                builder.Configuration.GetSection(Config.TelemetryOptions.SectionName));
+
             // Configure RabbitMQ
             builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
 
             // Add EventInterceptor as a hosted service
             builder.Services.AddHostedService<Services.EventInterceptor>();
+
+            // Backstop that expires silent native devices (missed offline signal / stale-after-restart).
+            builder.Services.AddHostedService<Services.DeviceLivenessWatchdog>();
 
             // Add services to the container
             builder.Services.AddEndpointsApiExplorer();
@@ -74,6 +81,12 @@ internal static class Program
             app.MapCapabilityDeviceEndpoints();
             app.MapZoneEndpoints();
             app.MapHistoryEndpoints();
+            app.MapAutomationEndpoints();
+            app.MapModeEndpoints();
+            app.MapBlockEndpoints();
+            app.MapActivityEndpoints();
+            app.MapMlEndpoints();
+            app.MapProposalsEndpoints();
             app.MapMetrics();
 
             // Health check endpoint

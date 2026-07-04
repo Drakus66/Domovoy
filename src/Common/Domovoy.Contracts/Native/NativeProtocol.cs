@@ -30,6 +30,19 @@ public static class NativeProtocol
     /// <summary>Retained device availability (LWT): <see cref="Online"/> / <see cref="Offline"/>.</summary>
     public static string AvailabilityTopic(string deviceId) => $"{Root}/{deviceId}/availability";
 
+    // Board ("hub") reachability ------------------------------------------
+
+    /// <summary>Topic root for board reachability (a board is the MQTT connection fronting many devices).</summary>
+    public const string HubRoot = "domovoy/hub";
+
+    /// <summary>
+    /// Retained board reachability, and the board's single MQTT Last-Will (payload <see cref="Online"/> /
+    /// <see cref="Offline"/>). MQTT allows only ONE last-will per connection, so it cannot be attached to a
+    /// per-device <see cref="AvailabilityTopic"/>; instead the will lives here and the adapter marks every
+    /// device fronted by the hub offline when the board drops ungracefully.
+    /// </summary>
+    public static string HubStatusTopic(string hubId) => $"{HubRoot}/{hubId}/status";
+
     /// <summary>
     /// Server→all-devices broadcast: "who is there?". Devices re-publish their <see cref="AnnounceTopic"/>
     /// in response. The server sends this when its adapter (re)starts, because RabbitMQ's MQTT plugin does
@@ -43,6 +56,7 @@ public static class NativeProtocol
     public const string AnnounceFilter = "domovoy/native/+/announce";
     public const string StateFilter = "domovoy/native/+/state";
     public const string AvailabilityFilter = "domovoy/native/+/availability";
+    public const string HubStatusFilter = "domovoy/hub/+/status";
 
     // Availability payloads ------------------------------------------------
 
@@ -54,6 +68,15 @@ public static class NativeProtocol
     {
         var parts = topic.Split('/');
         return parts.Length >= 4 && parts[0] == "domovoy" && parts[1] == "native"
+            ? parts[2]
+            : null;
+    }
+
+    /// <summary>Extracts the <c>hubId</c> segment from a <c>domovoy/hub/{hubId}/status</c> topic, or null.</summary>
+    public static string? HubIdFromStatusTopic(string topic)
+    {
+        var parts = topic.Split('/');
+        return parts.Length == 4 && parts[0] == "domovoy" && parts[1] == "hub" && parts[3] == "status"
             ? parts[2]
             : null;
     }

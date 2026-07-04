@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
 import {
   Container, Box, Typography, Stack, Button, IconButton, LinearProgress, Alert,
   Card, CardContent, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions,
@@ -15,6 +17,7 @@ const KIND_OPTIONS = ['floor', 'room', 'outdoor', 'lawn', 'bed', 'gate'];
 const EMPTY: ZoneInput = { name: '', description: '', parentZoneId: '', kind: '', order: 0 };
 
 export default function Zones() {
+  const { t } = useTranslation('zones');
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +29,7 @@ export default function Zones() {
     try {
       setZones(await zonesApi.getZones());
     } catch {
-      setError('Failed to load zones. Check ApiGateway / DbGateway connection.');
+      setError(t('errors.load'));
     } finally {
       setLoading(false);
     }
@@ -57,17 +60,17 @@ export default function Zones() {
       close();
       await fetchZones();
     } catch {
-      setError('Failed to save zone.');
+      setError(t('errors.save'));
     }
   };
 
   const remove = async (z: Zone) => {
-    if (!window.confirm(`Delete zone "${z.name}"? Devices in it become Unassigned; child zones move up.`)) return;
+    if (!window.confirm(i18n.t('zones:deleteConfirm', { name: z.name }))) return;
     try {
       await zonesApi.deleteZone(z.id);
       await fetchZones();
     } catch {
-      setError('Failed to delete zone.');
+      setError(t('errors.delete'));
     }
   };
 
@@ -87,13 +90,13 @@ export default function Zones() {
       <Box py={{ xs: 3, md: 4 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
           <Box>
-            <Typography variant="h4" component="h1" fontWeight={700}>Zones</Typography>
+            <Typography variant="h4" component="h1" fontWeight={700}>{t('title')}</Typography>
             <Typography variant="caption" color="text.secondary">
-              Areas of the home and grounds — group devices, drive climate-by-zone and automations.
+              {t('subtitle')}
             </Typography>
           </Box>
           <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={openCreate}>
-            New zone
+            {t('newZone')}
           </Button>
         </Stack>
 
@@ -103,7 +106,7 @@ export default function Zones() {
         {sorted.length === 0 && !loading ? (
           <Box textAlign="center" py={8}>
             <RoomRoundedIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-            <Typography color="text.secondary">No zones yet. Create one to start grouping devices.</Typography>
+            <Typography color="text.secondary">{t('empty')}</Typography>
           </Box>
         ) : (
           <Stack spacing={1.5}>
@@ -116,15 +119,15 @@ export default function Zones() {
                       <Typography fontWeight={700}>{z.name}</Typography>
                       {z.kind && <Chip size="small" label={z.kind} variant="outlined" />}
                       {z.parentZoneId && (
-                        <Chip size="small" label={`in ${nameById.get(z.parentZoneId) ?? '—'}`} variant="outlined" />
+                        <Chip size="small" label={t('in', { name: nameById.get(z.parentZoneId) ?? '—' })} variant="outlined" />
                       )}
                     </Stack>
                     {z.description && (
                       <Typography variant="body2" color="text.secondary" noWrap>{z.description}</Typography>
                     )}
                   </Box>
-                  <Tooltip title="Edit"><IconButton onClick={() => openEdit(z)}><EditRoundedIcon /></IconButton></Tooltip>
-                  <Tooltip title="Delete"><IconButton onClick={() => remove(z)}><DeleteOutlineRoundedIcon /></IconButton></Tooltip>
+                  <Tooltip title={t('actions.edit')}><IconButton onClick={() => openEdit(z)}><EditRoundedIcon /></IconButton></Tooltip>
+                  <Tooltip title={t('actions.delete')}><IconButton onClick={() => remove(z)}><DeleteOutlineRoundedIcon /></IconButton></Tooltip>
                 </CardContent>
               </Card>
             ))}
@@ -133,44 +136,44 @@ export default function Zones() {
       </Box>
 
       <Dialog open={draft !== null} onClose={close} fullWidth maxWidth="sm">
-        <DialogTitle>{editing ? 'Edit zone' : 'New zone'}</DialogTitle>
+        <DialogTitle>{editing ? t('dialog.editTitle') : t('dialog.newTitle')}</DialogTitle>
         <DialogContent>
           {draft && (
             <Stack spacing={2} mt={1}>
               <TextField
-                label="Name" value={draft.name} autoFocus required fullWidth
+                label={t('dialog.name')} value={draft.name} autoFocus required fullWidth
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               />
               <TextField
-                label="Description" value={draft.description ?? ''} fullWidth
+                label={t('dialog.description')} value={draft.description ?? ''} fullWidth
                 onChange={(e) => setDraft({ ...draft, description: e.target.value })}
               />
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                 <TextField
-                  select label="Parent zone" value={draft.parentZoneId ?? ''} fullWidth
+                  select label={t('dialog.parentZone')} value={draft.parentZoneId ?? ''} fullWidth
                   onChange={(e) => setDraft({ ...draft, parentZoneId: e.target.value })}
                 >
-                  <MenuItem value=""><em>None (top-level)</em></MenuItem>
+                  <MenuItem value=""><em>{t('dialog.parentNone')}</em></MenuItem>
                   {parentOptions.map((z) => <MenuItem key={z.id} value={z.id}>{z.name}</MenuItem>)}
                 </TextField>
                 <TextField
-                  select label="Kind" value={draft.kind ?? ''} fullWidth
+                  select label={t('dialog.kind')} value={draft.kind ?? ''} fullWidth
                   onChange={(e) => setDraft({ ...draft, kind: e.target.value })}
                 >
-                  <MenuItem value=""><em>None</em></MenuItem>
+                  <MenuItem value=""><em>{t('dialog.kindNone')}</em></MenuItem>
                   {KIND_OPTIONS.map((k) => <MenuItem key={k} value={k}>{k}</MenuItem>)}
                 </TextField>
               </Stack>
               <TextField
-                type="number" label="Order" value={draft.order ?? 0} sx={{ maxWidth: 140 }}
+                type="number" label={t('dialog.order')} value={draft.order ?? 0} sx={{ maxWidth: 140 }}
                 onChange={(e) => setDraft({ ...draft, order: Number(e.target.value) || 0 })}
               />
             </Stack>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={close}>Cancel</Button>
-          <Button variant="contained" onClick={save} disabled={!draft?.name.trim()}>Save</Button>
+          <Button onClick={close}>{t('actions.cancel')}</Button>
+          <Button variant="contained" onClick={save} disabled={!draft?.name.trim()}>{t('actions.save')}</Button>
         </DialogActions>
       </Dialog>
     </Container>

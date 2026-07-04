@@ -2,7 +2,7 @@
 // Validates: Requirements 7.1, 7.2, 7.3
 
 import { describe, it, expect } from 'vitest';
-import theme from './theme';
+import theme, { themeOptions, DEFAULT_THEME_ID, getTheme, isThemeId } from './theme';
 
 describe('Theme Responsive Configuration', () => {
   it('should have correct breakpoint values for responsive layouts', () => {
@@ -59,5 +59,32 @@ describe('Theme Responsive Configuration', () => {
     expect(betweenSmMd).toContain('600px');
     // between uses max-width: 959.95px (just below 960px)
     expect(betweenSmMd).toContain('959.95px');
+  });
+});
+
+describe('Theme registry', () => {
+  it('has unique ids and both color schemes per theme', () => {
+    const ids = themeOptions.map((o) => o.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const option of themeOptions) {
+      expect(option.theme.colorSchemes.light).toBeDefined();
+      expect(option.theme.colorSchemes.dark).toBeDefined();
+      expect(option.preview.light.primary).toMatch(/^#/);
+      expect(option.preview.dark.primary).toMatch(/^#/);
+    }
+  });
+
+  it('resolves the default theme and falls back on unknown ids', () => {
+    expect(isThemeId(DEFAULT_THEME_ID)).toBe(true);
+    expect(isThemeId('no-such-theme')).toBe(false);
+    expect(getTheme(DEFAULT_THEME_ID)).toBe(theme);
+    expect(getTheme('no-such-theme')).toBe(theme);
+  });
+
+  it('default theme keeps the shared structural base', () => {
+    for (const option of themeOptions) {
+      expect(option.theme.breakpoints.values.md).toBe(960);
+      expect(option.theme.shape.borderRadius).toBe(12);
+    }
   });
 });

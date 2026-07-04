@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import i18n from 'i18next';
 import { NotificationContainer } from './Notification';
 import { useUIStore } from '../../store/uiStore';
 
@@ -86,7 +87,7 @@ describe('NotificationContainer', () => {
       expect(screen.getByText('Test notification')).toBeInTheDocument();
     });
     
-    const closeButton = screen.getByLabelText('close');
+    const closeButton = screen.getByLabelText(i18n.t('common:actions.close'));
     await user.click(closeButton);
     
     await waitFor(() => {

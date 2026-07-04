@@ -1,0 +1,62 @@
+{
+  "title": "Zigbee Network",
+  "subtitle": "Data refreshes every 30s · Real-time events via SignalR",
+  "refresh": "Refresh",
+  "loadError": "Failed to load Zigbee data. Check ApiGateway connection.",
+  "pairing": {
+    "chip": "Pairing: {{time}}",
+    "label": "Pairing mode:",
+    "stop": "Stop",
+    "enabled": "Pairing mode enabled for {{duration}}s",
+    "disabled": "Pairing mode disabled",
+    "error": "Failed to change permit join state"
+  },
+  "bridge": {
+    "online": "Bridge Online",
+    "offline": "Bridge Offline",
+    "coordinator": "Coordinator",
+    "channel": "Channel",
+    "panId": "PAN ID",
+    "version": "Version",
+    "devices": "Devices",
+    "devicesSummary": "{{total}} total · {{recent}} recent"
+  },
+  "linkQuality": "Link quality: {{value}}",
+  "state": {
+    "on": "On",
+    "off": "Off",
+    "occupied": "👤 Occupied",
+    "empty": "○ Empty",
+    "closed": "🔒 Closed",
+    "open": "🔓 Open"
+  },
+  "brightness": "Brightness: {{value}}%",
+  "device": {
+    "rename": "Rename",
+    "remove": "Remove from network"
+  },
+  "events": {
+    "joined": "New device joined: {{name}}",
+    "left": "Device left network: {{name}}"
+  },
+  "empty": "No Zigbee devices found. Enable pairing mode and add a device.",
+  "renameDialog": {
+    "title": "Rename Device",
+    "currentName": "Current name:",
+    "newName": "New name",
+    "cancel": "Cancel",
+    "confirm": "Rename",
+    "success": "Renamed to \"{{name}}\"",
+    "error": "Rename failed"
+  },
+  "removeDialog": {
+    "title": "Remove Device",
+    "warning": "This will remove {{name}} from the Zigbee network.",
+    "note": "The device will need to be re-paired to join again.",
+    "cancel": "Cancel",
+    "confirm": "Remove",
+    "success": "\"{{name}}\" removed from network",
+    "error": "Remove failed"
+  },
+  "commandError": "Command failed"
+}

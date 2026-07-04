@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material/styles';
 import { BrowserRouter } from 'react-router-dom';
+import i18n from 'i18next';
 import theme from '../../theme';
 import Layout from './Layout';
 
@@ -28,8 +29,8 @@ describe('Layout', () => {
       </CssVarsProvider>
     );
     
-    const dashboardLinks = screen.getAllByText('Dashboard');
-    const logsLinks = screen.getAllByText('Logs');
+    const dashboardLinks = screen.getAllByText(i18n.t('nav:dashboard'));
+    const logsLinks = screen.getAllByText(i18n.t('nav:logs'));
     expect(dashboardLinks.length).toBeGreaterThan(0);
     expect(logsLinks.length).toBeGreaterThan(0);
   });

@@ -18,7 +18,11 @@ import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
 import NetworkCheckRoundedIcon from '@mui/icons-material/NetworkCheckRounded';
 import SensorsRoundedIcon from '@mui/icons-material/SensorsRounded';
 import DevicesOtherRoundedIcon from '@mui/icons-material/DevicesOtherRounded';
+import i18n from 'i18next';
 import type { Capability, CapabilityDevice } from '../../api/capabilityDevices';
+import { effectiveArchetype } from '../../api/capabilityDevices';
+
+const t = (key: string, options?: Record<string, unknown>) => i18n.t(`devices:${key}`, options ?? {});
 
 /** Loose coercions — adapters report state as strings, numbers or booleans. */
 export const asBool = (v: unknown) => v === true || v === 'ON' || v === 'true' || v === 1 || v === 'on';
@@ -40,44 +44,52 @@ export const CATEGORY_ACCENT: Record<DeviceCategory, string> = {
   other: '#94A3B8',
 };
 
-interface CapMeta {
-  label: string;
-  Icon: SvgIconComponent;
-}
-
-/** Human label + icon for a well-known capability id. */
-const CAPABILITY_META: Record<string, CapMeta> = {
-  on_off: { label: 'Power', Icon: PowerSettingsNewRoundedIcon },
-  brightness: { label: 'Brightness', Icon: LightbulbRoundedIcon },
-  color: { label: 'Color', Icon: PaletteRoundedIcon },
-  color_temp: { label: 'Color temperature', Icon: WbIncandescentRoundedIcon },
-  temperature: { label: 'Temperature', Icon: DeviceThermostatRoundedIcon },
-  temperature_setpoint: { label: 'Target temperature', Icon: ThermostatRoundedIcon },
-  humidity: { label: 'Humidity', Icon: WaterDropRoundedIcon },
-  co2: { label: 'CO₂', Icon: Co2RoundedIcon },
-  occupancy: { label: 'Occupancy', Icon: DirectionsRunRoundedIcon },
-  contact: { label: 'Contact', Icon: SensorDoorRoundedIcon },
-  lock: { label: 'Lock', Icon: LockRoundedIcon },
-  valve: { label: 'Valve', Icon: WaterRoundedIcon },
-  power: { label: 'Power draw', Icon: BoltRoundedIcon },
-  energy: { label: 'Energy', Icon: ElectricMeterRoundedIcon },
-  battery: { label: 'Battery', Icon: BatteryFullRoundedIcon },
-  illuminance: { label: 'Illuminance', Icon: LightModeRoundedIcon },
-  link_quality: { label: 'Link quality', Icon: NetworkCheckRoundedIcon },
+/** Icon for a well-known capability id. Labels are translated (devices:capabilities.<id>). */
+const CAPABILITY_ICONS: Record<string, SvgIconComponent> = {
+  on_off: PowerSettingsNewRoundedIcon,
+  brightness: LightbulbRoundedIcon,
+  color: PaletteRoundedIcon,
+  color_temp: WbIncandescentRoundedIcon,
+  temperature: DeviceThermostatRoundedIcon,
+  temperature_setpoint: ThermostatRoundedIcon,
+  humidity: WaterDropRoundedIcon,
+  co2: Co2RoundedIcon,
+  occupancy: DirectionsRunRoundedIcon,
+  contact: SensorDoorRoundedIcon,
+  lock: LockRoundedIcon,
+  valve: WaterRoundedIcon,
+  power: BoltRoundedIcon,
+  energy: ElectricMeterRoundedIcon,
+  battery: BatteryFullRoundedIcon,
+  illuminance: LightModeRoundedIcon,
+  link_quality: NetworkCheckRoundedIcon,
 };
 
 /** A readable label for a capability id (well-known or namespaced/custom). */
 export const capabilityLabel = (id: string): string =>
-  CAPABILITY_META[id]?.label ?? id.replace(/[_:]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  id in CAPABILITY_ICONS
+    ? t(`capabilities.${id}`)
+    : id.replace(/[_:]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 export const capabilityIcon = (id: string): SvgIconComponent =>
-  CAPABILITY_META[id]?.Icon ?? SensorsRoundedIcon;
+  CAPABILITY_ICONS[id] ?? SensorsRoundedIcon;
 
 const has = (device: CapabilityDevice, id: string) => device.capabilities.some((c) => c.id === id);
 const writable = (device: CapabilityDevice, id: string) =>
   device.capabilities.some((c) => c.id === id && c.writable);
 
+/** Backend archetype (Epic 2D) → UI category. Falls back to the capability heuristic if unknown/absent. */
+const ARCHETYPE_CATEGORY: Record<string, DeviceCategory> = {
+  light: 'light', switch: 'switch', thermostat: 'climate', valve: 'climate',
+  climate_sensor: 'sensor', motion: 'sensor', contact: 'sensor', sensor: 'sensor',
+  lock: 'security', energy_meter: 'energy', control_block: 'other',
+};
+
 export function deviceCategory(device: CapabilityDevice): DeviceCategory {
+  // Prefer the authoritative semantic archetype from the backend (Epic 2D).
+  const mapped = ARCHETYPE_CATEGORY[effectiveArchetype(device)];
+  if (mapped) return mapped;
+  // Fallback: derive from the capability set (also used when archetype is unknown/absent).
   if (has(device, 'brightness') || has(device, 'color') || has(device, 'color_temp')) return 'light';
   if (has(device, 'lock')) return 'security';
   if (has(device, 'temperature_setpoint') || has(device, 'valve')) return 'climate';
@@ -134,22 +146,24 @@ export function describeDevice(device: CapabilityDevice): DeviceVisual {
     case 'light': {
       const bri = 'brightness' in state ? Math.round(asNum(state.brightness)) : undefined;
       isActive = on;
-      primary = on ? `On${bri !== undefined ? ` · ${bri}%` : ''}` : 'Off';
+      primary = on
+        ? (bri !== undefined ? t('headline.onWithBrightness', { brightness: bri }) : t('headline.on'))
+        : t('headline.off');
       break;
     }
     case 'switch': {
       isActive = on;
-      primary = on ? 'On' : 'Off';
+      primary = on ? t('headline.on') : t('headline.off');
       break;
     }
     case 'security': {
       const locked = asBool(state.lock);
       isActive = !locked; // unlocked = needs attention
-      primary = locked ? 'Locked' : 'Unlocked';
+      primary = locked ? t('headline.locked') : t('headline.unlocked');
       break;
     }
     case 'climate': {
-      if ('temperature_setpoint' in state) primary = `${fmtNum(state.temperature_setpoint, '°C')} target`;
+      if ('temperature_setpoint' in state) primary = t('headline.target', { value: fmtNum(state.temperature_setpoint, '°C') });
       else if ('temperature' in state) primary = fmtNum(state.temperature, '°C');
       else if ('valve' in state) primary = fmtNum(state.valve, '%');
       break;
@@ -176,8 +190,8 @@ function sensorHeadline(device: CapabilityDevice, state: Record<string, unknown>
   if ('humidity' in state) return fmtNum(state.humidity, '%');
   if ('co2' in state) return fmtNum(state.co2, 'ppm');
   if ('illuminance' in state) return fmtNum(state.illuminance, 'lux');
-  if ('occupancy' in state) return asBool(state.occupancy) ? 'Motion' : 'Clear';
-  if ('contact' in state) return asBool(state.contact) ? 'Open' : 'Closed';
+  if ('occupancy' in state) return asBool(state.occupancy) ? t('headline.motion') : t('headline.clear');
+  if ('contact' in state) return asBool(state.contact) ? t('headline.open') : t('headline.closed');
   if ('battery' in state) return fmtNum(state.battery, '%');
   const prim = primaryCapability(device);
   if (prim && prim.id in state) return String(state[prim.id]);
@@ -199,7 +213,7 @@ function capabilityIconForCategory(category: DeviceCategory): SvgIconComponent {
 /** Human-readable value for one capability (used in the detail drawer rows). */
 export function formatCapabilityValue(cap: Capability, value: unknown): string {
   if (value === undefined || value === null || value === '') return '—';
-  if (cap.kind === 'Boolean') return asBool(value) ? 'Yes' : 'No';
+  if (cap.kind === 'Boolean') return asBool(value) ? t('value.yes') : t('value.no');
   if (cap.kind === 'Number') return fmtNum(value, cap.unit);
   return String(value);
 }

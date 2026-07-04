@@ -14,6 +14,9 @@ import {
   Divider,
   LinearProgress,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
+import { fmtTime } from '../i18n/format';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
@@ -93,7 +96,7 @@ function ServiceRow({ service }: { service: ServiceStatus }) {
         </Box>
       </Box>
       <Chip
-        label={service.isUp ? 'Online' : 'Offline'}
+        label={service.isUp ? i18n.t('status:status.online') : i18n.t('status:status.offline')}
         size="small"
         color={service.isUp ? 'success' : 'error'}
         variant="outlined"
@@ -103,6 +106,7 @@ function ServiceRow({ service }: { service: ServiceStatus }) {
 }
 
 function SystemStatus() {
+  const { t } = useTranslation('status');
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [summary, setSummary] = useState<SystemSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -120,11 +124,11 @@ function SystemStatus() {
       setSummary(sum);
       setLastUpdated(new Date());
     } catch {
-      setError('Failed to load system metrics. Check that API Gateway is reachable.');
+      setError(t('loadError'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchData();
@@ -144,15 +148,15 @@ function SystemStatus() {
         <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
           <Box>
             <Typography variant="h4" fontWeight={600}>
-              System Status
+              {t('title')}
             </Typography>
             {lastUpdated && (
               <Typography variant="caption" color="text.secondary">
-                Updated: {lastUpdated.toLocaleTimeString()} · auto-refresh every 30s
+                {t('updatedAt', { time: fmtTime(lastUpdated) })}
               </Typography>
             )}
           </Box>
-          <Tooltip title="Refresh now">
+          <Tooltip title={t('refreshNow')}>
             <span>
               <IconButton onClick={fetchData} disabled={loading}>
                 <RefreshIcon />
@@ -173,7 +177,7 @@ function SystemStatus() {
         <Grid container spacing={2} mb={3}>
           <Grid item xs={6} sm={3}>
             <SummaryCard
-              title="Services online"
+              title={t('cards.servicesOnline')}
               value={services.length ? `${servicesOnline} / ${services.length}` : null}
               icon={<CheckCircleIcon />}
               color={allOnline ? 'success.main' : 'warning.main'}
@@ -181,14 +185,14 @@ function SystemStatus() {
           </Grid>
           <Grid item xs={6} sm={3}>
             <SummaryCard
-              title="MQTT connections"
+              title={t('cards.mqttConnections')}
               value={summary?.mqttConnections ?? null}
               icon={<WifiIcon />}
             />
           </Grid>
           <Grid item xs={6} sm={3}>
             <SummaryCard
-              title="Memory usage"
+              title={t('cards.memoryUsage')}
               value={summary?.memoryMb ?? null}
               unit="MB"
               icon={<MemoryIcon />}
@@ -196,7 +200,7 @@ function SystemStatus() {
           </Grid>
           <Grid item xs={6} sm={3}>
             <SummaryCard
-              title="API req/s"
+              title={t('cards.apiRate')}
               value={summary?.apiRequestRate !== null && summary?.apiRequestRate !== undefined
                 ? summary.apiRequestRate.toFixed(2)
                 : null}
@@ -211,7 +215,7 @@ function SystemStatus() {
           <Box mb={3}>
             <Box display="flex" justifyContent="space-between" mb={0.5}>
               <Typography variant="body2" color="text.secondary">
-                Overall health
+                {t('overallHealth')}
               </Typography>
               <Typography variant="body2" fontWeight={600}>
                 {healthPct}%
@@ -230,7 +234,7 @@ function SystemStatus() {
         <Card variant="outlined">
           <Box px={2} pt={2} pb={1}>
             <Typography variant="subtitle1" fontWeight={600}>
-              Services
+              {t('services')}
             </Typography>
           </Box>
           <Divider />
@@ -240,7 +244,7 @@ function SystemStatus() {
             </Box>
           ) : services.length === 0 ? (
             <Box py={4} textAlign="center">
-              <Typography color="text.secondary">No data received from Prometheus</Typography>
+              <Typography color="text.secondary">{t('noData')}</Typography>
             </Box>
           ) : (
             services
