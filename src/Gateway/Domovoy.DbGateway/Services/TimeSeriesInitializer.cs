@@ -59,6 +59,57 @@ public static class TimeSeriesInitializer
             if (name == SensorReadingsCollection)
                 await ApplyRetention(database, name, rawRetentionDays, logger, ct);
         }
+
+        await EnsureIndexesAsync(database, logger, ct);
+    }
+
+    /// <summary>
+    /// Secondary indexes matching the query shapes of <c>/api/events</c>, <c>/api/telemetry</c> and the
+    /// automation-history endpoints — without them every filtered read is a collection scan. Idempotent
+    /// (CreateMany on an existing identical index is a no-op); requires MongoDB 6.3+ for non-meta fields
+    /// on time-series collections, so failures only log a warning.
+    /// </summary>
+    private static async Task EnsureIndexesAsync(IMongoDatabase database, ILogger logger, CancellationToken ct)
+    {
+        var events = database.GetCollection<BsonDocument>(DeviceEventsCollection);
+        await CreateIndexes(events, logger, ct,
+            ("Meta.DeviceId", "Timestamp"),
+            ("Meta.ZoneId", "Timestamp"),
+            ("CapabilityId", "Timestamp"));
+
+        var readings = database.GetCollection<BsonDocument>(SensorReadingsCollection);
+        await CreateIndexes(readings, logger, ct,
+            ("Meta.DeviceId", "Timestamp"),
+            ("Meta.ZoneId", "Timestamp"),
+            ("Meta.CapabilityId", "Timestamp"));
+
+        var history = database.GetCollection<BsonDocument>(Endpoints.AutomationEndpoints.HistoryCollection);
+        await CreateIndexes(history, logger, ct,
+            ("RuleId", "Timestamp"));
+        await CreateIndexes(history, logger, ct, (null, "Timestamp"));
+    }
+
+    private static async Task CreateIndexes(
+        IMongoCollection<BsonDocument> collection, ILogger logger, CancellationToken ct,
+        params (string? Eq, string Time)[] shapes)
+    {
+        foreach (var (eq, time) in shapes)
+        {
+            var keys = eq is null
+                ? Builders<BsonDocument>.IndexKeys.Descending(time)
+                : Builders<BsonDocument>.IndexKeys.Ascending(eq).Descending(time);
+            try
+            {
+                await collection.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(keys), cancellationToken: ct);
+                logger.LogInformation("Index on {Collection} ({Eq}, {Time}) ensured",
+                    collection.CollectionNamespace.CollectionName, eq ?? "-", time);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not create index on {Collection} ({Eq}, {Time})",
+                    collection.CollectionNamespace.CollectionName, eq ?? "-", time);
+            }
+        }
     }
 
     /// <summary>Set (or clear when 0) the TTL on an existing collection via <c>collMod</c>.</summary>
