@@ -59,6 +59,9 @@ internal static class Program
             // Add EventInterceptor as a hosted service
             builder.Services.AddHostedService<Services.EventInterceptor>();
 
+            // Backstop that expires silent native devices (missed offline signal / stale-after-restart).
+            builder.Services.AddHostedService<Services.DeviceLivenessWatchdog>();
+
             // Add services to the container
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddOpenApi();
@@ -83,6 +86,7 @@ internal static class Program
             app.MapBlockEndpoints();
             app.MapActivityEndpoints();
             app.MapMlEndpoints();
+            app.MapProposalsEndpoints();
             app.MapMetrics();
 
             // Health check endpoint

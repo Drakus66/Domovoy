@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 
+using Domovoy.Common.Configuration;
+using Domovoy.Common.Models.Events;
 using Domovoy.Contracts.Capabilities;
 using Domovoy.Contracts.Home;
 using Domovoy.Contracts.Messaging;
@@ -47,6 +49,19 @@ public class EventInterceptor : BackgroundService
     /// </summary>
     private volatile string _currentMode = WellKnownModes.Default;
 
+    /// <summary>
+    /// Adapter source of Zigbee capability devices (matches <c>Zigbee2MqttAdapter.Name</c>). Used to
+    /// scope the bridge-down offline sweep so only Zigbee devices are marked unreachable.
+    /// </summary>
+    private const string ZigbeeAdapterSource = "Zigbee2Mqtt";
+
+    /// <summary>
+    /// Last observed Zigbee bridge state. The adapter re-publishes the state every ~15s, so we only act
+    /// on the online→offline transition (or the first offline seen) to avoid rewriting the read-model
+    /// on every heartbeat. <c>null</c> until the first bridge event arrives.
+    /// </summary>
+    private bool? _zigbeeBridgeOnline;
+
     private sealed record RecentCommand(DateTime At, string TriggerSource, string? CorrelationId, IReadOnlyDictionary<string, object?> Set);
 
     public EventInterceptor(
@@ -91,6 +106,16 @@ public class EventInterceptor : BackgroundService
             BusTopology.EventsExchange,
             BusTopology.DeviceOnlineChangedKey,
             HandleCapabilityOnline);
+
+        // Zigbee bridge state (coordinator/stick up-down). The Zigbee2Mqtt adapter never emits a
+        // per-device DeviceOnlineChangedV1, so a disconnected stick would otherwise leave every paired
+        // device stuck as IsOnline=true in the read-model. When the bridge drops we sweep all Zigbee
+        // devices offline so the dashboard agrees with the (staleness-based) Zigbee page.
+        await _messageBus.SubscribeAsync<ZigbeeBridgeStateEvent>(
+            "dbgateway-zigbee-bridge-state",
+            MessageBusConfiguration.ZigbeeBridgeExchange,
+            MessageBusConfiguration.ZigbeeBridgeStateRoutingKey,
+            HandleZigbeeBridgeState);
 
         // Commands are logged for audit and to attribute later state changes to a trigger (P0-5).
         await _messageBus.SubscribeAsync<Envelope<DeviceCommandV1>>(
@@ -202,6 +227,41 @@ public class EventInterceptor : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating availability for {DeviceId}", change.DeviceId);
+        }
+    }
+
+    /// <summary>
+    /// Marks all Zigbee devices offline when the bridge (coordinator/stick) goes down. Acts only on the
+    /// online→offline transition — the adapter re-emits the state on a ~15s heartbeat, so a naive handler
+    /// would rewrite the collection repeatedly. Devices flip back to online on their own as they re-report
+    /// state/discovery once the bridge returns, so the online transition needs no action here.
+    /// </summary>
+    private async Task HandleZigbeeBridgeState(ZigbeeBridgeStateEvent ev)
+    {
+        var wasOnline = _zigbeeBridgeOnline;
+        _zigbeeBridgeOnline = ev.IsOnline;
+
+        // Only sweep on the first offline we see or a true→false edge. Ignore the online transition
+        // and the repeated offline heartbeats.
+        if (ev.IsOnline || wasOnline == false) return;
+
+        try
+        {
+            var collection = _database.GetCollection<CapabilityDeviceDocument>(CapabilityCollection);
+            var filter = Builders<CapabilityDeviceDocument>.Filter.Eq(x => x.AdapterSource, ZigbeeAdapterSource)
+                & Builders<CapabilityDeviceDocument>.Filter.Eq(x => x.IsOnline, true);
+            var update = Builders<CapabilityDeviceDocument>.Update
+                .Set(x => x.IsOnline, false)
+                .Set(x => x.LastUpdated, DateTime.UtcNow);
+
+            var result = await collection.UpdateManyAsync(filter, update);
+            if (result.ModifiedCount > 0)
+                _logger.LogInformation(
+                    "Zigbee bridge offline — marked {Count} Zigbee device(s) offline", result.ModifiedCount);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sweeping Zigbee devices offline after bridge drop");
         }
     }
 
