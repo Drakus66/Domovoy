@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Typography, Skeleton, useTheme } from '@mui/material';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts';
 import { historyApi, AggregateBucket } from '../../api/history';
+import { fmtTime, fmtDateTime } from '../../i18n/format';
 
 interface Props {
   capabilityId: string;
@@ -24,6 +26,7 @@ export default function TelemetryChart({
   capabilityId, deviceId, zoneId, unit, hours = 24, bucket = 'hour', height = 200,
 }: Props) {
   const theme = useTheme();
+  const { t } = useTranslation('devices');
   const [data, setData] = useState<AggregateBucket[] | null>(null);
   const [error, setError] = useState(false);
 
@@ -40,10 +43,10 @@ export default function TelemetryChart({
     return () => { cancelled = true; };
   }, [capabilityId, deviceId, zoneId, from, bucket]);
 
-  if (error) return <Typography variant="caption" color="text.secondary">Could not load history.</Typography>;
+  if (error) return <Typography variant="caption" color="text.secondary">{t('chart.loadError')}</Typography>;
   if (data === null) return <Skeleton variant="rounded" height={height} />;
   if (data.length === 0) {
-    return <Typography variant="caption" color="text.secondary">No samples in the last {hours}h.</Typography>;
+    return <Typography variant="caption" color="text.secondary">{t('chart.noSamples', { hours })}</Typography>;
   }
 
   const series = data.map((b) => ({
@@ -53,8 +56,8 @@ export default function TelemetryChart({
     max: Number(b.max.toFixed(2)),
   }));
 
-  const fmtTime = (t: number) =>
-    new Date(t).toLocaleTimeString([], bucket === 'day' ? { month: 'short', day: 'numeric' } : { hour: '2-digit', minute: '2-digit' });
+  const fmtAxisTick = (ts: number) =>
+    fmtTime(ts, bucket === 'day' ? { month: 'short', day: 'numeric' } : { hour: '2-digit', minute: '2-digit' });
 
   const accent = theme.palette.primary.main;
 
@@ -71,7 +74,7 @@ export default function TelemetryChart({
           <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} vertical={false} />
           <XAxis
             dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']}
-            tickFormatter={fmtTime} tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
+            tickFormatter={fmtAxisTick} tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
             minTickGap={32} stroke={theme.palette.divider}
           />
           <YAxis
@@ -86,11 +89,11 @@ export default function TelemetryChart({
               border: `1px solid ${theme.palette.divider}`,
               borderRadius: 8, fontSize: 12,
             }}
-            labelFormatter={(t) => new Date(Number(t)).toLocaleString()}
+            labelFormatter={(label) => fmtDateTime(new Date(Number(label)).toISOString())}
             formatter={(value: number, name: string) => [`${value}${unit ?? ''}`, name]}
           />
           <Area
-            type="monotone" dataKey="avg" name="avg"
+            type="monotone" dataKey="avg" name={t('chart.avg')}
             stroke={accent} strokeWidth={2} fill={`url(#grad-${capabilityId})`}
             isAnimationActive={false} dot={false}
           />

@@ -1,0 +1,89 @@
+{
+  "brand": "Domovoy",
+  "language": {
+    "label": "Language"
+  },
+  "theme": {
+    "label": "Theme"
+  },
+  "themes": {
+    "domovoy": "Indigo & warm honey — the hearth default",
+    "skazka": "Folk tale: khokhloma red, gold & birch",
+    "jarvis": "Butler-grade HUD: graphite, cyan & brass",
+    "cosmos": "Deep space: nebula violet & starlight cyan",
+    "aurora": "Polar night: aurora glow & violet",
+    "malachite": "Ural tales: malachite green & copper",
+    "gzhel": "Porcelain: cobalt brushwork on white",
+    "nisse": "Winter farmstead: falu red, snow & straw",
+    "zashiki": "Tatami & indigo: washi, vermilion, matcha",
+    "alux": "Maya guardian: cenote turquoise & maize",
+    "brownie": "Scottish hearth: heather, oat & caramel",
+    "cluricaun": "Irish cellar: stout, clover & whiskey"
+  },
+  "colorMode": {
+    "toLight": "Switch to light",
+    "toDark": "Switch to dark",
+    "ariaLabel": "toggle color mode"
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create",
+    "delete": "Delete",
+    "close": "Close",
+    "add": "Add",
+    "search": "Search",
+    "back": "Back",
+    "retry": "Retry",
+    "openMenu": "open drawer"
+  },
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "onlineOnly": "Online only",
+    "all": "All",
+    "loading": "Loading…",
+    "enabled": "enabled",
+    "disabled": "disabled",
+    "none": "None",
+    "on": "on",
+    "off": "off",
+    "unassigned": "Unassigned",
+    "noSamples": "no samples yet"
+  },
+  "hearth": {
+    "ariaLabel": "system health",
+    "lit": "The hearth is lit — all {{count}} services up",
+    "smoldering": "The hearth smolders — {{up}} of {{total}} services up",
+    "cold": "The hearth is cold — no metrics"
+  },
+  "digest": {
+    "greeting": {
+      "Home": "Everyone is home",
+      "Away": "Watching over the empty house",
+      "Night": "The house is asleep",
+      "Vacation": "Standing guard while you are away",
+      "mode": "Mode: {{mode}}"
+    },
+    "adjustmentsToday_one": "I've made {{count}} adjustment today",
+    "adjustmentsToday_other": "I've made {{count}} adjustments today",
+    "quietDay": "a quiet day — no adjustments needed yet",
+    "suggestionsWaiting_one": "{{count}} suggestion waiting for you",
+    "suggestionsWaiting_other": "{{count}} suggestions waiting for you"
+  },
+  "newResident": "A new resident has moved in: {{name}}",
+  "error": {
+    "title": "Something went wrong",
+    "appError": "Application Error",
+    "unexpected": "An unexpected error occurred",
+    "body": "We're sorry for the inconvenience. The application encountered an error and couldn't continue. You can try to reload the page or reset the application.",
+    "tryAgain": "Try Again",
+    "reload": "Reload Page"
+  },
+  "notFound": {
+    "title": "I haven't been in this room yet",
+    "body": "There is nothing at {{path}}.",
+    "back": "Back to the dashboard"
+  }
+}

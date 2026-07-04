@@ -1,0 +1,36 @@
+{
+  "title": "Plugins",
+  "subtitle": "Out-of-process integrations over the bus. Each declares the resources it needs; the supervisor runs only those the host can satisfy, isolated from the core.",
+  "host": "Host: {{cores}} cores · {{memoryMb}} MB · GPU {{gpu}} · internet {{internet}}",
+  "yes": "yes",
+  "no": "no",
+  "resources": {
+    "cores": "{{count}} cores",
+    "memoryMb": "{{memoryMb}} MB",
+    "gpu": "GPU",
+    "internet": "internet",
+    "none": "no special resources"
+  },
+  "needs": "Needs {{resources}}",
+  "provides": " · provides {{capabilities}}",
+  "version": "v{{version}}",
+  "errors": {
+    "load": "Failed to load plugins. Check ApiGateway / PluginSupervisor connection.",
+    "start": "Failed to start {{name}}.",
+    "stop": "Failed to stop {{name}}."
+  },
+  "empty": "No plugins discovered. Drop a folder with a plugin.json into the plugins root.",
+  "actions": {
+    "start": "Start",
+    "stop": "Stop"
+  },
+  "status": {
+    "Running": "Running",
+    "Starting": "Starting",
+    "Blocked": "Blocked",
+    "Failed": "Failed",
+    "Disabled": "Disabled",
+    "Stopped": "Stopped",
+    "Discovered": "Discovered"
+  }
+}

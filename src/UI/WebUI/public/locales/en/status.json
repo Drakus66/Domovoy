@@ -1,0 +1,19 @@
+{
+  "title": "System Status",
+  "updatedAt": "Updated: {{time}} · auto-refresh every 30s",
+  "refreshNow": "Refresh now",
+  "loadError": "Failed to load system metrics. Check that API Gateway is reachable.",
+  "cards": {
+    "servicesOnline": "Services online",
+    "mqttConnections": "MQTT connections",
+    "memoryUsage": "Memory usage",
+    "apiRate": "API req/s"
+  },
+  "overallHealth": "Overall health",
+  "services": "Services",
+  "status": {
+    "online": "Online",
+    "offline": "Offline"
+  },
+  "noData": "No data received from Prometheus"
+}

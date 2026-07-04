@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactFlow, { Background, Controls, MarkerType, type Edge, type Node, type NodeProps } from 'reactflow';
 import 'reactflow/dist/style.css';
 import {
@@ -70,6 +71,7 @@ const STATUS_OPTIONS: RuleStatus[] = ['Active', 'Shadow', 'Disabled'];
 // ---- page -------------------------------------------------------------------
 
 export default function Flow() {
+  const { t: tr } = useTranslation('flow');
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [devices, setDevices] = useState<CapabilityDevice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,7 +80,7 @@ export default function Flow() {
 
   // Editable rule model.
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [name, setName] = useState('New flow');
+  const [name, setName] = useState(tr('newFlow'));
   const [status, setStatus] = useState<RuleStatus>('Active');
   const [trigger, setTrigger] = useState<RuleTrigger>({ type: 'DeviceState', operator: 'eq', value: true });
   const [conditions, setConditions] = useState<RuleCondition[]>([]);
@@ -92,11 +94,11 @@ export default function Flow() {
       setRules(r);
       setDevices(d);
     } catch {
-      setError('Failed to load. Check ApiGateway / DbGateway connection.');
+      setError(tr('loadError'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tr]);
   useEffect(() => { load(); }, [load]);
   // Live device state for context while authoring (realtime-ish via poll).
   useEffect(() => {
@@ -121,7 +123,7 @@ export default function Flow() {
   };
   const newRule = () => {
     setEditingId(null);
-    setName('New flow');
+    setName(tr('newFlow'));
     setStatus('Active');
     setTrigger({ type: 'DeviceState', operator: 'eq', value: true });
     setConditions([]);
@@ -134,39 +136,39 @@ export default function Flow() {
     if (t.type === 'DeviceState') {
       const lv = liveValue(t.deviceId, t.capabilityId);
       return [
-        `${t.capabilityId ?? 'any'} ${t.operator ?? 'eq'} ${fmt(t.value)}`,
+        `${t.capabilityId ?? tr('summary.any')} ${t.operator ?? 'eq'} ${fmt(t.value)}`,
         deviceName(t.deviceId),
-        ...(lv !== undefined ? [`now: ${fmt(lv)}`] : []),
+        ...(lv !== undefined ? [tr('summary.now', { value: fmt(lv) })] : []),
       ];
     }
-    if (t.type === 'Time') return [`cron ${t.cron ?? ''}`];
+    if (t.type === 'Time') return [tr('summary.cron', { value: t.cron ?? '' })];
     return [`${t.sun ?? 'sun'}${t.offsetMinutes ? ` ${t.offsetMinutes > 0 ? '+' : ''}${t.offsetMinutes}m` : ''}`];
   };
   const conditionSummary = (c: RuleCondition): string[] => {
-    if (c.type === 'Sun') return [c.dark === false ? 'while light' : 'while dark'];
+    if (c.type === 'Sun') return [c.dark === false ? tr('summary.whileLight') : tr('summary.whileDark')];
     if (c.type === 'TimeOfDay') return [`${c.fromTime}–${c.toTime}`];
-    if (c.type === 'Mode') return [`mode ${c.mode}`];
+    if (c.type === 'Mode') return [tr('summary.mode', { mode: c.mode })];
     return [`${c.capabilityId ?? '?'} ${c.operator ?? 'eq'} ${fmt(c.value)}`, deviceName(c.deviceId)];
   };
   const actionSummary = (a: RuleAction): string[] => {
-    if (a.type === 'Command') return [`set ${Object.entries(a.set ?? {}).map(([k, v]) => `${k}=${fmt(v)}`).join(', ') || '…'}`, deviceName(a.deviceId)];
-    if (a.type === 'Delay') return [`wait ${a.delaySeconds ?? 0}s`];
-    return [`notify "${a.message ?? ''}"`];
+    if (a.type === 'Command') return [tr('summary.set', { value: Object.entries(a.set ?? {}).map(([k, v]) => `${k}=${fmt(v)}`).join(', ') || '…' }), deviceName(a.deviceId)];
+    if (a.type === 'Delay') return [tr('summary.wait', { seconds: a.delaySeconds ?? 0 })];
+    return [tr('summary.notify', { message: a.message ?? '' })];
   };
 
   const nodes: Node<CardData>[] = useMemo(() => {
     const list: Node<CardData>[] = [];
     list.push({
       id: 'trigger', type: 'card', position: { x: 0, y: 140 },
-      data: { title: 'When', lines: triggerSummary(trigger), tone: 'trigger', selected: selection?.kind === 'trigger' },
+      data: { title: tr('card.when'), lines: triggerSummary(trigger), tone: 'trigger', selected: selection?.kind === 'trigger' },
     });
     conditions.forEach((c, i) => list.push({
       id: `cond-${i}`, type: 'card', position: { x: 320, y: i * 130 },
-      data: { title: 'And if', lines: conditionSummary(c), tone: 'condition', selected: selection?.kind === 'condition' && selection.index === i },
+      data: { title: tr('card.andIf'), lines: conditionSummary(c), tone: 'condition', selected: selection?.kind === 'condition' && selection.index === i },
     }));
     actions.forEach((a, i) => list.push({
       id: `act-${i}`, type: 'card', position: { x: 640, y: i * 130 },
-      data: { title: `Then ${i + 1}`, lines: actionSummary(a), tone: 'action', selected: selection?.kind === 'action' && selection.index === i },
+      data: { title: tr('card.then', { index: i + 1 }), lines: actionSummary(a), tone: 'action', selected: selection?.kind === 'action' && selection.index === i },
     }));
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -193,7 +195,7 @@ export default function Flow() {
   // ---- save ----
   const save = async () => {
     setError(null); setInfo(null);
-    if (!name.trim()) { setError('Name is required.'); return; }
+    if (!name.trim()) { setError(tr('nameRequired')); return; }
     const payload: NewRule = {
       name: name.trim(), description: null, status,
       triggers: [trigger], conditions, actions,
@@ -202,15 +204,15 @@ export default function Flow() {
       if (editingId) {
         const existing = rules.find((r) => r.id === editingId)!;
         await automationsApi.updateRule(editingId, { ...existing, ...payload });
-        setInfo('Flow updated.');
+        setInfo(tr('updated'));
       } else {
         const created = await automationsApi.createRule(payload);
         setEditingId(created.id);
-        setInfo('Flow created.');
+        setInfo(tr('created'));
       }
       await load();
     } catch {
-      setError('Failed to save flow.');
+      setError(tr('saveError'));
     }
   };
 
@@ -219,19 +221,19 @@ export default function Flow() {
       <Box py={{ xs: 2, md: 3 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" useFlexGap>
           <Box>
-            <Typography variant="h4" component="h1" fontWeight={700}>Flow editor</Typography>
+            <Typography variant="h4" component="h1" fontWeight={700}>{tr('title')}</Typography>
             <Typography variant="caption" color="text.secondary">
-              Visual trigger → conditions → actions, Homey-style. Click a card to edit it on the right.
+              {tr('subtitle')}
             </Typography>
           </Box>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-            <TextField select size="small" label="Open" value={editingId ?? ''} sx={{ minWidth: 180 }}
+            <TextField select size="small" label={tr('open')} value={editingId ?? ''} sx={{ minWidth: 180 }}
               onChange={(e) => { const r = rules.find((x) => x.id === e.target.value); if (r) loadRule(r); }}>
-              <MenuItem value=""><em>— select a flow —</em></MenuItem>
+              <MenuItem value=""><em>{tr('selectFlow')}</em></MenuItem>
               {rules.filter((r) => !r.isProtected).map((r) => <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>)}
             </TextField>
-            <Button onClick={newRule}>New</Button>
-            <Button variant="contained" startIcon={<SaveRoundedIcon />} onClick={save}>Save</Button>
+            <Button onClick={newRule}>{tr('new')}</Button>
+            <Button variant="contained" startIcon={<SaveRoundedIcon />} onClick={save}>{tr('save')}</Button>
           </Stack>
         </Stack>
 
@@ -275,6 +277,7 @@ function SidePanel(props: {
   actions: RuleAction[]; setActions: (a: RuleAction[]) => void;
   setSelection: (s: Selection) => void;
 }) {
+  const { t: tr } = useTranslation('flow');
   const {
     name, setName, status, setStatus, selection, devices,
     trigger, setTrigger, conditions, setConditions, actions, setActions, setSelection,
@@ -288,13 +291,13 @@ function SidePanel(props: {
 
   return (
     <Stack spacing={2}>
-      <TextField label="Flow name" size="small" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
-      <TextField select label="Status" size="small" value={status} onChange={(e) => setStatus(e.target.value as RuleStatus)} fullWidth>
+      <TextField label={tr('panel.flowName')} size="small" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
+      <TextField select label={tr('panel.status')} size="small" value={status} onChange={(e) => setStatus(e.target.value as RuleStatus)} fullWidth>
         {STATUS_OPTIONS.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
       </TextField>
       <Stack direction="row" spacing={1}>
-        <Button size="small" startIcon={<AddRoundedIcon />} onClick={addCondition}>Condition</Button>
-        <Button size="small" startIcon={<AddRoundedIcon />} onClick={addAction}>Action</Button>
+        <Button size="small" startIcon={<AddRoundedIcon />} onClick={addCondition}>{tr('panel.condition')}</Button>
+        <Button size="small" startIcon={<AddRoundedIcon />} onClick={addAction}>{tr('panel.action')}</Button>
       </Stack>
       <Divider />
 
@@ -304,8 +307,8 @@ function SidePanel(props: {
       {selection?.kind === 'condition' && conditions[selection.index] && (
         <Stack spacing={2}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="subtitle2">Condition {selection.index + 1}</Typography>
-            <Tooltip title="Delete"><IconButton size="small" onClick={() => delCondition(selection.index)}><DeleteOutlineRoundedIcon fontSize="small" /></IconButton></Tooltip>
+            <Typography variant="subtitle2">{tr('panel.conditionN', { index: selection.index + 1 })}</Typography>
+            <Tooltip title={tr('panel.delete')}><IconButton size="small" onClick={() => delCondition(selection.index)}><DeleteOutlineRoundedIcon fontSize="small" /></IconButton></Tooltip>
           </Stack>
           <ConditionEditor devices={devices} caps={caps} value={conditions[selection.index]}
             onChange={(c) => setConditions(conditions.map((x, i) => (i === selection.index ? c : x)))} />
@@ -314,14 +317,14 @@ function SidePanel(props: {
       {selection?.kind === 'action' && actions[selection.index] && (
         <Stack spacing={2}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="subtitle2">Action {selection.index + 1}</Typography>
-            <Tooltip title="Delete"><IconButton size="small" onClick={() => delAction(selection.index)}><DeleteOutlineRoundedIcon fontSize="small" /></IconButton></Tooltip>
+            <Typography variant="subtitle2">{tr('panel.actionN', { index: selection.index + 1 })}</Typography>
+            <Tooltip title={tr('panel.delete')}><IconButton size="small" onClick={() => delAction(selection.index)}><DeleteOutlineRoundedIcon fontSize="small" /></IconButton></Tooltip>
           </Stack>
           <ActionEditor devices={devices} caps={caps} value={actions[selection.index]}
             onChange={(a) => setActions(actions.map((x, i) => (i === selection.index ? a : x)))} />
         </Stack>
       )}
-      {!selection && <Typography variant="body2" color="text.secondary">Select a card to edit it.</Typography>}
+      {!selection && <Typography variant="body2" color="text.secondary">{tr('panel.selectCard')}</Typography>}
     </Stack>
   );
 }
@@ -330,44 +333,45 @@ function TriggerEditor({ devices, caps, value, onChange }: {
   devices: CapabilityDevice[]; caps: (id?: string | null) => CapabilityDevice['capabilities'];
   value: RuleTrigger; onChange: (t: RuleTrigger) => void;
 }) {
+  const { t: tr } = useTranslation('flow');
   return (
     <Stack spacing={2}>
-      <Typography variant="subtitle2">When (trigger)</Typography>
-      <TextField select label="Type" size="small" value={value.type}
+      <Typography variant="subtitle2">{tr('trigger.heading')}</Typography>
+      <TextField select label={tr('trigger.type')} size="small" value={value.type}
         onChange={(e) => onChange({ ...value, type: e.target.value as RuleTrigger['type'] })}>
         {['DeviceState', 'Time', 'Sun'].map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
       </TextField>
       {value.type === 'DeviceState' && (
         <>
-          <TextField select label="Device" size="small" value={value.deviceId ?? ''}
+          <TextField select label={tr('trigger.device')} size="small" value={value.deviceId ?? ''}
             onChange={(e) => onChange({ ...value, deviceId: e.target.value, capabilityId: '' })}>
             {devices.map((d) => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
           </TextField>
-          <TextField select label="Capability" size="small" value={value.capabilityId ?? ''} disabled={!value.deviceId}
+          <TextField select label={tr('trigger.capability')} size="small" value={value.capabilityId ?? ''} disabled={!value.deviceId}
             onChange={(e) => onChange({ ...value, capabilityId: e.target.value })}>
             {caps(value.deviceId).map((c) => <MenuItem key={c.id} value={c.id}>{c.id}</MenuItem>)}
           </TextField>
           <Stack direction="row" spacing={1}>
-            <TextField select label="Op" size="small" value={value.operator ?? 'eq'} sx={{ width: 110 }}
+            <TextField select label={tr('trigger.op')} size="small" value={value.operator ?? 'eq'} sx={{ width: 110 }}
               onChange={(e) => onChange({ ...value, operator: e.target.value })}>
               {OPERATORS.map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}
             </TextField>
-            <TextField label="Value" size="small" fullWidth disabled={value.operator === 'changed'}
+            <TextField label={tr('trigger.value')} size="small" fullWidth disabled={value.operator === 'changed'}
               value={fmt(value.value)} onChange={(e) => onChange({ ...value, value: parseValue(e.target.value) })} />
           </Stack>
         </>
       )}
       {value.type === 'Time' && (
-        <TextField label="Cron (m h dom mon dow)" size="small" value={value.cron ?? ''}
+        <TextField label={tr('trigger.cron')} size="small" value={value.cron ?? ''}
           onChange={(e) => onChange({ ...value, cron: e.target.value })} />
       )}
       {value.type === 'Sun' && (
         <Stack direction="row" spacing={1}>
-          <TextField select label="Event" size="small" value={value.sun ?? 'Sunset'} fullWidth
+          <TextField select label={tr('trigger.event')} size="small" value={value.sun ?? 'Sunset'} fullWidth
             onChange={(e) => onChange({ ...value, sun: e.target.value as RuleTrigger['sun'] })}>
             {['Sunrise', 'Sunset'].map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
           </TextField>
-          <TextField type="number" label="Offset min" size="small" value={value.offsetMinutes ?? 0} sx={{ width: 120 }}
+          <TextField type="number" label={tr('trigger.offsetMin')} size="small" value={value.offsetMinutes ?? 0} sx={{ width: 120 }}
             onChange={(e) => onChange({ ...value, offsetMinutes: Number(e.target.value) || 0 })} />
         </Stack>
       )}
@@ -379,47 +383,48 @@ function ConditionEditor({ devices, caps, value, onChange }: {
   devices: CapabilityDevice[]; caps: (id?: string | null) => CapabilityDevice['capabilities'];
   value: RuleCondition; onChange: (c: RuleCondition) => void;
 }) {
+  const { t: tr } = useTranslation('flow');
   return (
     <Stack spacing={2}>
-      <TextField select label="Type" size="small" value={value.type}
+      <TextField select label={tr('condition.type')} size="small" value={value.type}
         onChange={(e) => onChange({ ...value, type: e.target.value as RuleCondition['type'] })}>
         {['DeviceState', 'TimeOfDay', 'Sun', 'Mode'].map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
       </TextField>
       {value.type === 'DeviceState' && (
         <>
-          <TextField select label="Device" size="small" value={value.deviceId ?? ''}
+          <TextField select label={tr('condition.device')} size="small" value={value.deviceId ?? ''}
             onChange={(e) => onChange({ ...value, deviceId: e.target.value, capabilityId: '' })}>
             {devices.map((d) => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
           </TextField>
-          <TextField select label="Capability" size="small" value={value.capabilityId ?? ''} disabled={!value.deviceId}
+          <TextField select label={tr('condition.capability')} size="small" value={value.capabilityId ?? ''} disabled={!value.deviceId}
             onChange={(e) => onChange({ ...value, capabilityId: e.target.value })}>
             {caps(value.deviceId).map((c) => <MenuItem key={c.id} value={c.id}>{c.id}</MenuItem>)}
           </TextField>
           <Stack direction="row" spacing={1}>
-            <TextField select label="Op" size="small" value={value.operator ?? 'eq'} sx={{ width: 110 }}
+            <TextField select label={tr('condition.op')} size="small" value={value.operator ?? 'eq'} sx={{ width: 110 }}
               onChange={(e) => onChange({ ...value, operator: e.target.value })}>
               {OPERATORS.filter((o) => o !== 'changed').map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}
             </TextField>
-            <TextField label="Value" size="small" fullWidth value={fmt(value.value)}
+            <TextField label={tr('condition.value')} size="small" fullWidth value={fmt(value.value)}
               onChange={(e) => onChange({ ...value, value: parseValue(e.target.value) })} />
           </Stack>
         </>
       )}
       {value.type === 'TimeOfDay' && (
         <Stack direction="row" spacing={1}>
-          <TextField label="From (HH:mm)" size="small" value={value.fromTime ?? ''} onChange={(e) => onChange({ ...value, fromTime: e.target.value })} />
-          <TextField label="To (HH:mm)" size="small" value={value.toTime ?? ''} onChange={(e) => onChange({ ...value, toTime: e.target.value })} />
+          <TextField label={tr('condition.fromTime')} size="small" value={value.fromTime ?? ''} onChange={(e) => onChange({ ...value, fromTime: e.target.value })} />
+          <TextField label={tr('condition.toTime')} size="small" value={value.toTime ?? ''} onChange={(e) => onChange({ ...value, toTime: e.target.value })} />
         </Stack>
       )}
       {value.type === 'Sun' && (
-        <TextField select label="Daylight" size="small" value={value.dark === false ? 'light' : 'dark'}
+        <TextField select label={tr('condition.daylight')} size="small" value={value.dark === false ? 'light' : 'dark'}
           onChange={(e) => onChange({ ...value, dark: e.target.value === 'dark' })}>
-          <MenuItem value="dark">while dark</MenuItem>
-          <MenuItem value="light">while light</MenuItem>
+          <MenuItem value="dark">{tr('condition.whileDark')}</MenuItem>
+          <MenuItem value="light">{tr('condition.whileLight')}</MenuItem>
         </TextField>
       )}
       {value.type === 'Mode' && (
-        <TextField select label="Mode" size="small" value={value.mode ?? 'Home'}
+        <TextField select label={tr('condition.mode')} size="small" value={value.mode ?? 'Home'}
           onChange={(e) => onChange({ ...value, mode: e.target.value })}>
           {['Home', 'Away', 'Night', 'Vacation'].map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}
         </TextField>
@@ -432,36 +437,37 @@ function ActionEditor({ devices, caps, value, onChange }: {
   devices: CapabilityDevice[]; caps: (id?: string | null) => CapabilityDevice['capabilities'];
   value: RuleAction; onChange: (a: RuleAction) => void;
 }) {
+  const { t: tr } = useTranslation('flow');
   const setKey = Object.keys(value.set ?? {})[0] ?? '';
   const setVal = setKey ? (value.set as Record<string, unknown>)[setKey] : '';
   return (
     <Stack spacing={2}>
-      <TextField select label="Type" size="small" value={value.type}
+      <TextField select label={tr('action.type')} size="small" value={value.type}
         onChange={(e) => onChange({ ...value, type: e.target.value as RuleAction['type'] })}>
         {['Command', 'Delay', 'Notify'].map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
       </TextField>
       {value.type === 'Command' && (
         <>
-          <TextField select label="Device" size="small" value={value.deviceId ?? ''}
+          <TextField select label={tr('action.device')} size="small" value={value.deviceId ?? ''}
             onChange={(e) => onChange({ ...value, deviceId: e.target.value, set: {} })}>
             {devices.map((d) => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
           </TextField>
           <Stack direction="row" spacing={1}>
-            <TextField select label="Capability" size="small" value={setKey} disabled={!value.deviceId} sx={{ flex: 1 }}
+            <TextField select label={tr('action.capability')} size="small" value={setKey} disabled={!value.deviceId} sx={{ flex: 1 }}
               onChange={(e) => onChange({ ...value, set: { [e.target.value]: setVal === '' ? true : setVal } })}>
               {caps(value.deviceId).filter((c) => c.writable).map((c) => <MenuItem key={c.id} value={c.id}>{c.id}</MenuItem>)}
             </TextField>
-            <TextField label="Value" size="small" sx={{ width: 110 }} disabled={!setKey} value={fmt(setVal)}
+            <TextField label={tr('action.value')} size="small" sx={{ width: 110 }} disabled={!setKey} value={fmt(setVal)}
               onChange={(e) => onChange({ ...value, set: { [setKey]: parseValue(e.target.value) } })} />
           </Stack>
         </>
       )}
       {value.type === 'Delay' && (
-        <TextField type="number" label="Seconds" size="small" value={value.delaySeconds ?? 0}
+        <TextField type="number" label={tr('action.seconds')} size="small" value={value.delaySeconds ?? 0}
           onChange={(e) => onChange({ ...value, delaySeconds: Number(e.target.value) || 0 })} />
       )}
       {value.type === 'Notify' && (
-        <TextField label="Message" size="small" value={value.message ?? ''}
+        <TextField label={tr('action.message')} size="small" value={value.message ?? ''}
           onChange={(e) => onChange({ ...value, message: e.target.value })} />
       )}
     </Stack>

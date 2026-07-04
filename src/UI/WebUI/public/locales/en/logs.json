@@ -1,0 +1,29 @@
+{
+  "title": "Activity",
+  "subtitle": "What happened and why — device events, automation runs and system logs in one searchable feed.",
+  "refresh": "Refresh",
+  "searchPlaceholder": "Search…",
+  "sources": {
+    "all": "All",
+    "device": "Devices",
+    "automation": "Automations",
+    "system": "System"
+  },
+  "severity": {
+    "label": "Severity",
+    "all": "All",
+    "info": "Info",
+    "warn": "Warning",
+    "error": "Error"
+  },
+  "window": {
+    "label": "Window",
+    "lastHour": "Last hour",
+    "last24h": "Last 24h",
+    "last7d": "Last 7 days"
+  },
+  "errors": {
+    "load": "Failed to load activity. Check ApiGateway / DbGateway connection."
+  },
+  "empty": "No activity in the selected window."
+}

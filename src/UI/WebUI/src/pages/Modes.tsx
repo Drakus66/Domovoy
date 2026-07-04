@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Container, Box, Typography, Stack, LinearProgress, Alert, Card, CardActionArea,
   CardContent, Chip, Divider, List, ListItem, ListItemText,
@@ -10,23 +11,20 @@ import BeachAccessRoundedIcon from '@mui/icons-material/BeachAccessRounded';
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import { modeApi, HomeState } from '../api/mode';
 import { historyApi, EventLogEntry } from '../api/history';
+import { fmtDateTime } from '../i18n/format';
 
-/** Visual + copy per well-known mode; unknown custom modes fall back to a generic look. */
-const MODE_META: Record<string, { icon: JSX.Element; blurb: string }> = {
-  Home: { icon: <HomeRoundedIcon />, blurb: 'Someone is home — normal interactive behaviour.' },
-  Away: { icon: <DirectionsWalkRoundedIcon />, blurb: 'Nobody home — energy setbacks, security-leaning.' },
-  Night: { icon: <BedtimeRoundedIcon />, blurb: 'Dimmed and quiet while occupants sleep.' },
-  Vacation: { icon: <BeachAccessRoundedIcon />, blurb: 'Extended absence — deeper setbacks. Manual only.' },
+/** Icon per well-known mode; unknown custom modes fall back to a generic look. */
+const MODE_ICONS: Record<string, JSX.Element> = {
+  Home: <HomeRoundedIcon />,
+  Away: <DirectionsWalkRoundedIcon />,
+  Night: <BedtimeRoundedIcon />,
+  Vacation: <BeachAccessRoundedIcon />,
 };
 
-const metaFor = (mode: string) => MODE_META[mode] ?? { icon: <TuneRoundedIcon />, blurb: 'Custom mode.' };
-
-const fmt = (iso: string) => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
-};
+const iconFor = (mode: string) => MODE_ICONS[mode] ?? <TuneRoundedIcon />;
 
 export default function Modes() {
+  const { t } = useTranslation('modes');
   const [state, setState] = useState<HomeState | null>(null);
   const [options, setOptions] = useState<string[]>([]);
   const [history, setHistory] = useState<EventLogEntry[]>([]);
@@ -35,6 +33,11 @@ export default function Modes() {
   const [error, setError] = useState<string | null>(null);
 
   const since = useMemo(() => new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString(), []);
+
+  // Backend mode values render as user-facing labels: map known ones, fall back to the raw value.
+  const nameFor = (mode: string) => t(`names.${mode}`, { defaultValue: mode });
+  const blurbFor = (mode: string) =>
+    mode in MODE_ICONS ? t(`blurbs.${mode}`) : t('blurbs.custom');
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -48,7 +51,7 @@ export default function Modes() {
       setOptions(opts);
       setHistory(hist);
     } catch {
-      setError('Failed to load home mode. Check ApiGateway / DbGateway connection.');
+      setError(t('error.load'));
     } finally {
       setLoading(false);
     }
@@ -65,7 +68,7 @@ export default function Modes() {
       // The event-log record is written asynchronously; re-pull shortly after.
       setTimeout(refresh, 600);
     } catch {
-      setError(`Failed to switch to ${mode}.`);
+      setError(t('error.switch', { mode: nameFor(mode) }));
     } finally {
       setBusy(false);
     }
@@ -76,16 +79,16 @@ export default function Modes() {
       <Box py={{ xs: 3, md: 4 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
           <Box>
-            <Typography variant="h4" component="h1" fontWeight={700}>Home mode</Typography>
+            <Typography variant="h4" component="h1" fontWeight={700}>{t('title')}</Typography>
             <Typography variant="caption" color="text.secondary">
-              The house context — drives automations and climate, and is stamped on every event for ML.
+              {t('subtitle')}
             </Typography>
           </Box>
           {state && (
             <Chip
               color="primary"
-              icon={metaFor(state.mode).icon}
-              label={`${state.mode} · by ${state.source}`}
+              icon={iconFor(state.mode)}
+              label={t('chipLabel', { mode: nameFor(state.mode), source: state.source })}
               sx={{ fontWeight: 700, '& .MuiChip-icon': { color: 'inherit' } }}
             />
           )}
@@ -104,7 +107,6 @@ export default function Modes() {
         >
           {options.map((mode) => {
             const selected = mode === state?.mode;
-            const meta = metaFor(mode);
             return (
               <Card
                 key={mode}
@@ -117,10 +119,10 @@ export default function Modes() {
                 <CardActionArea onClick={() => switchTo(mode)} disabled={busy} sx={{ height: '100%' }}>
                   <CardContent sx={{ textAlign: 'center', py: 3 }}>
                     <Box sx={{ color: selected ? 'primary.main' : 'text.secondary', '& svg': { fontSize: 40 } }}>
-                      {meta.icon}
+                      {iconFor(mode)}
                     </Box>
-                    <Typography fontWeight={700} mt={1}>{mode}</Typography>
-                    <Typography variant="caption" color="text.secondary">{meta.blurb}</Typography>
+                    <Typography fontWeight={700} mt={1}>{nameFor(mode)}</Typography>
+                    <Typography variant="caption" color="text.secondary">{blurbFor(mode)}</Typography>
                   </CardContent>
                 </CardActionArea>
               </Card>
@@ -128,11 +130,11 @@ export default function Modes() {
           })}
         </Box>
 
-        <Typography variant="h6" fontWeight={700} mb={1}>Recent changes</Typography>
+        <Typography variant="h6" fontWeight={700} mb={1}>{t('recentChanges')}</Typography>
         <Card variant="outlined">
           {history.length === 0 ? (
             <Box textAlign="center" py={4}>
-              <Typography color="text.secondary">No mode changes recorded yet.</Typography>
+              <Typography color="text.secondary">{t('noChanges')}</Typography>
             </Box>
           ) : (
             <List dense disablePadding>
@@ -144,12 +146,12 @@ export default function Modes() {
                       primary={
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                           <Typography component="span" fontWeight={600}>
-                            {(h.oldValue as string) || '—'} → {(h.newValue as string) || '—'}
+                            {h.oldValue ? nameFor(h.oldValue as string) : '—'} → {h.newValue ? nameFor(h.newValue as string) : '—'}
                           </Typography>
-                          <Chip size="small" variant="outlined" label={`by ${h.triggerSource}`} />
+                          <Chip size="small" variant="outlined" label={t('changedBy', { source: h.triggerSource })} />
                         </Stack>
                       }
-                      secondary={fmt(h.timestamp)}
+                      secondary={fmtDateTime(h.timestamp)}
                     />
                   </ListItem>
                 </Box>

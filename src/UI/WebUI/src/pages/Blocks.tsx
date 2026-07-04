@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
 import {
   Container, Box, Typography, Stack, Button, IconButton, LinearProgress, Alert,
   Card, CardContent, Tooltip, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
@@ -7,8 +9,18 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
+import PublishRoundedIcon from '@mui/icons-material/PublishRounded';
 import { blocksApi, BlockCatalogEntry, ControlBlock, NewBlock, PortBinding } from '../api/blocks';
 import { capabilityDevicesApi, CapabilityDevice } from '../api/capabilityDevices';
+import { proposalsApi } from '../api/proposals';
+
+const stageName = (s: number) =>
+  i18n.t(s >= 2 ? 'blocks:stageName.full' : s === 1 ? 'blocks:stageName.bounded' : 'blocks:stageName.shadow');
+
+// The authority ladder phrased as trust in the house spirit (2B staging):
+// it starts by watching, then acts carefully, then runs the loop on its own.
+const stageHint = (s: number) =>
+  i18n.t(s >= 2 ? 'blocks:stageHint.full' : s === 1 ? 'blocks:stageHint.bounded' : 'blocks:stageHint.shadow');
 
 const fmt = (v: unknown): string => {
   if (v === null || v === undefined || v === '') return '—';
@@ -26,11 +38,13 @@ interface BlockDraft {
 }
 
 export default function Blocks() {
+  const { t } = useTranslation('blocks');
   const [blocks, setBlocks] = useState<ControlBlock[]>([]);
   const [catalog, setCatalog] = useState<BlockCatalogEntry[]>([]);
   const [devices, setDevices] = useState<CapabilityDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [draft, setDraft] = useState<BlockDraft | null>(null);
 
   const load = useCallback(async () => {
@@ -43,11 +57,11 @@ export default function Blocks() {
       setCatalog(c);
       setDevices(d);
     } catch {
-      setError('Failed to load control blocks. Check ApiGateway / AutomationService connection.');
+      setError(t('errors.load'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -89,14 +103,36 @@ export default function Blocks() {
       setDraft(null);
       await load();
     } catch {
-      setError('Failed to create block.');
+      setError(t('errors.create'));
     }
   };
 
   const remove = async (b: ControlBlock) => {
-    if (!window.confirm(`Delete block "${b.name}"? Its virtual device disappears.`)) return;
+    if (!window.confirm(t('confirmDelete', { name: b.name }))) return;
     try { await blocksApi.deleteBlock(b.id); await load(); }
-    catch { setError('Failed to delete block.'); }
+    catch { setError(t('errors.delete')); }
+  };
+
+  // Promotion goes through the approval queue (Epic 2C), not a direct stage edit — a human approves the
+  // Shadow → Bounded → Full step after reading the scorecard.
+  const proposePromotion = async (b: ControlBlock) => {
+    const current = Math.round(b.params.stage ?? 0);
+    const next = Math.min(2, current + 1);
+    setError(null); setInfo(null);
+    try {
+      await proposalsApi.create({
+        kind: 'BlockPromotion',
+        title: t('promote.title', { name: b.name, from: stageName(current), to: stageName(next) }),
+        blockId: b.id,
+        fromStage: current,
+        toStage: next,
+        source: 'user',
+        rationale: t('promote.rationale'),
+      });
+      setInfo(t('promote.queued', { name: b.name }));
+    } catch {
+      setError(t('errors.promote'));
+    }
   };
 
   return (
@@ -104,10 +140,9 @@ export default function Blocks() {
       <Box py={{ xs: 3, md: 4 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
           <Box>
-            <Typography variant="h4" component="h1" fontWeight={700}>Control blocks</Typography>
+            <Typography variant="h4" component="h1" fontWeight={700}>{t('title')}</Typography>
             <Typography variant="caption" color="text.secondary">
-              Stateful loops between rules and devices — filters, thermostats, sequencers. Each block is a
-              virtual device you can chart, wire and command.
+              {t('subtitle')}
             </Typography>
           </Box>
         </Stack>
@@ -125,17 +160,23 @@ export default function Blocks() {
 
         {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
         {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+        {info && <Alert severity="info" sx={{ mb: 2 }} onClose={() => setInfo(null)}>{info}</Alert>}
 
         {blocks.length === 0 && !loading ? (
           <Box textAlign="center" py={8}>
             <AccountTreeRoundedIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-            <Typography color="text.secondary">No control blocks yet. Add one from the catalog above.</Typography>
+            <Typography color="text.secondary">
+              {t('empty')}
+            </Typography>
           </Box>
         ) : (
           <Stack spacing={1.5}>
             {blocks.map((b) => {
               const type = typeById.get(b.typeId);
               const vdev = deviceById.get(b.deviceId);
+              // ML governor blocks carry a `stage` param; below Full they can be promoted via the queue.
+              const isGovernor = type?.params.some((p) => p.name === 'stage') ?? false;
+              const stage = Math.round(b.params.stage ?? 0);
               return (
                 <Card key={b.id} variant="outlined">
                   <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
@@ -144,34 +185,50 @@ export default function Blocks() {
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap mb={0.5}>
                           <Typography fontWeight={700}>{b.name}</Typography>
                           <Chip size="small" variant="outlined" label={type?.title ?? b.typeId} />
-                          {!b.enabled && <Chip size="small" label="disabled" color="default" variant="outlined" />}
+                          {!b.enabled && <Chip size="small" label={t('chip.disabled')} color="default" variant="outlined" />}
+                          {isGovernor && (
+                            <Tooltip title={stageHint(stage)}>
+                              <Chip size="small" variant="outlined" color={stage === 0 ? 'default' : 'primary'}
+                                label={t('chip.stage', { stage: stageName(stage) })} />
+                            </Tooltip>
+                          )}
                         </Stack>
 
                         {Object.keys(b.inputs).length > 0 && (
                           <Typography variant="body2" color="text.secondary">
-                            <b>Inputs</b>{' '}
+                            <b>{t('labels.inputs')}</b>{' '}
                             {Object.entries(b.inputs).map(([port, bind]) =>
                               `${port} ← ${deviceById.get(bind.deviceId)?.name ?? bind.deviceId}.${bind.capabilityId}`).join(' · ')}
                           </Typography>
                         )}
 
                         <Typography variant="body2" color="text.secondary">
-                          <b>Output</b>{' '}
+                          <b>{t('labels.output')}</b>{' '}
                           {vdev && vdev.state && Object.keys(vdev.state).length > 0
                             ? Object.entries(vdev.state).map(([k, v]) => `${k}=${fmt(v)}`).join(' · ')
-                            : <em>no samples yet</em>}
+                            : <em>{t('labels.noSamples')}</em>}
                         </Typography>
                         {Object.keys(b.outputs).length > 0 && (
                           <Typography variant="body2" color="text.secondary">
-                            <b>Drives</b>{' '}
+                            <b>{t('labels.drives')}</b>{' '}
                             {Object.entries(b.outputs).map(([cap, bind]) =>
                               `${cap} → ${deviceById.get(bind.deviceId)?.name ?? bind.deviceId}.${bind.capabilityId}`).join(' · ')}
                           </Typography>
                         )}
                       </Box>
-                      <Tooltip title="Delete">
-                        <IconButton onClick={() => remove(b)}><DeleteOutlineRoundedIcon /></IconButton>
-                      </Tooltip>
+                      <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
+                        {isGovernor && stage < 2 && (
+                          <Tooltip title={t('promote.tooltip')}>
+                            <Button size="small" variant="outlined" startIcon={<PublishRoundedIcon />}
+                              onClick={() => proposePromotion(b)}>
+                              {t('promote.button')}
+                            </Button>
+                          </Tooltip>
+                        )}
+                        <Tooltip title={t('actions.delete')}>
+                          <IconButton onClick={() => remove(b)}><DeleteOutlineRoundedIcon /></IconButton>
+                        </Tooltip>
+                      </Stack>
                     </Stack>
                   </CardContent>
                 </Card>
@@ -199,36 +256,37 @@ function CreateDialog({
   onClose: () => void;
   onSave: () => void;
 }) {
+  const { t } = useTranslation('blocks');
   const type = draft ? catalog.get(draft.typeId) : undefined;
   const capsOf = (deviceId: string) => devices.find((d) => d.id === deviceId)?.capabilities ?? [];
 
   return (
     <Dialog open={draft !== null} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>New {type?.title ?? 'block'}</DialogTitle>
+      <DialogTitle>{t('dialog.title', { type: type?.title ?? t('dialog.blockFallback') })}</DialogTitle>
       <DialogContent>
         {draft && type && (
           <Stack spacing={2.5} mt={1}>
             <Typography variant="caption" color="text.secondary">{type.description}</Typography>
-            <TextField label="Name" value={draft.name} autoFocus required fullWidth
+            <TextField label={t('dialog.name')} value={draft.name} autoFocus required fullWidth
               onChange={(e) => onChange({ ...draft, name: e.target.value })} />
 
             {type.inputs.length > 0 && (
               <Box>
-                <Typography variant="overline" color="text.secondary">Inputs (wiring)</Typography>
+                <Typography variant="overline" color="text.secondary">{t('dialog.inputsSection')}</Typography>
                 {type.inputs.map((port) => {
                   const bind = draft.inputs[port.name] ?? { deviceId: '', capabilityId: '' };
                   return (
                     <Stack key={port.name} direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mt={1}>
-                      <TextField select label={`${port.name} · device`} value={bind.deviceId} fullWidth
+                      <TextField select label={t('dialog.deviceSuffix', { port: port.name })} value={bind.deviceId} fullWidth
                         helperText={port.description}
                         onChange={(e) => onChange({
                           ...draft,
                           inputs: { ...draft.inputs, [port.name]: { deviceId: e.target.value, capabilityId: '' } },
                         })}>
-                        <MenuItem value=""><em>None</em></MenuItem>
+                        <MenuItem value=""><em>{t('dialog.none')}</em></MenuItem>
                         {devices.map((d) => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
                       </TextField>
-                      <TextField select label="capability" value={bind.capabilityId} fullWidth disabled={!bind.deviceId}
+                      <TextField select label={t('dialog.capability')} value={bind.capabilityId} fullWidth disabled={!bind.deviceId}
                         onChange={(e) => onChange({
                           ...draft,
                           inputs: { ...draft.inputs, [port.name]: { ...bind, capabilityId: e.target.value } },
@@ -243,21 +301,21 @@ function CreateDialog({
 
             {type.outputs.length > 0 && (
               <Box>
-                <Typography variant="overline" color="text.secondary">Outputs (actuate — optional)</Typography>
+                <Typography variant="overline" color="text.secondary">{t('dialog.outputsSection')}</Typography>
                 {type.outputs.map((out) => {
                   const bind = draft.outputs[out.id] ?? { deviceId: '', capabilityId: '' };
                   return (
                     <Stack key={out.id} direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mt={1}>
-                      <TextField select label={`${out.id} → device`} value={bind.deviceId} fullWidth
-                        helperText="Leave empty to only report (no actuation)"
+                      <TextField select label={t('dialog.outputDeviceSuffix', { output: out.id })} value={bind.deviceId} fullWidth
+                        helperText={t('dialog.outputHelper')}
                         onChange={(e) => onChange({
                           ...draft,
                           outputs: { ...draft.outputs, [out.id]: { deviceId: e.target.value, capabilityId: '' } },
                         })}>
-                        <MenuItem value=""><em>None</em></MenuItem>
+                        <MenuItem value=""><em>{t('dialog.none')}</em></MenuItem>
                         {devices.map((d) => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
                       </TextField>
-                      <TextField select label="capability" value={bind.capabilityId} fullWidth disabled={!bind.deviceId}
+                      <TextField select label={t('dialog.capability')} value={bind.capabilityId} fullWidth disabled={!bind.deviceId}
                         onChange={(e) => onChange({
                           ...draft,
                           outputs: { ...draft.outputs, [out.id]: { ...bind, capabilityId: e.target.value } },
@@ -272,22 +330,22 @@ function CreateDialog({
 
             {type.params.length > 0 && (
               <Box>
-                <Typography variant="overline" color="text.secondary">Parameters</Typography>
+                <Typography variant="overline" color="text.secondary">{t('dialog.parametersSection')}</Typography>
                 <Stack spacing={1.5} mt={1}>
                   {type.params.map((p) => (
                     p.name === 'stage' ? (
                       // ML authority stage (Epic 2B): a friendly selector over the numeric 0/1/2 param.
                       <TextField
-                        key={p.name} select label="authority stage"
+                        key={p.name} select label={t('dialog.authorityStage')}
                         value={draft.params[p.name] ?? p.default}
                         helperText={p.description}
                         onChange={(e) => onChange({
                           ...draft, params: { ...draft.params, [p.name]: Number(e.target.value) },
                         })}
                       >
-                        <MenuItem value={0}>Shadow (observe only, no commands)</MenuItem>
-                        <MenuItem value={1}>Bounded-Active (clamped band)</MenuItem>
-                        <MenuItem value={2}>Full</MenuItem>
+                        <MenuItem value={0}>{t('stageOption.shadow')}</MenuItem>
+                        <MenuItem value={1}>{t('stageOption.bounded')}</MenuItem>
+                        <MenuItem value={2}>{t('stageOption.full')}</MenuItem>
                       </TextField>
                     ) : (
                       <TextField
@@ -306,14 +364,16 @@ function CreateDialog({
 
             <Divider />
             <Typography variant="caption" color="text.secondary">
-              Outputs: {type.outputs.map((o) => `${o.id}${o.writable ? ' (writable)' : ''}`).join(', ')}
+              {t('dialog.outputsSummary', {
+                list: type.outputs.map((o) => `${o.id}${o.writable ? ` (${t('dialog.writable')})` : ''}`).join(', '),
+              })}
             </Typography>
           </Stack>
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={onSave} disabled={!draft?.name.trim()}>Create</Button>
+        <Button onClick={onClose}>{t('actions.cancel')}</Button>
+        <Button variant="contained" onClick={onSave} disabled={!draft?.name.trim()}>{t('actions.create')}</Button>
       </DialogActions>
     </Dialog>
   );

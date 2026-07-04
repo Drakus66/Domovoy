@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Typography, Switch, Slider, Chip, Button, Stack, LinearProgress } from '@mui/material';
 import type { Capability, CapabilityDevice } from '../../api/capabilityDevices';
 import {
@@ -54,6 +55,7 @@ function NumberSlider({
 export default function CapabilityControl({
   device, cap, value, onCommand,
 }: { device: CapabilityDevice; cap: Capability; value: unknown; onCommand: CommandFn }) {
+  const { t } = useTranslation('devices');
   const Icon = capabilityIcon(cap.id);
   const label = capabilityLabel(cap.id);
 
@@ -108,7 +110,7 @@ export default function CapabilityControl({
       <Row icon={<Icon fontSize="small" />} label={label}>
         <Button size="small" variant="outlined" disabled={!device.isOnline}
           onClick={() => onCommand(device.id, { [cap.id]: true })}>
-          Run
+          {t('actions.run')}
         </Button>
       </Row>
     );

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Container, Box, Typography, Stack, Button, LinearProgress, Alert, Card, CardContent, Chip,
 } from '@mui/material';
@@ -6,33 +7,35 @@ import ModelTrainingRoundedIcon from '@mui/icons-material/ModelTrainingRounded';
 import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
 import { mlApi, MlModel, ModelScope } from '../api/ml';
 import ScorecardChart from '../components/charts/ScorecardChart';
+import { fmtDateTime } from '../i18n/format';
 
-const fmt = (iso: string) => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
-};
-
-// Scope label along the zone → zone_kind → global chain (Epic 2I).
-const scopeLabel = (s?: ModelScope | null): string =>
-  !s || s.level === 'global' || !s.key ? 'global' : `${s.level === 'zone_kind' ? 'kind' : 'zone'}: ${s.key}`;
+// Whether the scope is the global (default) bucket vs a zone/zone_kind scope (Epic 2I).
+const isGlobalScope = (s?: ModelScope | null): boolean => !s || s.level === 'global' || !s.key;
 
 export default function Models() {
+  const { t } = useTranslation('models');
   const [models, setModels] = useState<MlModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [training, setTraining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
+  // Scope label along the zone → zone_kind → global chain (Epic 2I).
+  const scopeLabel = (s?: ModelScope | null): string =>
+    isGlobalScope(s)
+      ? t('scope.global')
+      : t(s!.level === 'zone_kind' ? 'scope.kind' : 'scope.zone', { key: s!.key });
+
   const load = useCallback(async () => {
     setError(null);
     try {
       setModels(await mlApi.getModels());
     } catch {
-      setError('Failed to load models. Check ApiGateway / DbGateway connection.');
+      setError(t('errors.load'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -41,11 +44,16 @@ export default function Models() {
     try {
       const r = await mlApi.train();
       setInfo(r.trained
-        ? `Trained "${r.model?.name}" v${r.model?.version} on ${r.model?.sampleCount} samples (RMSE ${r.model?.rmse.toFixed(3)}).`
-        : `Not trained: ${r.message}.`);
+        ? t('trained', {
+            name: r.model?.name,
+            version: r.model?.version,
+            count: r.model?.sampleCount,
+            rmse: r.model?.rmse.toFixed(3),
+          })
+        : t('notTrained', { message: r.message }));
       await load();
     } catch {
-      setError('Training request failed — is the AutomationService reachable?');
+      setError(t('errors.train'));
     } finally {
       setTraining(false);
     }
@@ -56,14 +64,13 @@ export default function Models() {
       <Box py={{ xs: 3, md: 4 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" useFlexGap>
           <Box>
-            <Typography variant="h4" component="h1" fontWeight={700}>ML models</Typography>
+            <Typography variant="h4" component="h1" fontWeight={700}>{t('title')}</Typography>
             <Typography variant="caption" color="text.secondary">
-              Learned models on the telemetry feature store (ML.NET). An ML control block serves the latest
-              model (e.g. a learned setpoint schedule). Training needs accumulated history.
+              {t('caption')}
             </Typography>
           </Box>
           <Button variant="contained" startIcon={<ModelTrainingRoundedIcon />} onClick={train} disabled={training}>
-            Train now
+            {t('actions.trainNow')}
           </Button>
         </Stack>
 
@@ -75,7 +82,7 @@ export default function Models() {
           <Box textAlign="center" py={8}>
             <PsychologyRoundedIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
             <Typography color="text.secondary">
-              No models yet. Once enough telemetry has accrued, "Train now" registers the first model.
+              {t('empty')}
             </Typography>
           </Box>
         ) : (
@@ -91,8 +98,8 @@ export default function Models() {
                       <Chip size="small" variant="outlined" label={m.kind} />
                       <Chip
                         size="small"
-                        color={scopeLabel(m.scope) === 'global' ? 'default' : 'primary'}
-                        variant={scopeLabel(m.scope) === 'global' ? 'outlined' : 'filled'}
+                        color={isGlobalScope(m.scope) ? 'default' : 'primary'}
+                        variant={isGlobalScope(m.scope) ? 'outlined' : 'filled'}
                         label={scopeLabel(m.scope)}
                       />
                       {m.features && m.features !== 'time' && (
@@ -101,11 +108,11 @@ export default function Models() {
                       {m.algorithm && <Chip size="small" variant="outlined" label={m.algorithm} />}
                     </Stack>
                     <Typography variant="caption" color="text.secondary">
-                      target {m.targetCapability} · {m.sampleCount} samples
+                      {t('card.target', { capability: m.targetCapability, count: m.sampleCount })}
                       {m.holdoutSampleCount > 0
-                        ? ` · backtest ${m.metric || 'MAE'} ${(m.holdoutScore || m.holdoutMae).toFixed(3)}`
-                        : ` · RMSE ${m.rmse.toFixed(3)}`}
-                      {' · trained '}{fmt(m.trainedAt)}
+                        ? t('card.backtest', { metric: m.metric || 'MAE', score: (m.holdoutScore || m.holdoutMae).toFixed(3) })
+                        : t('card.rmse', { value: m.rmse.toFixed(3) })}
+                      {t('card.trained', { when: fmtDateTime(m.trainedAt) })}
                     </Typography>
                   </Box>
                 </CardContent>
@@ -117,10 +124,9 @@ export default function Models() {
         {models.length > 0 && (
           <Card variant="outlined" sx={{ mt: 3 }}>
             <CardContent>
-              <Typography fontWeight={700} gutterBottom>Backtest scorecard</Typography>
+              <Typography fontWeight={700} gutterBottom>{t('scorecard.title')}</Typography>
               <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
-                The loaded model's prediction vs actual telemetry — the signal to read before promoting an ML
-                block from Shadow to an active stage (Epic 2B).
+                {t('scorecard.caption')}
               </Typography>
               <ScorecardChart days={7} />
             </CardContent>

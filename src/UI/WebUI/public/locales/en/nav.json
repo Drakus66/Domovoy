@@ -1,0 +1,14 @@
+{
+  "dashboard": "Dashboard",
+  "zones": "Zones",
+  "modes": "Modes",
+  "automations": "Automations",
+  "flow": "Flow editor",
+  "blocks": "Control blocks",
+  "models": "ML models",
+  "proposals": "Proposals",
+  "plugins": "Plugins",
+  "zigbee": "Zigbee",
+  "status": "System Status",
+  "logs": "Logs"
+}

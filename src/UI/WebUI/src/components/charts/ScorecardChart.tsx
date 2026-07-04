@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Box, Typography, Skeleton, Stack, Chip, useTheme } from '@mui/material';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from 'recharts';
 import { mlApi, Backtest } from '../../api/ml';
+import { fmtDateTime, fmtTime } from '../../i18n/format';
 
 interface Props {
   /** Look-back window in days (default 7). */
@@ -17,6 +19,7 @@ interface Props {
  * promoting an ML block from Shadow to an active stage (the approval queue itself is Epic 2C).
  */
 export default function ScorecardChart({ days = 7, height = 240 }: Props) {
+  const { t } = useTranslation('models');
   const theme = useTheme();
   const [data, setData] = useState<Backtest | null>(null);
   const [error, setError] = useState(false);
@@ -32,13 +35,13 @@ export default function ScorecardChart({ days = 7, height = 240 }: Props) {
     return () => { cancelled = true; };
   }, [days]);
 
-  if (error) return <Typography variant="caption" color="text.secondary">Could not load the backtest.</Typography>;
+  if (error) return <Typography variant="caption" color="text.secondary">{t('chart.loadError')}</Typography>;
   if (data === null) return <Skeleton variant="rounded" height={height} />;
   if (!data.model) {
-    return <Typography variant="caption" color="text.secondary">No model loaded yet — train one first.</Typography>;
+    return <Typography variant="caption" color="text.secondary">{t('chart.noModel')}</Typography>;
   }
   if (data.points.length === 0) {
-    return <Typography variant="caption" color="text.secondary">No telemetry in the last {days}d to score against.</Typography>;
+    return <Typography variant="caption" color="text.secondary">{t('chart.noTelemetry', { days })}</Typography>;
   }
 
   const series = data.points.map((p) => ({
@@ -47,8 +50,8 @@ export default function ScorecardChart({ days = 7, height = 240 }: Props) {
     actual: p.actual,
   }));
 
-  const fmtTime = (t: number) =>
-    new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit' });
+  const fmtAxis = (t: number) =>
+    fmtTime(t, { month: 'short', day: 'numeric', hour: '2-digit' });
 
   const accent = theme.palette.primary.main;
   const factColor = theme.palette.text.secondary;
@@ -56,9 +59,9 @@ export default function ScorecardChart({ days = 7, height = 240 }: Props) {
   return (
     <Box>
       <Stack direction="row" spacing={1} mb={1} flexWrap="wrap" useFlexGap>
-        <Chip size="small" variant="outlined" label={`Backtest MAE ${data.model.holdoutMae.toFixed(3)}`} />
-        <Chip size="small" variant="outlined" label={`Train RMSE ${data.model.rmse.toFixed(3)}`} />
-        <Chip size="small" variant="outlined" label={`${data.points.length} points · ${days}d`} />
+        <Chip size="small" variant="outlined" label={t('chart.chip.mae', { value: data.model.holdoutMae.toFixed(3) })} />
+        <Chip size="small" variant="outlined" label={t('chart.chip.rmse', { value: data.model.rmse.toFixed(3) })} />
+        <Chip size="small" variant="outlined" label={t('chart.chip.points', { count: data.points.length, days })} />
       </Stack>
       <Box sx={{ width: '100%', height }}>
         <ResponsiveContainer width="100%" height="100%">
@@ -66,7 +69,7 @@ export default function ScorecardChart({ days = 7, height = 240 }: Props) {
             <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} vertical={false} />
             <XAxis
               dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']}
-              tickFormatter={fmtTime} tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
+              tickFormatter={fmtAxis} tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
               minTickGap={48} stroke={theme.palette.divider}
             />
             <YAxis
@@ -79,11 +82,11 @@ export default function ScorecardChart({ days = 7, height = 240 }: Props) {
                 border: `1px solid ${theme.palette.divider}`,
                 borderRadius: 8, fontSize: 12,
               }}
-              labelFormatter={(t) => new Date(Number(t)).toLocaleString()}
+              labelFormatter={(label) => fmtDateTime(new Date(Number(label)).toISOString())}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Line type="monotone" dataKey="actual" name="actual" stroke={factColor} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-            <Line type="monotone" dataKey="predicted" name="predicted" stroke={accent} strokeWidth={2} dot={false} isAnimationActive={false} />
+            <Line type="monotone" dataKey="actual" name={t('chart.legend.actual')} stroke={factColor} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+            <Line type="monotone" dataKey="predicted" name={t('chart.legend.predicted')} stroke={accent} strokeWidth={2} dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </Box>

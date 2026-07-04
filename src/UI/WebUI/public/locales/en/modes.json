@@ -1,0 +1,25 @@
+{
+  "title": "Home mode",
+  "subtitle": "The house context — drives automations and climate, and is stamped on every event for ML.",
+  "chipLabel": "{{mode}} · by {{source}}",
+  "recentChanges": "Recent changes",
+  "noChanges": "No mode changes recorded yet.",
+  "changedBy": "by {{source}}",
+  "error": {
+    "load": "Failed to load home mode. Check ApiGateway / DbGateway connection.",
+    "switch": "Failed to switch to {{mode}}."
+  },
+  "names": {
+    "Home": "Home",
+    "Away": "Away",
+    "Night": "Night",
+    "Vacation": "Vacation"
+  },
+  "blurbs": {
+    "Home": "Someone is home — normal interactive behaviour.",
+    "Away": "Nobody home — energy setbacks, security-leaning.",
+    "Night": "Dimmed and quiet while occupants sleep.",
+    "Vacation": "Extended absence — deeper setbacks. Manual only.",
+    "custom": "Custom mode."
+  }
+}

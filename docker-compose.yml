@@ -161,6 +161,12 @@ services:
       - domovoy-network
     ports:
       - "80:80"
+    # UI translations are runtime-loaded static JSON (i18next-http-backend). Mounting
+    # the source locales over the served folder means editing a language — or, later,
+    # dropping a new one — takes effect on refresh with NO image rebuild. Read-only:
+    # the container never writes here.
+    volumes:
+      - ./src/UI/WebUI/public/locales:/usr/share/nginx/html/locales:ro
     restart: unless-stopped
 
   # ============ Infrastructure Services ============

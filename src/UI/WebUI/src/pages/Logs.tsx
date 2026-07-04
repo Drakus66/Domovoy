@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { fmtDateTime } from '../i18n/format';
 import {
   Container, Box, Typography, Stack, Chip, TextField, MenuItem, InputAdornment,
   LinearProgress, Alert, Card, IconButton, Tooltip, Divider,
@@ -11,10 +13,10 @@ import TerminalRoundedIcon from '@mui/icons-material/TerminalRounded';
 import { activityApi, ActivityEntry, ActivitySource, ActivitySeverity } from '../api/activity';
 import { capabilityDevicesApi } from '../api/capabilityDevices';
 
-const SOURCE_META: Record<ActivitySource, { label: string; icon: JSX.Element; color: 'primary' | 'secondary' | 'default' }> = {
-  device: { label: 'Devices', icon: <DevicesRoundedIcon fontSize="small" />, color: 'primary' },
-  automation: { label: 'Automations', icon: <BoltRoundedIcon fontSize="small" />, color: 'secondary' },
-  system: { label: 'System', icon: <TerminalRoundedIcon fontSize="small" />, color: 'default' },
+const SOURCE_META: Record<ActivitySource, { icon: JSX.Element; color: 'primary' | 'secondary' | 'default' }> = {
+  device: { icon: <DevicesRoundedIcon fontSize="small" />, color: 'primary' },
+  automation: { icon: <BoltRoundedIcon fontSize="small" />, color: 'secondary' },
+  system: { icon: <TerminalRoundedIcon fontSize="small" />, color: 'default' },
 };
 
 const SEVERITY_COLOR: Record<ActivitySeverity, 'default' | 'warning' | 'error'> = {
@@ -26,12 +28,13 @@ const SEVERITY_BAR: Record<ActivitySeverity, string> = {
 };
 
 const WINDOWS = [
-  { label: 'Last hour', hours: 1 },
-  { label: 'Last 24h', hours: 24 },
-  { label: 'Last 7 days', hours: 168 },
+  { key: 'lastHour', hours: 1 },
+  { key: 'last24h', hours: 24 },
+  { key: 'last7d', hours: 168 },
 ];
 
 export default function Logs() {
+  const { t } = useTranslation('logs');
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [deviceNames, setDeviceNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -54,7 +57,7 @@ export default function Logs() {
       });
       setEntries(rows);
     } catch {
-      setError('Failed to load activity. Check ApiGateway / DbGateway connection.');
+      setError(t('errors.load'));
     } finally {
       setLoading(false);
     }
@@ -73,49 +76,44 @@ export default function Logs() {
       .catch(() => undefined);
   }, []);
 
-  const fmt = (iso: string) => {
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
-  };
-
   return (
     <Container maxWidth="lg">
       <Box py={{ xs: 3, md: 4 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
           <Box>
-            <Typography variant="h4" component="h1" fontWeight={700}>Activity</Typography>
+            <Typography variant="h4" component="h1" fontWeight={700}>{t('title')}</Typography>
             <Typography variant="caption" color="text.secondary">
-              What happened and why — device events, automation runs and system logs in one searchable feed.
+              {t('subtitle')}
             </Typography>
           </Box>
-          <Tooltip title="Refresh"><IconButton onClick={load} disabled={loading}><RefreshRoundedIcon /></IconButton></Tooltip>
+          <Tooltip title={t('refresh')}><IconButton onClick={load} disabled={loading}><RefreshRoundedIcon /></IconButton></Tooltip>
         </Stack>
 
         <Stack direction="row" spacing={1.5} mb={2} flexWrap="wrap" useFlexGap alignItems="center">
           <TextField
-            size="small" placeholder="Search…" value={search}
+            size="small" placeholder={t('searchPlaceholder')} value={search}
             onChange={(e) => setSearch(e.target.value)} sx={{ minWidth: 220 }}
             InputProps={{ startAdornment: (<InputAdornment position="start"><SearchRoundedIcon fontSize="small" /></InputAdornment>) }}
           />
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <Chip label="All" variant={source === 'all' ? 'filled' : 'outlined'}
+            <Chip label={t('sources.all')} variant={source === 'all' ? 'filled' : 'outlined'}
               color={source === 'all' ? 'primary' : 'default'} onClick={() => setSource('all')} />
             {(Object.keys(SOURCE_META) as ActivitySource[]).map((s) => (
-              <Chip key={s} icon={SOURCE_META[s].icon} label={SOURCE_META[s].label}
+              <Chip key={s} icon={SOURCE_META[s].icon} label={t(`sources.${s}`)}
                 variant={source === s ? 'filled' : 'outlined'}
                 color={source === s ? SOURCE_META[s].color : 'default'} onClick={() => setSource(s)} />
             ))}
           </Stack>
-          <TextField select size="small" label="Severity" value={severity} sx={{ width: 130 }}
+          <TextField select size="small" label={t('severity.label')} value={severity} sx={{ width: 130 }}
             onChange={(e) => setSeverity(e.target.value as ActivitySeverity | 'all')}>
-            <MenuItem value="all">All</MenuItem>
-            <MenuItem value="info">Info</MenuItem>
-            <MenuItem value="warn">Warning</MenuItem>
-            <MenuItem value="error">Error</MenuItem>
+            <MenuItem value="all">{t('severity.all')}</MenuItem>
+            <MenuItem value="info">{t('severity.info')}</MenuItem>
+            <MenuItem value="warn">{t('severity.warn')}</MenuItem>
+            <MenuItem value="error">{t('severity.error')}</MenuItem>
           </TextField>
-          <TextField select size="small" label="Window" value={hours} sx={{ width: 140 }}
+          <TextField select size="small" label={t('window.label')} value={hours} sx={{ width: 140 }}
             onChange={(e) => setHours(Number(e.target.value))}>
-            {WINDOWS.map((w) => <MenuItem key={w.hours} value={w.hours}>{w.label}</MenuItem>)}
+            {WINDOWS.map((w) => <MenuItem key={w.hours} value={w.hours}>{t(`window.${w.key}`)}</MenuItem>)}
           </TextField>
         </Stack>
 
@@ -124,7 +122,7 @@ export default function Logs() {
 
         {entries.length === 0 && !loading ? (
           <Box textAlign="center" py={8}>
-            <Typography color="text.secondary">No activity in the selected window.</Typography>
+            <Typography color="text.secondary">{t('empty')}</Typography>
           </Box>
         ) : (
           <Card variant="outlined">
@@ -135,9 +133,9 @@ export default function Logs() {
                   <Box flex={1} minWidth={0}>
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap mb={0.25}>
                       <Chip size="small" variant="outlined" color={SOURCE_META[e.source]?.color ?? 'default'}
-                        label={SOURCE_META[e.source]?.label ?? e.source} />
+                        label={SOURCE_META[e.source] ? t(`sources.${e.source}`) : e.source} />
                       {e.severity !== 'info' && (
-                        <Chip size="small" color={SEVERITY_COLOR[e.severity]} label={e.severity} />
+                        <Chip size="small" color={SEVERITY_COLOR[e.severity]} label={t(`severity.${e.severity}`)} />
                       )}
                       <Typography variant="body2" fontWeight={600} sx={{ wordBreak: 'break-word' }}>{e.title}</Typography>
                     </Stack>
@@ -150,7 +148,7 @@ export default function Logs() {
                     )}
                   </Box>
                   <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap', pt: 0.25 }}>
-                    {fmt(e.timestamp)}
+                    {fmtDateTime(e.timestamp)}
                   </Typography>
                 </Stack>
               ))}

@@ -1,0 +1,50 @@
+{
+  "title": "Proposals",
+  "caption": "Everything I would like to change, gathered in one queue — ML block promotions, model pins and proposed rules. Nothing activates without your approval (Epic 2C). Rules are justified by replay, model-backed proposals by the backtest scorecard.",
+  "filter": {
+    "pending": "Pending",
+    "all": "All"
+  },
+  "actions": {
+    "runProposer": "Run proposer",
+    "simulate": "Simulate",
+    "approve": "Approve",
+    "reject": "Reject"
+  },
+  "rejectTooltip": "Reject — the target is left untouched",
+  "kind": {
+    "Rule": "Rule",
+    "BlockPromotion": "Block promotion",
+    "ModelSelection": "Model selection"
+  },
+  "stageName": {
+    "shadow": "Shadow",
+    "bounded": "Bounded",
+    "full": "Full"
+  },
+  "provenance": {
+    "stage": "stage {{from}} → {{to}}",
+    "pinModel": "pin model v{{version}}"
+  },
+  "meta": {
+    "proposed": "proposed {{when}}",
+    "decided": "decided {{when}}",
+    "decision": "decision {{id}}"
+  },
+  "proposerResult": "I went through the event log: {{created}} new candidate(s) out of {{candidates}} found ({{note}}).",
+  "approved": "Approved \"{{title}}\" (decision {{id}}).",
+  "simResult_one": "Would have fired {{count}}× over 7d ({{events}} events scanned)",
+  "simResult_other": "Would have fired {{count}}× over 7d ({{events}} events scanned)",
+  "simNotes": " — {{notes}}",
+  "empty": {
+    "pending": "Nothing needs your approval right now. Promote an ML block, or let me look for patterns (Run proposer).",
+    "all": "No proposals yet."
+  },
+  "errors": {
+    "load": "Failed to load proposals. Check ApiGateway / DbGateway connection.",
+    "proposer": "Proposer request failed — is the AutomationService reachable?",
+    "approve": "Approve failed — the target may no longer exist, or a service is unreachable.",
+    "reject": "Reject failed — is the gateway reachable?",
+    "simulate": "Simulate failed — is the AutomationService reachable?"
+  }
+}

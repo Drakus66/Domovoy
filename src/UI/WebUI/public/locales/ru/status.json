@@ -1,0 +1,19 @@
+{
+  "title": "Состояние системы",
+  "updatedAt": "Обновлено: {{time}} · автообновление каждые 30 с",
+  "refreshNow": "Обновить сейчас",
+  "loadError": "Не удалось загрузить метрики системы. Проверьте, доступен ли API Gateway.",
+  "cards": {
+    "servicesOnline": "Служб в сети",
+    "mqttConnections": "MQTT-соединения",
+    "memoryUsage": "Использование памяти",
+    "apiRate": "API запр./с"
+  },
+  "overallHealth": "Общее состояние",
+  "services": "Службы",
+  "status": {
+    "online": "В сети",
+    "offline": "Не в сети"
+  },
+  "noData": "Нет данных от Prometheus"
+}

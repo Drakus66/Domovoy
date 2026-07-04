@@ -1,4 +1,5 @@
 import { Box, Card, CardActionArea, Stack, Switch, Typography, LinearProgress, Tooltip } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import CircleIcon from '@mui/icons-material/Circle';
 import type { CapabilityDevice } from '../../api/capabilityDevices';
 import type { CommandFn } from './CapabilityControls';
@@ -12,6 +13,7 @@ import { asBool, asNum, describeDevice, primaryCapability } from './deviceVisual
 export default function DeviceTile({
   device, onOpen, onCommand,
 }: { device: CapabilityDevice; onOpen: (d: CapabilityDevice) => void; onCommand: CommandFn }) {
+  const { t } = useTranslation('devices');
   const { accent, Icon, isActive, primary, secondary } = describeDevice(device);
   const offline = !device.isOnline;
 
@@ -59,7 +61,7 @@ export default function DeviceTile({
                 />
               </Box>
             ) : (
-              <Tooltip title={offline ? 'Offline' : 'Online'}>
+              <Tooltip title={offline ? t('status.offline') : t('status.online')}>
                 <CircleIcon sx={{ fontSize: 10, mt: 1, color: offline ? 'text.disabled' : 'success.main' }} />
               </Tooltip>
             )}

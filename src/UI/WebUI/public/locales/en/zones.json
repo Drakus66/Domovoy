@@ -1,0 +1,30 @@
+{
+  "title": "Zones",
+  "subtitle": "Areas of the home and grounds — group devices, drive climate-by-zone and automations.",
+  "newZone": "New zone",
+  "empty": "No zones yet. Create one to start grouping devices.",
+  "in": "in {{name}}",
+  "deleteConfirm": "Delete zone \"{{name}}\"? Devices in it become Unassigned; child zones move up.",
+  "errors": {
+    "load": "Failed to load zones. Check ApiGateway / DbGateway connection.",
+    "save": "Failed to save zone.",
+    "delete": "Failed to delete zone."
+  },
+  "actions": {
+    "edit": "Edit",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "dialog": {
+    "editTitle": "Edit zone",
+    "newTitle": "New zone",
+    "name": "Name",
+    "description": "Description",
+    "parentZone": "Parent zone",
+    "parentNone": "None (top-level)",
+    "kind": "Kind",
+    "kindNone": "None",
+    "order": "Order"
+  }
+}

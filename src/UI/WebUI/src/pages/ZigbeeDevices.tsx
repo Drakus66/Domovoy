@@ -5,6 +5,8 @@ import {
   DialogContent, DialogActions, Alert, LinearProgress, Tooltip,
   Grid, Divider, Slider, Switch, FormControlLabel, CircularProgress,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -57,7 +59,7 @@ function PermitJoinTimer({ active, initialSeconds }: { active: boolean; initialS
   return (
     <Chip
       icon={<BluetoothSearchingIcon />}
-      label={`Pairing: ${mm}:${ss}`}
+      label={i18n.t('zigbee:pairing.chip', { time: `${mm}:${ss}` })}
       color="warning"
       variant="filled"
       size="small"
@@ -77,6 +79,7 @@ function DeviceCard({
   onRemove: (d: ZigbeeDevice) => void;
   onControl: (d: ZigbeeDevice, updates: Record<string, unknown>) => void;
 }) {
+  const { t } = useTranslation('zigbee');
   const { state } = device;
   const isLight = device.description.toLowerCase().includes('light') || device.description.toLowerCase().includes('bulb');
   const isSwitch = device.description.toLowerCase().includes('switch') || device.description.toLowerCase().includes('plug');
@@ -98,7 +101,7 @@ function DeviceCard({
             </Typography>
           </Box>
           {state.linkquality !== undefined && (
-            <Tooltip title={`Link quality: ${state.linkquality}`}>
+            <Tooltip title={t('linkQuality', { value: state.linkquality })}>
               <Box sx={{ color: `${linkQualityColor(state.linkquality as number)}.main`, display: 'flex' }}>
                 <SignalCellularAltIcon fontSize="small" />
               </Box>
@@ -119,10 +122,10 @@ function DeviceCard({
               color={(state.battery as number) < 20 ? 'error' : 'default'} />
           )}
           {state.occupancy !== undefined && (
-            <Chip label={state.occupancy ? '👤 Occupied' : '○ Empty'} size="small" variant="outlined" />
+            <Chip label={state.occupancy ? t('state.occupied') : t('state.empty')} size="small" variant="outlined" />
           )}
           {state.contact !== undefined && (
-            <Chip label={state.contact ? '🔒 Closed' : '🔓 Open'} size="small" variant="outlined" />
+            <Chip label={state.contact ? t('state.closed') : t('state.open')} size="small" variant="outlined" />
           )}
         </Box>
 
@@ -138,12 +141,12 @@ function DeviceCard({
                   color="warning"
                 />
               }
-              label={<Typography variant="body2">{isOn ? 'On' : 'Off'}</Typography>}
+              label={<Typography variant="body2">{isOn ? t('state.on') : t('state.off')}</Typography>}
             />
             {isLight && isOn && state.brightness !== undefined && (
               <Box px={1}>
                 <Typography variant="caption" color="text.secondary">
-                  Brightness: {Math.round(((state.brightness as number) / 254) * 100)}%
+                  {t('brightness', { value: Math.round(((state.brightness as number) / 254) * 100) })}
                 </Typography>
                 <Slider
                   size="small"
@@ -165,12 +168,12 @@ function DeviceCard({
           {device.ieeeAddress}
         </Typography>
         <Box>
-          <Tooltip title="Rename">
+          <Tooltip title={t('device.rename')}>
             <IconButton size="small" onClick={() => onRename(device)}>
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Remove from network">
+          <Tooltip title={t('device.remove')}>
             <IconButton size="small" color="error" onClick={() => onRemove(device)}>
               <DeleteIcon fontSize="small" />
             </IconButton>
@@ -182,6 +185,7 @@ function DeviceCard({
 }
 
 export default function ZigbeeDevices() {
+  const { t } = useTranslation('zigbee');
   const [bridge, setBridge] = useState<ZigbeeBridge | null>(null);
   const [devices, setDevices] = useState<ZigbeeDevice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -205,11 +209,11 @@ export default function ZigbeeDevices() {
       setPermitJoinActive(b.permitJoin);
       setPermitJoinRemaining(b.permitJoinTimeout);
     } catch {
-      setError('Failed to load Zigbee data. Check ApiGateway connection.');
+      setError(t('loadError'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchData();
@@ -235,10 +239,10 @@ export default function ZigbeeDevices() {
 
     conn.on('ZigbeeNetworkEvent', (eventType: string, friendlyName: string) => {
       if (eventType === 'device_joined') {
-        setNotification({ type: 'success', text: `New device joined: ${friendlyName}` });
+        setNotification({ type: 'success', text: t('events.joined', { name: friendlyName }) });
         fetchData();
       } else if (eventType === 'device_leave') {
-        setNotification({ type: 'info', text: `Device left network: ${friendlyName}` });
+        setNotification({ type: 'info', text: t('events.left', { name: friendlyName }) });
         fetchData();
       }
     });
@@ -249,7 +253,7 @@ export default function ZigbeeDevices() {
     startDeviceHub(conn, () => cancelled);
     hubRef.current = conn;
     return () => { cancelled = true; conn.stop(); };
-  }, [fetchData]);
+  }, [fetchData, t]);
 
   const handlePermitJoin = async (duration: number) => {
     setActionLoading(true);
@@ -257,9 +261,9 @@ export default function ZigbeeDevices() {
       await zigbeeApi.permitJoin(duration);
       setPermitJoinActive(duration > 0);
       setPermitJoinRemaining(duration);
-      setNotification({ type: duration > 0 ? 'success' : 'info', text: duration > 0 ? `Pairing mode enabled for ${duration}s` : 'Pairing mode disabled' });
+      setNotification({ type: duration > 0 ? 'success' : 'info', text: duration > 0 ? t('pairing.enabled', { duration }) : t('pairing.disabled') });
     } catch {
-      setNotification({ type: 'error', text: 'Failed to change permit join state' });
+      setNotification({ type: 'error', text: t('pairing.error') });
     } finally {
       setActionLoading(false);
     }
@@ -270,11 +274,11 @@ export default function ZigbeeDevices() {
     setActionLoading(true);
     try {
       await zigbeeApi.renameDevice(renameTarget.friendlyName, renameValue.trim());
-      setNotification({ type: 'success', text: `Renamed to "${renameValue.trim()}"` });
+      setNotification({ type: 'success', text: t('renameDialog.success', { name: renameValue.trim() }) });
       setRenameTarget(null);
       setTimeout(fetchData, 1000);
     } catch {
-      setNotification({ type: 'error', text: 'Rename failed' });
+      setNotification({ type: 'error', text: t('renameDialog.error') });
     } finally {
       setActionLoading(false);
     }
@@ -285,11 +289,11 @@ export default function ZigbeeDevices() {
     setActionLoading(true);
     try {
       await zigbeeApi.removeDevice(removeTarget.friendlyName);
-      setNotification({ type: 'success', text: `"${removeTarget.friendlyName}" removed from network` });
+      setNotification({ type: 'success', text: t('removeDialog.success', { name: removeTarget.friendlyName }) });
       setRemoveTarget(null);
       setTimeout(fetchData, 1500);
     } catch {
-      setNotification({ type: 'error', text: 'Remove failed' });
+      setNotification({ type: 'error', text: t('removeDialog.error') });
     } finally {
       setActionLoading(false);
     }
@@ -308,7 +312,7 @@ export default function ZigbeeDevices() {
         )
       );
     } catch {
-      setNotification({ type: 'error', text: 'Command failed' });
+      setNotification({ type: 'error', text: t('commandError') });
     }
   };
 
@@ -324,14 +328,14 @@ export default function ZigbeeDevices() {
         {/* Header */}
         <Box display="flex" alignItems="center" justifyContent="space-between" mb={3} flexWrap="wrap" gap={2}>
           <Box>
-            <Typography variant="h4" fontWeight={600}>Zigbee Network</Typography>
+            <Typography variant="h4" fontWeight={600}>{t('title')}</Typography>
             <Typography variant="caption" color="text.secondary">
-              Data refreshes every 30s · Real-time events via SignalR
+              {t('subtitle')}
             </Typography>
           </Box>
           <Box display="flex" alignItems="center" gap={1}>
             <PermitJoinTimer active={permitJoinActive} initialSeconds={permitJoinRemaining} />
-            <Tooltip title="Refresh">
+            <Tooltip title={t('refresh')}>
               <span>
                 <IconButton onClick={fetchData} disabled={loading}>
                   <RefreshIcon />
@@ -359,37 +363,37 @@ export default function ZigbeeDevices() {
                     {bridge?.isOnline ? <CheckCircleIcon /> : <ErrorIcon />}
                   </Box>
                   <Typography variant="subtitle1" fontWeight={600}>
-                    Bridge {bridge?.isOnline ? 'Online' : 'Offline'}
+                    {bridge?.isOnline ? t('bridge.online') : t('bridge.offline')}
                   </Typography>
                 </Box>
               </Grid>
               {bridge && (
                 <>
                   <Grid item xs={6} sm="auto">
-                    <Typography variant="caption" color="text.secondary" display="block">Coordinator</Typography>
+                    <Typography variant="caption" color="text.secondary" display="block">{t('bridge.coordinator')}</Typography>
                     <Typography variant="body2">{bridge.coordinator.type || '—'}</Typography>
                   </Grid>
                   <Grid item xs={6} sm="auto">
-                    <Typography variant="caption" color="text.secondary" display="block">Channel</Typography>
+                    <Typography variant="caption" color="text.secondary" display="block">{t('bridge.channel')}</Typography>
                     <Typography variant="body2">{bridge.network.channel || '—'}</Typography>
                   </Grid>
                   <Grid item xs={6} sm="auto">
-                    <Typography variant="caption" color="text.secondary" display="block">PAN ID</Typography>
+                    <Typography variant="caption" color="text.secondary" display="block">{t('bridge.panId')}</Typography>
                     <Typography variant="body2">{bridge.network.panId || '—'}</Typography>
                   </Grid>
                   <Grid item xs={6} sm="auto">
-                    <Typography variant="caption" color="text.secondary" display="block">Version</Typography>
+                    <Typography variant="caption" color="text.secondary" display="block">{t('bridge.version')}</Typography>
                     <Typography variant="body2">{bridge.version || '—'}</Typography>
                   </Grid>
                   <Grid item xs={6} sm="auto">
-                    <Typography variant="caption" color="text.secondary" display="block">Devices</Typography>
-                    <Typography variant="body2">{devices.length} total · {onlineCount} recent</Typography>
+                    <Typography variant="caption" color="text.secondary" display="block">{t('bridge.devices')}</Typography>
+                    <Typography variant="body2">{t('bridge.devicesSummary', { total: devices.length, recent: onlineCount })}</Typography>
                   </Grid>
                 </>
               )}
               <Grid item xs={12} sm="auto" sx={{ ml: { sm: 'auto' } }}>
                 <Box display="flex" alignItems="center" gap={1}>
-                  <Typography variant="body2" color="text.secondary">Pairing mode:</Typography>
+                  <Typography variant="body2" color="text.secondary">{t('pairing.label')}</Typography>
                   {PERMIT_JOIN_DURATIONS.map((d) => (
                     <Button
                       key={d}
@@ -406,7 +410,7 @@ export default function ZigbeeDevices() {
                   {permitJoinActive && (
                     <Button size="small" variant="outlined" color="error"
                       onClick={() => handlePermitJoin(0)} disabled={actionLoading}>
-                      Stop
+                      {t('pairing.stop')}
                     </Button>
                   )}
                 </Box>
@@ -420,7 +424,7 @@ export default function ZigbeeDevices() {
           <Box textAlign="center" py={6}>
             <BluetoothSearchingIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
             <Typography color="text.secondary">
-              No Zigbee devices found. Enable pairing mode and add a device.
+              {t('empty')}
             </Typography>
           </Box>
         ) : (
@@ -442,15 +446,15 @@ export default function ZigbeeDevices() {
 
       {/* Rename dialog */}
       <Dialog open={!!renameTarget} onClose={() => setRenameTarget(null)} fullWidth maxWidth="xs">
-        <DialogTitle>Rename Device</DialogTitle>
+        <DialogTitle>{t('renameDialog.title')}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" mb={2}>
-            Current name: <strong>{renameTarget?.friendlyName}</strong>
+            {t('renameDialog.currentName')} <strong>{renameTarget?.friendlyName}</strong>
           </Typography>
           <TextField
             autoFocus
             fullWidth
-            label="New name"
+            label={t('renameDialog.newName')}
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleRenameConfirm()}
@@ -458,37 +462,37 @@ export default function ZigbeeDevices() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRenameTarget(null)}>Cancel</Button>
+          <Button onClick={() => setRenameTarget(null)}>{t('renameDialog.cancel')}</Button>
           <Button
             variant="contained"
             onClick={handleRenameConfirm}
             disabled={actionLoading || !renameValue.trim()}
           >
-            {actionLoading ? <CircularProgress size={18} /> : 'Rename'}
+            {actionLoading ? <CircularProgress size={18} /> : t('renameDialog.confirm')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Remove confirm dialog */}
       <Dialog open={!!removeTarget} onClose={() => setRemoveTarget(null)} fullWidth maxWidth="xs">
-        <DialogTitle>Remove Device</DialogTitle>
+        <DialogTitle>{t('removeDialog.title')}</DialogTitle>
         <DialogContent>
           <Alert severity="warning" sx={{ mb: 1 }}>
-            This will remove <strong>{removeTarget?.friendlyName}</strong> from the Zigbee network.
+            {t('removeDialog.warning', { name: removeTarget?.friendlyName })}
           </Alert>
           <Typography variant="body2" color="text.secondary">
-            The device will need to be re-paired to join again.
+            {t('removeDialog.note')}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRemoveTarget(null)}>Cancel</Button>
+          <Button onClick={() => setRemoveTarget(null)}>{t('removeDialog.cancel')}</Button>
           <Button
             variant="contained"
             color="error"
             onClick={handleRemoveConfirm}
             disabled={actionLoading}
           >
-            {actionLoading ? <CircularProgress size={18} /> : 'Remove'}
+            {actionLoading ? <CircularProgress size={18} /> : t('removeDialog.confirm')}
           </Button>
         </DialogActions>
       </Dialog>

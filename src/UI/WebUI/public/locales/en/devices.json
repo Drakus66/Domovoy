@@ -1,0 +1,93 @@
+{
+  "title": "Devices",
+  "stats": {
+    "online": "online",
+    "lightsOn": "lights on",
+    "power": "power"
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "run": "Run",
+    "allOff": "All off"
+  },
+  "filters": {
+    "searchPlaceholder": "Search devices or zones…",
+    "all": "All",
+    "onlineOnly": "Online only"
+  },
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "on": "on",
+    "off": "off"
+  },
+  "errors": {
+    "loadDevices": "Failed to load devices. Check ApiGateway / DbGateway connection.",
+    "command": "Command failed",
+    "assignZone": "Failed to assign zone",
+    "setArchetype": "Failed to set device type"
+  },
+  "empty": {
+    "noDevices": "The house feels empty — no devices have moved in yet. Pair a Zigbee device or start the emulator.",
+    "noMatches": "No devices match the current filters."
+  },
+  "zone": "Zone",
+  "unassigned": "Unassigned",
+  "type": {
+    "label": "Type",
+    "auto": "Auto · {{value}}",
+    "unknown": "unknown"
+  },
+  "sections": {
+    "controls": "Controls",
+    "sensors": "Sensors",
+    "trends": "Trends · last 24h",
+    "history": "History"
+  },
+  "noCapabilities": "No capabilities reported.",
+  "noHistory": "No recorded changes yet.",
+  "historyVia": "via {{rule}}",
+  "historyCausedBy": "Caused by rule: {{rule}}",
+  "aRule": "a rule",
+  "updated": "Updated {{when}}",
+  "capabilities": {
+    "on_off": "Power",
+    "brightness": "Brightness",
+    "color": "Color",
+    "color_temp": "Color temperature",
+    "temperature": "Temperature",
+    "temperature_setpoint": "Target temperature",
+    "humidity": "Humidity",
+    "co2": "CO₂",
+    "occupancy": "Occupancy",
+    "contact": "Contact",
+    "lock": "Lock",
+    "valve": "Valve",
+    "power": "Power draw",
+    "energy": "Energy",
+    "battery": "Battery",
+    "illuminance": "Illuminance",
+    "link_quality": "Link quality"
+  },
+  "headline": {
+    "on": "On",
+    "onWithBrightness": "On · {{brightness}}%",
+    "off": "Off",
+    "locked": "Locked",
+    "unlocked": "Unlocked",
+    "target": "{{value}} target",
+    "motion": "Motion",
+    "clear": "Clear",
+    "open": "Open",
+    "closed": "Closed"
+  },
+  "value": {
+    "yes": "Yes",
+    "no": "No"
+  },
+  "chart": {
+    "loadError": "Could not load history.",
+    "noSamples": "No samples in the last {{hours}}h.",
+    "avg": "avg"
+  }
+}

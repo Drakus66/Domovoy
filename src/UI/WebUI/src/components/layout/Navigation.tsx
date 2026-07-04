@@ -3,6 +3,7 @@ import {
   AppBar, Toolbar, Typography, Box, IconButton, Drawer, List, ListItem,
   ListItemButton, ListItemIcon, ListItemText, useMediaQuery, useTheme,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 import MenuIcon from '@mui/icons-material/Menu';
 import SpaceDashboardRoundedIcon from '@mui/icons-material/SpaceDashboardRounded';
@@ -16,22 +17,28 @@ import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
 import ExtensionRoundedIcon from '@mui/icons-material/ExtensionRounded';
 import AccountTreeRoundedIcon2 from '@mui/icons-material/SchemaRounded';
 import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
+import RuleRoundedIcon from '@mui/icons-material/RuleRounded';
 import ColorModeToggle from '../theme/ColorModeToggle';
+import ThemePicker from '../theme/ThemePicker';
+import LanguagePicker from '../i18n/LanguagePicker';
+import HearthIndicator from './HearthIndicator';
 
 const DRAWER_WIDTH = 248;
 
+// `key` maps to a nav.json translation; the path/icon stay code-side.
 const navItems = [
-  { label: 'Dashboard', path: '/', icon: <SpaceDashboardRoundedIcon /> },
-  { label: 'Zones', path: '/zones', icon: <RoomRoundedIcon /> },
-  { label: 'Modes', path: '/modes', icon: <HomeWorkRoundedIcon /> },
-  { label: 'Automations', path: '/automations', icon: <BoltRoundedIcon /> },
-  { label: 'Flow editor', path: '/flow', icon: <AccountTreeRoundedIcon2 /> },
-  { label: 'Control blocks', path: '/blocks', icon: <AccountTreeRoundedIcon /> },
-  { label: 'ML models', path: '/models', icon: <PsychologyRoundedIcon /> },
-  { label: 'Plugins', path: '/plugins', icon: <ExtensionRoundedIcon /> },
-  { label: 'Zigbee', path: '/zigbee', icon: <BluetoothSearchingRoundedIcon /> },
-  { label: 'System Status', path: '/status', icon: <MonitorHeartRoundedIcon /> },
-  { label: 'Logs', path: '/logs', icon: <ArticleRoundedIcon /> },
+  { key: 'dashboard', path: '/', icon: <SpaceDashboardRoundedIcon /> },
+  { key: 'zones', path: '/zones', icon: <RoomRoundedIcon /> },
+  { key: 'modes', path: '/modes', icon: <HomeWorkRoundedIcon /> },
+  { key: 'automations', path: '/automations', icon: <BoltRoundedIcon /> },
+  { key: 'flow', path: '/flow', icon: <AccountTreeRoundedIcon2 /> },
+  { key: 'blocks', path: '/blocks', icon: <AccountTreeRoundedIcon /> },
+  { key: 'models', path: '/models', icon: <PsychologyRoundedIcon /> },
+  { key: 'proposals', path: '/proposals', icon: <RuleRoundedIcon /> },
+  { key: 'plugins', path: '/plugins', icon: <ExtensionRoundedIcon /> },
+  { key: 'zigbee', path: '/zigbee', icon: <BluetoothSearchingRoundedIcon /> },
+  { key: 'status', path: '/status', icon: <MonitorHeartRoundedIcon /> },
+  { key: 'logs', path: '/logs', icon: <ArticleRoundedIcon /> },
 ];
 
 function Brand() {
@@ -45,12 +52,14 @@ function Brand() {
         }}
       />
       <Typography variant="h6" fontWeight={800} letterSpacing="-0.02em">Domovoy</Typography>
+      <HearthIndicator />
     </Box>
   );
 }
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
+  const { t } = useTranslation('nav');
   return (
     <List sx={{ px: 1.5, py: 1, flex: 1 }}>
       {navItems.map((item) => {
@@ -74,7 +83,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
               }}
             >
               <ListItemIcon sx={{ minWidth: 38, color: 'text.secondary' }}>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: selected ? 700 : 500 }} />
+              <ListItemText primary={t(item.key)} primaryTypographyProps={{ fontWeight: selected ? 700 : 500 }} />
             </ListItemButton>
           </ListItem>
         );
@@ -90,7 +99,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <NavList onNavigate={onNavigate} />
       <Box sx={{ px: 2.5, py: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography variant="caption" color="text.secondary">v1.0</Typography>
-        <ColorModeToggle />
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <LanguagePicker />
+          <ThemePicker />
+          <ColorModeToggle />
+        </Box>
       </Box>
     </Box>
   );
@@ -98,6 +111,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
 function Navigation() {
   const theme = useTheme();
+  const { t } = useTranslation('common');
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -106,10 +120,12 @@ function Navigation() {
       <>
         <AppBar position="fixed">
           <Toolbar>
-            <IconButton aria-label="open drawer" edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 1 }}>
+            <IconButton aria-label={t('actions.openMenu')} edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 1 }}>
               <MenuIcon />
             </IconButton>
             <Box sx={{ flexGrow: 1 }}><Brand /></Box>
+            <LanguagePicker />
+            <ThemePicker />
             <ColorModeToggle />
           </Toolbar>
         </AppBar>

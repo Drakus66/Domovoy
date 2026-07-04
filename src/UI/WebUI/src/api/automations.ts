@@ -71,6 +71,9 @@ export const automationsApi = {
   getRules: (): Promise<AutomationRule[]> =>
     apiClient.get<AutomationRule[]>('/api/automations').then((r) => r.data),
 
+  getRule: (id: string): Promise<AutomationRule> =>
+    apiClient.get<AutomationRule>(`/api/automations/${encodeURIComponent(id)}`).then((r) => r.data),
+
   createRule: (rule: NewRule): Promise<AutomationRule> =>
     apiClient.post<AutomationRule>('/api/automations', rule).then((r) => r.data),
 

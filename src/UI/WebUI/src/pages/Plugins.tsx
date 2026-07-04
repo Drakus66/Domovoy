@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
 import {
   Container, Box, Typography, Stack, Button, LinearProgress, Alert, Card, CardContent,
   Chip, Tooltip,
@@ -16,14 +18,15 @@ const STATUS_COLOR: Record<PluginStatus, 'success' | 'warning' | 'error' | 'info
 
 const reqText = (r: Plugin['resources']): string => {
   const parts: string[] = [];
-  if (r.cpuCores) parts.push(`${r.cpuCores} cores`);
-  if (r.memoryMb) parts.push(`${r.memoryMb} MB`);
-  if (r.gpu) parts.push('GPU');
-  if (r.internet) parts.push('internet');
-  return parts.length ? parts.join(' · ') : 'no special resources';
+  if (r.cpuCores) parts.push(i18n.t('plugins:resources.cores', { count: r.cpuCores }));
+  if (r.memoryMb) parts.push(i18n.t('plugins:resources.memoryMb', { memoryMb: r.memoryMb }));
+  if (r.gpu) parts.push(i18n.t('plugins:resources.gpu'));
+  if (r.internet) parts.push(i18n.t('plugins:resources.internet'));
+  return parts.length ? parts.join(' · ') : i18n.t('plugins:resources.none');
 };
 
 export default function Plugins() {
+  const { t } = useTranslation('plugins');
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [host, setHost] = useState<HostResources | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,7 +40,7 @@ export default function Plugins() {
       setPlugins(res.plugins);
       setHost(res.host);
     } catch {
-      setError('Failed to load plugins. Check ApiGateway / PluginSupervisor connection.');
+      setError(t('errors.load'));
     } finally {
       setLoading(false);
     }
@@ -56,7 +59,7 @@ export default function Plugins() {
       await (action === 'start' ? pluginsApi.start(p.id) : pluginsApi.stop(p.id));
       await load();
     } catch {
-      setError(`Failed to ${action} ${p.name}.`);
+      setError(t(action === 'start' ? 'errors.start' : 'errors.stop', { name: p.name }));
     } finally {
       setBusy(null);
     }
@@ -70,10 +73,9 @@ export default function Plugins() {
       <Box py={{ xs: 3, md: 4 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
           <Box>
-            <Typography variant="h4" component="h1" fontWeight={700}>Plugins</Typography>
+            <Typography variant="h4" component="h1" fontWeight={700}>{t('title')}</Typography>
             <Typography variant="caption" color="text.secondary">
-              Out-of-process integrations over the bus. Each declares the resources it needs; the supervisor
-              runs only those the host can satisfy, isolated from the core.
+              {t('subtitle')}
             </Typography>
           </Box>
         </Stack>
@@ -81,7 +83,12 @@ export default function Plugins() {
         {host && (
           <Chip
             icon={<MemoryRoundedIcon />} variant="outlined" sx={{ mb: 2 }}
-            label={`Host: ${host.cpuCores} cores · ${host.memoryMb} MB · GPU ${host.gpu ? 'yes' : 'no'} · internet ${host.internet ? 'yes' : 'no'}`}
+            label={t('host', {
+              cores: host.cpuCores,
+              memoryMb: host.memoryMb,
+              gpu: host.gpu ? t('yes') : t('no'),
+              internet: host.internet ? t('yes') : t('no'),
+            })}
           />
         )}
 
@@ -92,7 +99,7 @@ export default function Plugins() {
           <Box textAlign="center" py={8}>
             <ExtensionRoundedIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
             <Typography color="text.secondary">
-              No plugins discovered. Drop a folder with a <code>plugin.json</code> into the plugins root.
+              {t('empty')}
             </Typography>
           </Box>
         ) : (
@@ -104,31 +111,31 @@ export default function Plugins() {
                   <Box flex={1} minWidth={0}>
                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap mb={0.25}>
                       <Typography fontWeight={700}>{p.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">v{p.version}</Typography>
-                      <Chip size="small" variant="outlined" color={STATUS_COLOR[p.status]} label={p.status} />
+                      <Typography variant="caption" color="text.secondary">{t('version', { version: p.version })}</Typography>
+                      <Chip size="small" variant="outlined" color={STATUS_COLOR[p.status]} label={t(`status.${p.status}`)} />
                     </Stack>
                     {p.description && (
                       <Typography variant="body2" color="text.secondary">{p.description}</Typography>
                     )}
                     <Typography variant="caption" color="text.secondary">
-                      Needs {reqText(p.resources)}
-                      {p.providedCapabilities.length > 0 && ` · provides ${p.providedCapabilities.join(', ')}`}
+                      {t('needs', { resources: reqText(p.resources) })}
+                      {p.providedCapabilities.length > 0 && t('provides', { capabilities: p.providedCapabilities.join(', ') })}
                       {p.detail ? ` · ${p.detail}` : ''}
                     </Typography>
                   </Box>
                   {canStart(p.status) && (
-                    <Tooltip title="Start">
+                    <Tooltip title={t('actions.start')}>
                       <span>
                         <Button size="small" startIcon={<PlayArrowRoundedIcon />} disabled={busy === p.id}
-                          onClick={() => act(p, 'start')}>Start</Button>
+                          onClick={() => act(p, 'start')}>{t('actions.start')}</Button>
                       </span>
                     </Tooltip>
                   )}
                   {canStop(p.status) && (
-                    <Tooltip title="Stop">
+                    <Tooltip title={t('actions.stop')}>
                       <span>
                         <Button size="small" color="warning" startIcon={<StopRoundedIcon />} disabled={busy === p.id}
-                          onClick={() => act(p, 'stop')}>Stop</Button>
+                          onClick={() => act(p, 'stop')}>{t('actions.stop')}</Button>
                       </span>
                     </Tooltip>
                   )}
