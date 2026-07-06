@@ -67,6 +67,7 @@ internal static class Program
             builder.Services.AddSingleton<ReplayService>();   // 1F: dry-run a rule over history
             // 2I: registry of model templates; the trainer selects the best applicable cell by holdout.
             builder.Services.AddSingleton<IModelTemplate, ScheduleRegressionTemplate>();
+            builder.Services.AddSingleton<IModelTemplate, ContextScheduleRegressionTemplate>(); // 2B: time + home mode
             builder.Services.AddSingleton<IModelTemplate, ScheduleBinaryTemplate>();
             builder.Services.AddSingleton<IModelTemplate, ScheduleMulticlassTemplate>();
             builder.Services.AddSingleton<ModelTemplateRegistry>();

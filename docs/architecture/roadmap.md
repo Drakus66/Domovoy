@@ -482,10 +482,16 @@ E2 (композит) и конфигом-инстансом на уровне E
 > (`ScorecardChart`, recharts) + MAE/RMSE; `/blocks` — селектор стадии Shadow/Bounded/Full + поля
 > baseline/band/drift (каталог-форма) + live `ml_effective_stage`/`ml_drift`. **8 ML юнит-тестов** (стадии,
 > клампы, полоса, дрейф/no-model демоут, holdout) — 23/23 .NET; WebUI build + lint(мои файлы)/26 тестов зелёные.
-> **Решение по объёму:** ядро стадий отгружено на schedule-модели 2A (hour+dow); **обогащение фич режимом/
-> присутствием отложено** (требует серверного join `device_events`+режим и расширения ML-pipeline) — отдельной
-> итерацией. **Дальше:** очередь апрува/промоута со scorecard+провенансом и выбор модели на инстанс — Эпик 2C;
-> фичи mode/presence. **Не проверено вживую** против RabbitMQ/Mongo.
+> **Решение по объёму:** ядро стадий отгружено на schedule-модели 2A (hour+dow).
+> **✅ Хвост — фичи режима (2026-07-06):** **серверный context-join** [`ContextFeatureJoin`](../../src/Services/Domovoy.AutomationService/Ml/Templates/ContextFeatureJoin.cs)
+> (as-of join режима из `mode_change`-лога 1G на каждую тренировочную строку) + **context-шаблон**
+> [`ContextScheduleRegressionTemplate`](../../src/Services/Domovoy.AutomationService/Ml/Templates/ContextScheduleRegressionTemplate.cs)
+> (OneHot(mode) ⊕ hour/dow → SDCA-регрессия), конкурирует с time-only по holdout MAE (2I-селекция) — регистрируется
+> только если режим реально снижает ошибку (single-mode → declines). **Паритет train/serve без смены сигнатур:**
+> режим глобален, `MlModelService` кондиционирует на **текущий** `HomeModeState.Current` в момент инференса
+> (`DbGatewayClient.GetModeTimelineAsync`). `MlModel.Features` template-driven (`"time+mode"`). **Присутствие**
+> (per-instance) — остаётся: нужен вход presence в губернатор. 4 юнит-теста (139 .NET-юнит; аддитивно, старые
+> зелёные). **Дальше:** очередь апрува/промоута — Эпик 2C (сделан); фича presence. **Не проверено вживую.**
 
 ### Эпик 2I. Обобщённые ML-шаблоны + зональный scoping моделей ✅ (Фазы 0–5, 2026-06-28; остаток — мультивариантный пайплайн)
 **Мотивация.** 2B-термостат — частный случай «лежащего на поверхности» применения ML. По основной идее
@@ -565,8 +571,12 @@ generic-губернатор (он уже почти весь написан в 
 > `zone_kind` вес 0.5; через границу типа — **жёсткая стена**; global=только ambient). **Ф5** `1e87d7b` — WebUI
 > `/models` показывает Scope/Metric/Features. **Сетка типов закрыта:** Number→Setpoint, Boolean→Toggle,
 > Enum→Selector — новая величина = строка в каталоге, не класс. **Тесты:** 35 ML/governor + смежные, WebUI 26.
-> **Остаток:** мультивариантный ML-пайплайн, потребляющий admissible-фичи `FeatureLocality` (ждёт контекст-join,
-> без реальных данных умозрителен); descriptor-based `CapabilityKindResolver` для авто-тренировки enum-целей.
+> **✅ Хвост — мультивариантный пайплайн v1 (2026-07-06):** контекст-join отгружен (см. 2B) → пайплайн стал
+> **мультивариантным**: `ContextScheduleRegressionTemplate` потребляет **ambient-фичу** режима (по `FeatureLocality`
+> home mode = ambient → admissible для любой модели/зоны) поверх time и конкурирует по holdout. Это первая фича
+> сверх time, текущая через фич-локальность. **Остаток:** произвольные **зональные** admissible-сенсоры
+> (same-kind sibling с down-weight) в тренировке+serving — нужен per-instance ввод фич в инференс + живая
+> валидация против skew (Фаза 1.5); descriptor-based `CapabilityKindResolver` для авто-тренировки enum-целей.
 
 ### Эпик 2C. Очередь предложений + апрув ✅ (2026-07-04, ветка `epic-2b`)
 - Единый UI: промоут ML-блоков (Shadow→Active со scorecard/провенансом) + ML-**предложения правил** (`Proposed`, валидируются реплеем 1F — объяснимый дискретный путь, напр. «свет по присутствию»).

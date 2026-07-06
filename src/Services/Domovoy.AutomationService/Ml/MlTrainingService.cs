@@ -30,6 +30,10 @@ public sealed class MlTrainingService : BackgroundService
 
     private DateTime _lastTrain = DateTime.MinValue;
 
+    // Home-mode timeline for the current training run's context-join (Epic 2B). Training runs are serialized
+    // in practice (the _lastTrain guard + single background loop), so a per-run field is safe.
+    private IReadOnlyList<(DateTime At, string Mode)> _modeTimeline = Array.Empty<(DateTime At, string Mode)>();
+
     public MlTrainingService(
         DbGatewayClient db, ModelTemplateRegistry templates, MlModelService models, ZoneCache zones,
         IOptions<AutomationOptions> options, ILogger<MlTrainingService> logger)
@@ -103,6 +107,11 @@ public sealed class MlTrainingService : BackgroundService
     {
         _lastTrain = DateTime.UtcNow;
         var from = DateTime.UtcNow.AddDays(-_options.TrainWindowDays);
+
+        // Context-join (Epic 2B): the home-mode timeline over the window, attached to numeric training rows so a
+        // context template can learn mode-dependent schedules. Best-effort — absent ⇒ mode features are "none".
+        _modeTimeline = await _db.GetModeTimelineAsync(from, PageSize, ct)
+            ?? (IReadOnlyList<(DateTime At, string Mode)>)Array.Empty<(DateTime At, string Mode)>();
 
         var targetKind = CapabilityKindResolver.KindOf(_options.TrainCapability);
         var candidates = _templates.ForTarget(targetKind);
@@ -212,7 +221,7 @@ public sealed class MlTrainingService : BackgroundService
             HoldoutScore = r.HoldoutScore,
             HoldoutSampleCount = r.HoldoutCount,
             Metric = template.Metric,
-            Features = "time",
+            Features = template.Features,
             Algorithm = template.Algorithm,
         };
         return await _db.RegisterModelAsync(model, r.Artifact, ct);
@@ -243,7 +252,10 @@ public sealed class MlTrainingService : BackgroundService
             var telemetry = await LoadPagedAsync(
                 (hi, token) => _db.GetTelemetryAsync(_options.TrainCapability, from, PageSize, token, zoneId, hi),
                 s => s.Timestamp, ct);
-            return telemetry?.Select(s => new LabeledSample(s.Timestamp, s.Value)).ToList();
+            if (telemetry is null) return null;
+            // Attach the home mode in effect at each sample (Epic 2B context-join) for the context template.
+            var rows = telemetry.Select(s => new LabeledSample(s.Timestamp, s.Value)).ToList();
+            return ContextFeatureJoin.WithMode(rows, _modeTimeline);
         }
 
         // Boolean/enum targets are labeled from the event-log: booleans encode to 0/1, enums keep the class.

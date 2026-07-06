@@ -5,9 +5,11 @@ namespace Domovoy.AutomationService.Ml.Templates;
 /// <summary>
 /// A labeled training row at a point in time (roadmap Epic 2I). <see cref="Value"/> carries numeric and
 /// boolean (0/1) targets so they train the way telemetry does; <see cref="Class"/> carries the string label
-/// for enum/categorical targets (Phase 3). A row uses one or the other depending on the template.
+/// for enum/categorical targets (Phase 3). <see cref="Mode"/> is the home mode in effect at the row's time
+/// (Epic 2B context feature; null when unknown). A row uses <see cref="Value"/> or <see cref="Class"/>
+/// depending on the template; a context template additionally reads <see cref="Mode"/>.
 /// </summary>
-public readonly record struct LabeledSample(DateTime Timestamp, double Value, string? Class = null);
+public readonly record struct LabeledSample(DateTime Timestamp, double Value, string? Class = null, string? Mode = null);
 
 /// <summary>Outcome of training a template: the serialized artifact plus its honest holdout score.</summary>
 /// <param name="Artifact">Serialized ML.NET model bytes.</param>
@@ -42,6 +44,9 @@ public interface IModelTemplate
 
     /// <summary>Training algorithm, for provenance (<c>MlModel.Algorithm</c>).</summary>
     string Algorithm { get; }
+
+    /// <summary>Feature set the model is trained on, for provenance (<c>MlModel.Features</c>). Default time-only.</summary>
+    string Features => "time";
 
     /// <summary>Train the template, or null when there is too little data.</summary>
     TemplateResult? Train(IReadOnlyList<LabeledSample> samples, int minSamples);

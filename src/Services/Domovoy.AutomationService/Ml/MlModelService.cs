@@ -22,6 +22,7 @@ namespace Domovoy.AutomationService.Ml;
 public sealed class MlModelService
 {
     private readonly DbGatewayClient _db;
+    private readonly HomeModeState _mode;
     private readonly AutomationOptions _options;
     private readonly ILogger<MlModelService> _logger;
 
@@ -43,9 +44,10 @@ public sealed class MlModelService
     private sealed record Loaded(
         string ModelId, Func<DateTimeOffset, double>? Scalar, Func<DateTimeOffset, string?>? Class, MlModel Meta);
 
-    public MlModelService(DbGatewayClient db, IOptions<AutomationOptions> options, ILogger<MlModelService> logger)
+    public MlModelService(DbGatewayClient db, HomeModeState mode, IOptions<AutomationOptions> options, ILogger<MlModelService> logger)
     {
         _db = db;
+        _mode = mode;
         _options = options.Value;
         _logger = logger;
     }
@@ -169,6 +171,24 @@ public sealed class MlModelService
                 {
                     var (hour, dow) = Features(now);
                     return engine.Predict(new MlSample { Hour = hour, Dow = dow }).Value;
+                }, null);
+            }
+            case MlModelKinds.ScheduleRegressionContext:
+            {
+                // Train/serve parity (Epic 2B): condition on the CURRENT home mode at inference — the same
+                // ambient feature the context-join attached to each training row. Home mode is global, so the
+                // predictor reads it here rather than threading it through the block tick.
+                var engine = _ml.Model.CreatePredictionEngine<
+                    Templates.ContextScheduleRegressionTemplate.ContextSample,
+                    Templates.ContextScheduleRegressionTemplate.ContextPrediction>(model);
+                return (now =>
+                {
+                    var (hour, dow) = Features(now);
+                    var mode = _mode.Current ?? Templates.ContextScheduleRegressionTemplate.NoMode;
+                    return engine.Predict(new Templates.ContextScheduleRegressionTemplate.ContextSample
+                    {
+                        Hour = hour, Dow = dow, Mode = mode,
+                    }).Value;
                 }, null);
             }
             case MlModelKinds.ScheduleBinary:

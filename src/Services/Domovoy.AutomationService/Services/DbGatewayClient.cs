@@ -150,6 +150,35 @@ public sealed class DbGatewayClient
         }
     }
 
+    /// <summary>
+    /// Load the home-mode timeline (roadmap Epic 2B context-join): the <c>mode_change</c> records from the
+    /// event-log (1G), chronological, as (time, mode) pairs. Used to attach the mode in effect at each training
+    /// row. Null on a gateway failure; empty when no mode changes were recorded.
+    /// </summary>
+    public async Task<List<(DateTime At, string Mode)>?> GetModeTimelineAsync(DateTime fromUtc, int limit, CancellationToken ct)
+    {
+        try
+        {
+            var url = $"api/events?kind=mode_change&from={fromUtc:o}&limit={limit}";
+            var events = await _http.GetFromJsonAsync<List<EventLogEntry>>(url, Json, ct);
+            if (events is null) return null;
+            events.Reverse(); // newest-first → chronological
+
+            var timeline = new List<(DateTime, string)>();
+            foreach (var e in events)
+            {
+                var mode = e.NewValue is { ValueKind: JsonValueKind.String } v ? v.GetString() : e.NewValue?.ToString();
+                if (!string.IsNullOrWhiteSpace(mode)) timeline.Add((e.Timestamp, mode!));
+            }
+            return timeline;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load home-mode timeline from DbGateway");
+            return null;
+        }
+    }
+
     // ===== Approval queue (Epic 2C) =====
 
     /// <summary>Create a candidate automation rule (Proposed) and return it with its server-assigned id, or null.</summary>
