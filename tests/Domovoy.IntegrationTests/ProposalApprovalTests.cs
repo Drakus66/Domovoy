@@ -15,6 +15,7 @@ namespace Domovoy.IntegrationTests;
 /// endpoint runs — so the BSON round-trip of the patched rule/block is covered too.
 /// </summary>
 [Collection("infra")]
+[Trait("Category", "Infra")] // needs Docker (Testcontainers); excluded from the unit-only CI job
 public sealed class ProposalApprovalTests
 {
     private readonly InfraFixture _fx;

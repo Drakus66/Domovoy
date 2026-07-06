@@ -16,6 +16,7 @@ namespace Domovoy.IntegrationTests;
 /// Mirrors <see cref="ProposalApprovalTests"/> — exercises the same collections the live endpoints use.
 /// </summary>
 [Collection("infra")]
+[Trait("Category", "Infra")] // needs Docker (Testcontainers); excluded from the unit-only CI job
 public sealed class SecuritySeederTests
 {
     private readonly InfraFixture _fx;

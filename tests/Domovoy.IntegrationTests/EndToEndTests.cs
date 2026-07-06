@@ -19,6 +19,7 @@ namespace Domovoy.IntegrationTests;
 /// closes P0-4 for the adapter→bus→Mongo legs). The SignalR leg (ApiGateway relay) is not covered here.
 /// </summary>
 [Collection("infra")]
+[Trait("Category", "Infra")] // needs Docker (Testcontainers); excluded from the unit-only CI job
 public sealed class EndToEndTests
 {
     private readonly InfraFixture _fx;
