@@ -41,14 +41,16 @@ public class AutomationRule
 }
 
 /// <summary>
-/// Rule lifecycle / staged rollout (roadmap Epics 1A + 1F). Only <see cref="Active"/> rules execute
-/// commands. <see cref="Shadow"/> rules ARE evaluated and their would-be actions are logged to run
-/// history, but no commands are published — the "log what it would have done" stage before going live
-/// (ML proposals from Phase 2 land here first). <see cref="Proposed"/>/<see cref="Approved"/>/<see cref="Disabled"/>
-/// are not evaluated.
+/// Rule lifecycle / staged rollout (roadmap Epics 1A + 1F): <c>Proposed → Shadow → BoundedActive → Active</c>.
+/// <see cref="Active"/> rules execute freely. <see cref="Shadow"/> rules ARE evaluated and their would-be
+/// actions are logged to run history, but no commands are published — the "log what it would have done" stage
+/// (ML proposals from Phase 2 land here first). <see cref="BoundedActive"/> rules DO execute, but no more
+/// often than a cooldown window — bounding actuation rate (blast radius) while trust is still building, the
+/// stage between Shadow and full Active. <see cref="Proposed"/>/<see cref="Approved"/>/<see cref="Disabled"/>
+/// are not evaluated. New members are appended so persisted (BSON) ordinals stay stable.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
-public enum RuleStatus { Proposed, Approved, Active, Disabled, Shadow }
+public enum RuleStatus { Proposed, Approved, Active, Disabled, Shadow, BoundedActive }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum TriggerType { DeviceState, Time, Sun }

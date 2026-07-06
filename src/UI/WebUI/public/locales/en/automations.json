@@ -24,6 +24,7 @@
   },
   "status": {
     "Active": "Active",
+    "BoundedActive": "Bounded",
     "Shadow": "Shadow",
     "Disabled": "Disabled"
   },
@@ -60,6 +61,7 @@
     "name": "Name",
     "status": "Status",
     "shadowHelper": "logs, never acts",
+    "boundedHelper": "acts, but rate-limited",
     "whenTrigger": "When (trigger)",
     "device": "Device",
     "capability": "Capability",

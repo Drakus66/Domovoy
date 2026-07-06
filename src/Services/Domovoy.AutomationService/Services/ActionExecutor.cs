@@ -1,7 +1,12 @@
+using System.Collections.Concurrent;
+
+using Domovoy.AutomationService.Configuration;
 using Domovoy.AutomationService.Services.Notifications;
 using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Messaging;
 using Domovoy.MessageBus;
+
+using Microsoft.Extensions.Options;
 
 namespace Domovoy.AutomationService.Services;
 
@@ -16,14 +21,21 @@ public sealed class ActionExecutor
 {
     private readonly IMessageBus _bus;
     private readonly NotificationDispatcher _notifications;
+    private readonly TimeSpan _boundedCooldown;
     private readonly ILogger<ActionExecutor> _logger;
 
     private static readonly TimeSpan MaxDelay = TimeSpan.FromHours(24);
 
-    public ActionExecutor(IMessageBus bus, NotificationDispatcher notifications, ILogger<ActionExecutor> logger)
+    /// <summary>Per-rule last real execution — the throttle clock for BoundedActive rules (Epic 1F).</summary>
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _lastFired = new();
+
+    public ActionExecutor(
+        IMessageBus bus, NotificationDispatcher notifications,
+        IOptions<AutomationOptions> options, ILogger<ActionExecutor> logger)
     {
         _bus = bus;
         _notifications = notifications;
+        _boundedCooldown = TimeSpan.FromSeconds(Math.Max(0, options.Value.BoundedActiveCooldownSeconds));
         _logger = logger;
     }
 
@@ -36,6 +48,24 @@ public sealed class ActionExecutor
         // Shadow rules (roadmap Epic 1F staged rollout): evaluate and log what they WOULD do, but publish
         // no commands and skip real delays — the "shadow mode" stage before a rule (or ML proposal) goes live.
         var shadow = rule.Status == RuleStatus.Shadow;
+
+        // BoundedActive rules (Epic 1F, the stage between Shadow and Active): execute, but no more often than
+        // the cooldown — bounding actuation rate (blast radius) while trust is still building. Protected/Active
+        // safety rules are never throttled.
+        if (conditionsMet && !shadow && rule.Status == RuleStatus.BoundedActive && !rule.IsProtected)
+        {
+            var last = _lastFired.TryGetValue(rule.Id, out var t) ? t : DateTimeOffset.MinValue;
+            var elapsed = DateTimeOffset.UtcNow - last;
+            if (elapsed < _boundedCooldown)
+            {
+                var wait = _boundedCooldown - elapsed;
+                _logger.LogInformation("[{Rule}] BOUNDED throttled — {Wait:F0}s until next run", rule.Name, wait.TotalSeconds);
+                await PublishHistory(rule, triggerSummary, conditionsMet, success: true, executed: 0,
+                    detail: $"bounded: throttled ({wait.TotalSeconds:F0}s until next run)");
+                return;
+            }
+            _lastFired[rule.Id] = DateTimeOffset.UtcNow;
+        }
 
         if (conditionsMet)
         {

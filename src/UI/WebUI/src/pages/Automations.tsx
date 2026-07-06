@@ -22,9 +22,10 @@ import { capabilityDevicesApi, CapabilityDevice } from '../api/capabilityDevices
 
 const OPERATORS = ['eq', 'ne', 'gt', 'lt', 'gte', 'lte', 'changed'];
 // User-selectable lifecycle (Proposed/Approved are reserved for ML proposals, Epic 1F/Phase 2).
-const STATUS_OPTIONS: RuleStatus[] = ['Active', 'Shadow', 'Disabled'];
-const statusColor = (s: RuleStatus): 'success' | 'info' | 'default' =>
-  s === 'Active' ? 'success' : s === 'Shadow' ? 'info' : 'default';
+// BoundedActive (Epic 1F) = active but rate-limited — the stage between Shadow and full Active.
+const STATUS_OPTIONS: RuleStatus[] = ['Active', 'BoundedActive', 'Shadow', 'Disabled'];
+const statusColor = (s: RuleStatus): 'success' | 'info' | 'warning' | 'default' =>
+  s === 'Active' ? 'success' : s === 'BoundedActive' ? 'warning' : s === 'Shadow' ? 'info' : 'default';
 
 const parseValue = (raw: string): unknown => {
   const s = raw.trim();
@@ -261,9 +262,11 @@ function CreateDialog({
               <TextField label={t('dialog.name')} value={draft.name} autoFocus required fullWidth
                 onChange={(e) => onChange({ ...draft, name: e.target.value })} />
               <TextField select label={t('dialog.status')} value={draft.status} sx={{ minWidth: 140 }}
-                helperText={draft.status === 'Shadow' ? t('dialog.shadowHelper') : ' '}
+                helperText={draft.status === 'Shadow' ? t('dialog.shadowHelper')
+                  : draft.status === 'BoundedActive' ? t('dialog.boundedHelper') : ' '}
                 onChange={(e) => onChange({ ...draft, status: e.target.value as RuleStatus })}>
                 <MenuItem value="Active">{t('status.Active')}</MenuItem>
+                <MenuItem value="BoundedActive">{t('status.BoundedActive')}</MenuItem>
                 <MenuItem value="Shadow">{t('status.Shadow')}</MenuItem>
               </TextField>
             </Stack>

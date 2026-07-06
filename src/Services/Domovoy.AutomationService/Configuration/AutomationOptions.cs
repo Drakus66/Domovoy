@@ -22,6 +22,12 @@ public class AutomationOptions
     /// <summary>Path to the local safety-floor rules file (protected, non-disableable from UI).</summary>
     public string SafetyRulesPath { get; set; } = "safety-rules.json";
 
+    /// <summary>
+    /// Minimum seconds between executions of a BoundedActive rule (roadmap Epic 1F staged rollout). A
+    /// promoted-but-unproven rule runs, but no more often than this — bounding actuation rate while trust builds.
+    /// </summary>
+    public int BoundedActiveCooldownSeconds { get; set; } = 300;
+
     // --- Presence-driven home mode (roadmap Epic 1G) ---
 
     /// <summary>

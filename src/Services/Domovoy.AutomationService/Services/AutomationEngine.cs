@@ -69,9 +69,9 @@ public sealed class AutomationEngine : BackgroundService
         return Task.CompletedTask;
     }
 
-    // Active and Shadow rules are both evaluated; Shadow ones only log what they would do (Epic 1F).
+    // Active, BoundedActive and Shadow rules are all evaluated; Shadow only logs, BoundedActive throttles (Epic 1F).
     private IEnumerable<AutomationRule> ActiveRules() =>
-        _store.Rules.Where(r => r.IsProtected || r.Status is RuleStatus.Active or RuleStatus.Shadow);
+        _store.Rules.Where(r => r.IsProtected || r.Status is RuleStatus.Active or RuleStatus.Shadow or RuleStatus.BoundedActive);
 
     private static string Display(object? v) => v switch
     {
