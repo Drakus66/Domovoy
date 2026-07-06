@@ -9,6 +9,7 @@ import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import CancelRoundedIcon from '@mui/icons-material/CancelRounded';
 import ScienceRoundedIcon from '@mui/icons-material/ScienceRounded';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
+import TravelExploreRoundedIcon from '@mui/icons-material/TravelExploreRounded';
 import InboxRoundedIcon from '@mui/icons-material/InboxRounded';
 import { proposalsApi, Proposal, ProposalKind, ProposalStatus } from '../api/proposals';
 import { automationsApi } from '../api/automations';
@@ -55,6 +56,19 @@ export default function Proposals() {
       await load();
     } catch {
       setError(t('errors.proposer'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runDiscovery = async () => {
+    setBusy(true); setError(null); setInfo(null);
+    try {
+      const r = await proposalsApi.discover();
+      setInfo(t('discoveryResult', { created: r.created, patterns: r.patterns, note: r.note }));
+      await load();
+    } catch {
+      setError(t('errors.discovery'));
     } finally {
       setBusy(false);
     }
@@ -131,9 +145,14 @@ export default function Proposals() {
               <ToggleButton value="Proposed">{t('filter.pending')}</ToggleButton>
               <ToggleButton value="all">{t('filter.all')}</ToggleButton>
             </ToggleButtonGroup>
-            <Button variant="contained" startIcon={<AutoAwesomeRoundedIcon />} onClick={runProposer} disabled={busy}>
+            <Button variant="outlined" startIcon={<AutoAwesomeRoundedIcon />} onClick={runProposer} disabled={busy}>
               {t('actions.runProposer')}
             </Button>
+            <Tooltip title={t('discoveryTooltip')}>
+              <Button variant="contained" startIcon={<TravelExploreRoundedIcon />} onClick={runDiscovery} disabled={busy}>
+                {t('actions.runDiscovery')}
+              </Button>
+            </Tooltip>
           </Stack>
         </Stack>
 

@@ -62,6 +62,9 @@ internal static class Program
             // Backstop that expires silent native devices (missed offline signal / stale-after-restart).
             builder.Services.AddHostedService<Services.DeviceLivenessWatchdog>();
 
+            // Seed the built-in roles (admin/resident/guest) so the roles model is usable out of the box (Epic 2E).
+            builder.Services.AddHostedService<Services.SecuritySeeder>();
+
             // Add services to the container
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddOpenApi();
@@ -87,6 +90,8 @@ internal static class Program
             app.MapActivityEndpoints();
             app.MapMlEndpoints();
             app.MapProposalsEndpoints();
+            app.MapRoleEndpoints();
+            app.MapUserEndpoints();
             app.MapMetrics();
 
             // Health check endpoint

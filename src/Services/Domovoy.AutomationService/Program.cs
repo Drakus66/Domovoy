@@ -31,6 +31,8 @@ internal static class Program
 
             builder.Services.Configure<AutomationOptions>(
                 builder.Configuration.GetSection(AutomationOptions.SectionName));
+            builder.Services.Configure<AssistantOptions>(
+                builder.Configuration.GetSection(AssistantOptions.SectionName)); // 2H: NL-assistant feature flag
             builder.Services.Configure<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMQ"));
             builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
 
@@ -75,6 +77,10 @@ internal static class Program
             builder.Services.AddHostedService(sp => sp.GetRequiredService<MlTrainingService>());
             builder.Services.AddSingleton<RuleSuggester>();         // 2C: heuristic rule proposer (stub-precursor to 2F)
             builder.Services.AddHostedService(sp => sp.GetRequiredService<RuleSuggester>());
+            builder.Services.AddSingleton<Services.Discovery.DiscoveryEngine>(); // 2F: full MI/FDR pattern-discovery funnel
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Services.Discovery.DiscoveryEngine>());
+            // 2H: natural-language assistant extension point — the shipped connector is a disabled stub.
+            builder.Services.AddSingleton<Services.Assistant.IAssistantConnector, Services.Assistant.DisabledAssistantConnector>();
 
             var app = builder.Build();
 
@@ -100,6 +106,24 @@ internal static class Program
             // Run the heuristic rule proposer now (roadmap Epic 2C): mine the event-log, queue candidates.
             app.MapPost("/api/proposals/suggest", async (RuleSuggester suggester, CancellationToken ct) =>
                 Results.Ok(await suggester.SuggestOnceAsync(ct)));
+
+            // Run the pattern-discovery engine now (roadmap Epic 2F): MI/FDR funnel over history → queued proposals.
+            app.MapPost("/api/discovery/scan", async (Services.Discovery.DiscoveryEngine engine, CancellationToken ct) =>
+                Results.Ok(await engine.ScanOnceAsync(ct)));
+
+            // Natural-language assistant extension point (roadmap Epic 2H). Stubbed until a backend is wired: the
+            // connector reports availability and every call degrades gracefully (Available=false) while disabled.
+            app.MapGet("/api/assistant/status", (Services.Assistant.IAssistantConnector assistant) =>
+                Results.Ok(new Services.Assistant.AssistantStatus(
+                    assistant.IsAvailable, assistant.Provider, Services.Assistant.DisabledAssistantConnector.Capabilities)));
+
+            app.MapPost("/api/assistant/author-rule",
+                async (Services.Assistant.AssistantAuthorRequest req, Services.Assistant.IAssistantConnector assistant, CancellationToken ct) =>
+                    Results.Ok(await assistant.AuthorRuleAsync(req, ct)));
+
+            app.MapPost("/api/assistant/explain",
+                async (Services.Assistant.AssistantExplainRequest req, Services.Assistant.IAssistantConnector assistant, CancellationToken ct) =>
+                    Results.Ok(await assistant.ExplainAsync(req, ct)));
 
             // Control-block catalog (roadmap Epic 1H): the built-in types' schema for the authoring UI.
             app.MapGet("/api/blocks/catalog", (BlockCatalog catalog) => Results.Ok(

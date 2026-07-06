@@ -15,5 +15,11 @@
     "online": "Online",
     "offline": "Offline"
   },
+  "assistant": {
+    "title": "Assistant",
+    "disabled": "Not configured — an extension point for plain-language rule authoring and explanations, ready to be enabled later.",
+    "enabled": "Enabled via {{provider}}.",
+    "stub": "Disabled"
+  },
   "noData": "No data received from Prometheus"
 }

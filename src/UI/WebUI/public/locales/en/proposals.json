@@ -7,11 +7,13 @@
   },
   "actions": {
     "runProposer": "Run proposer",
+    "runDiscovery": "Discover patterns",
     "simulate": "Simulate",
     "approve": "Approve",
     "reject": "Reject"
   },
   "rejectTooltip": "Reject — the target is left untouched",
+  "discoveryTooltip": "Search history for regularities I could automate (Epic 2F): mutual-information screening, false-discovery control, then propose the survivors.",
   "kind": {
     "Rule": "Rule",
     "BlockPromotion": "Block promotion",
@@ -32,6 +34,7 @@
     "decision": "decision {{id}}"
   },
   "proposerResult": "I went through the event log: {{created}} new candidate(s) out of {{candidates}} found ({{note}}).",
+  "discoveryResult": "I searched for patterns: {{created}} new candidate(s) out of {{patterns}} passed screening ({{note}}).",
   "approved": "Approved \"{{title}}\" (decision {{id}}).",
   "simResult_one": "Would have fired {{count}}× over 7d ({{events}} events scanned)",
   "simResult_other": "Would have fired {{count}}× over 7d ({{events}} events scanned)",
@@ -43,6 +46,7 @@
   "errors": {
     "load": "Failed to load proposals. Check ApiGateway / DbGateway connection.",
     "proposer": "Proposer request failed — is the AutomationService reachable?",
+    "discovery": "Discovery request failed — is the AutomationService reachable?",
     "approve": "Approve failed — the target may no longer exist, or a service is unreachable.",
     "reject": "Reject failed — is the gateway reachable?",
     "simulate": "Simulate failed — is the AutomationService reachable?"

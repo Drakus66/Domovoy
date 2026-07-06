@@ -25,7 +25,9 @@ import RouterIcon from '@mui/icons-material/Router';
 import StorageIcon from '@mui/icons-material/Storage';
 import WifiIcon from '@mui/icons-material/Wifi';
 import SpeedIcon from '@mui/icons-material/Speed';
+import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import { metricsApi, ServiceStatus, SystemSummary } from '../api/metrics';
+import { assistantApi, AssistantStatus } from '../api/assistant';
 
 const REFRESH_INTERVAL_MS = 30_000;
 
@@ -109,6 +111,7 @@ function SystemStatus() {
   const { t } = useTranslation('status');
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [summary, setSummary] = useState<SystemSummary | null>(null);
+  const [assistant, setAssistant] = useState<AssistantStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -123,6 +126,8 @@ function SystemStatus() {
       setServices(svc);
       setSummary(sum);
       setLastUpdated(new Date());
+      // Assistant status is optional (Epic 2H, feature-flagged stub) — never fail the page over it.
+      assistantApi.getStatus().then(setAssistant).catch(() => setAssistant(null));
     } catch {
       setError(t('loadError'));
     } finally {
@@ -228,6 +233,29 @@ function SystemStatus() {
               sx={{ height: 8, borderRadius: 4 }}
             />
           </Box>
+        )}
+
+        {/* Natural-language assistant (Epic 2H) — a feature-flagged extension point, disabled by default. */}
+        {assistant && (
+          <Card variant="outlined" sx={{ mb: 3 }}>
+            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, '&:last-child': { pb: 2 } }}>
+              <Box sx={{ color: 'text.secondary', display: 'flex' }}><AutoAwesomeRoundedIcon /></Box>
+              <Box flex={1} minWidth={0}>
+                <Typography variant="subtitle1" fontWeight={600}>{t('assistant.title')}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {assistant.available
+                    ? t('assistant.enabled', { provider: assistant.provider })
+                    : t('assistant.disabled')}
+                </Typography>
+              </Box>
+              <Chip
+                size="small"
+                variant="outlined"
+                color={assistant.available ? 'success' : 'default'}
+                label={assistant.available ? i18n.t('status:status.online') : t('assistant.stub')}
+              />
+            </CardContent>
+          </Card>
         )}
 
         {/* Services list */}

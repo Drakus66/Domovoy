@@ -1,0 +1,61 @@
+{
+  "title": "Users & roles",
+  "subtitle": "Local household members and what they're allowed to do. Model only — nothing is enforced yet.",
+  "tabs": {
+    "users": "Users",
+    "roles": "Roles"
+  },
+  "newUser": "New user",
+  "newRole": "New role",
+  "emptyUsers": "No users yet. Add the people who live here.",
+  "disabled": "Disabled",
+  "noRoles": "No roles assigned",
+  "noPermissions": "No permissions",
+  "builtIn": "Built-in",
+  "builtInLocked": "Built-in roles cannot be deleted",
+  "deleteUserConfirm": "Remove user \"{{name}}\"?",
+  "deleteRoleConfirm": "Delete role \"{{name}}\"? It will be removed from any user who holds it.",
+  "errors": {
+    "load": "Failed to load users and roles. Check ApiGateway / DbGateway connection.",
+    "save": "Failed to save.",
+    "delete": "Failed to remove user.",
+    "deleteRole": "Failed to delete role. Built-in roles cannot be deleted."
+  },
+  "actions": {
+    "edit": "Edit",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "userDialog": {
+    "editTitle": "Edit user",
+    "newTitle": "New user",
+    "displayName": "Display name",
+    "email": "Email (optional)",
+    "roles": "Roles",
+    "noRolesYet": "No roles defined yet — create one on the Roles tab.",
+    "enabled": "Enabled"
+  },
+  "roleDialog": {
+    "editTitle": "Edit role",
+    "newTitle": "New role",
+    "name": "Name",
+    "description": "Description",
+    "permissions": "Permissions",
+    "builtInNameLocked": "Built-in role name cannot be changed"
+  },
+  "perm": {
+    "devices_view": "View devices",
+    "devices_control": "Control devices",
+    "zones_manage": "Manage zones",
+    "modes_manage": "Change home mode",
+    "automations_manage": "Manage automations",
+    "blocks_manage": "Manage control blocks",
+    "models_manage": "Manage ML models",
+    "proposals_approve": "Approve proposals",
+    "plugins_manage": "Manage plugins",
+    "activity_view": "View activity",
+    "users_manage": "Manage users & roles",
+    "system_admin": "Full administrator"
+  }
+}

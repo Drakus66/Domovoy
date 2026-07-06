@@ -625,11 +625,32 @@ generic-губернатор (он уже почти весь написан в 
 > discovery против реального Mongo (поймал баг writable-over-bus). 10 .NET-проектов + WebUI `tsc`/lint/26 тестов
 > зелёные. **Дальше:** ML.NET-классификатор; использование архетипа в ML-предложениях (2C).
 
-### Эпик 2E. Модель ролей ⬜ (без enforcement)
+### Эпик 2E. Модель ролей ✅ (без enforcement)
 - Локальные пользователи/роли/права (манифест плагина уже несёт `permissions`); назначение ролей. **Без** логина/токенов/сессий — enforcement в Фазе 3.
 - **DoD:** CRUD пользователей/ролей + привязка прав; модель готова к будущему enforcement; в dev ничего не блокирует.
 
-### Эпик 2F. Движок поиска закономерностей (Pattern Discovery Engine) ⬜ 🔬
+> **✅ Реализовано (Epic 2E — модель, без enforcement).** **Контракт** `Domovoy.Contracts/Security/`:
+> [`WellKnownPermissions`](../../src/Common/Domovoy.Contracts/Security/Permissions.cs) — **открытый** словарь
+> прав (`devices.view/control`, `zones/modes/automations/blocks/models/plugins/users.manage`,
+> `proposals.approve`, `activity.view`, `system.admin`), открыт как capability-модель (плагин может запросить
+> право вне списка — манифесты уже несут `Permissions` строками); [`Role`](../../src/Common/Domovoy.Contracts/Security/Role.cs)
+> (имя + описание + `IsBuiltIn` + список прав) и [`User`](../../src/Common/Domovoy.Contracts/Security/User.cs)
+> (identity + `RoleIds` + `Enabled`, **без пароля/логина/сессии** — аутентификация в Фазе 3). **DbGateway** —
+> источник истины: [`RolesEndpoints`](../../src/Gateway/Domovoy.DbGateway/Endpoints/RolesEndpoints.cs)
+> (`/api/roles` CRUD + `GET /permissions` = словарь для UI; built-in роль нельзя удалить, права редактируемы;
+> при удалении роли она снимается со всех пользователей), [`UsersEndpoints`](../../src/Gateway/Domovoy.DbGateway/Endpoints/UsersEndpoints.cs)
+> (`/api/users` CRUD), [`SecuritySeeder`](../../src/Gateway/Domovoy.DbGateway/Services/SecuritySeeder.cs)
+> (hosted-сервис, идемпотентно засевает встроенные роли **admin/resident/guest**, не затирая правки при
+> рестарте). **ApiGateway** — тонкие прокси `RolesController`/`UsersController` (калька `ZonesController`).
+> **WebUI** — страница `/users` («Пользователи и роли», вкладки): CRUD пользователей с назначением ролей,
+> CRUD ролей с чекбоксами прав, чип «встроенная» + защита от удаления; nav-пункт + i18n (ru/en). **Тесты:**
+> 4 офлайн-юнит на модель (встроенные роли/словарь прав: admin = супернабор, guest = read-only, только
+> известные права, без дублей) + 2 инфра-теста против реального Mongo (идемпотентность сидера без затирания
+> правок; BSON round-trip `User`, Docker-gated). Полное решение собирается (0 ошибок); WebUI `tsc`/lint/build
+> + 29 тестов зелёные. **No enforcement** — модель готова, гейтинг запросов на права = Фаза 3 (локальная auth).
+> **Дальше:** enforcement поверх ролей + логин/токены/сессии (Фаза 3, перед умными замками).
+
+### Эпик 2F. Движок поиска закономерностей (Pattern Discovery Engine) ✅ (v1 — тип A: дискретные политики)
 
 > Добавлен по итогам обсуждения с владельцем (2026-06-14). **Сдвиг от ручного ML к автономному.** 2A/2B
 > исполняют закономерность, которую **указал человек** (ML-термостат: «целевая температура из истории»).
@@ -728,6 +749,35 @@ generic-губернатор (он уже почти весь написан в 
   очередь 2C; тривиальные, обратно-причинные и статистически случайные кандидаты отсеиваются Stage 1/3; ни одно
   предложение не активируется без апрува; скан запускается по расписанию и вручную.
 
+> **✅ Реализовано (Epic 2F — v1, тип A/дискретные политики).** Полная воронка поверх заглушки 2C
+> (`RuleSuggester`), в `AutomationService/Services/Discovery/`. **Статистические примитивы (чистый .NET,
+> детерминированные):** [`InformationTheory`](../../src/Services/Domovoy.AutomationService/Services/Discovery/InformationTheory.cs)
+> (MI и **условная** MI в натах — ловит нелинейность и снимает конфаундер), [`ChiSquared`](../../src/Services/Domovoy.AutomationService/Services/Discovery/ChiSquared.cs)
+> (G-тест `G=2·N·MI` → p-value через регуляризованную неполную гамму = χ²-survival; Ланцош/цепная дробь),
+> [`Statistics`](../../src/Services/Domovoy.AutomationService/Services/Discovery/Statistics.cs) (Benjamini-Hochberg
+> FDR). **Ядро воронки** [`PatternMiner.Mine`](../../src/Services/Domovoy.AutomationService/Services/Discovery/PatternMiner.cs)
+> (чистая функция, Stage 0→3): **Stage 0** — бакетизация истории в слоты, сенсор сэмплируется *как-of начало
+> слота*, человеческие on-действия — *внутри* слота (сенсор всегда **предшествует** действию → уважает стрелу
+> времени, снимает reverse-causality by construction); **Stage 1** — по каждой паре сенсор×актуатор условная
+> `I(сенсор; действие | время-суток)` → G-тест p-value → **BH-FDR** по всем парам (здесь дохнут конфаундеры и
+> случайные пары); **Stage 2** — для выжившей пары ищется предсказывающее условие: булев сенсор → «active»,
+> числовой → **порог по терцилям** (`illuminance < t1` = «темно»→свет), опц. страж по времени суток; **Stage 3**
+> — гейты support/confidence/**lift** (÷ base rate), учитель только `triggerSource=user` (без ML-on-ML/self-
+> fulfilling), устройство не привязывается к себе. **Сервис-обёртка** [`DiscoveryEngine`](../../src/Services/Domovoy.AutomationService/Services/Discovery/DiscoveryEngine.cs)
+> (BackgroundService по образцу `MlTrainingService`/`RuleSuggester`): читает event-log по HTTP из DbGateway,
+> дедупит против правил+очереди, кладёт `Proposed`-`AutomationRule` (числовой `lt`/`gt`-триггер + опц.
+> `TimeOfDay`-условие — реплеятся 1F) + `Proposal` (`Source=discovery`, богатый rationale support/confidence/
+> lift/MI/p). `POST /api/discovery/scan` + прокси `ProposalsController.Discover`; WebUI `/proposals` — кнопка
+> **«Искать закономерности»** рядом с «Найти предложения». **Инвариант (принцип 1):** движок — только поставщик
+> гипотез, апрув и стадийный выкат те же (2C/1F/2B). **Тесты:** 16 офлайн-юнит — примитивы (MI=ln2/независимость/
+> снятие конфаундера, χ²-survival vs критические значения, BH-FDR) + `PatternMiner` на синтетике (находит
+> presence→light булевым и dark→light числовым порогом; отсекает self-wiring, non-user, несвязанное). Полное
+> решение собирается 0 ошибок; WebUI tsc/lint/build + 29 тестов зелёные. **Решение по объёму:** v1 — **тип A**
+> (дискретные политики → правила 1A) на MI/FDR-скрининге; **тип B** (уставки-предпочтения → ML-блок 2B) и
+> **тип C** (feedforward/inverse-plant для контуров 1H) + полный Granger/FP-growth/PrefixSpan/out-of-time-бэктест
+> реплеем внутри движка — дальше (умозрительны без реальной истории, ждут Фазу 1.5). Валидация реплеем 1F
+> доступна ревьюеру кнопкой «Simulate» на предложении (как в 2C).
+
 ### Эпик 2G. Центр активности (события + логи + уведомления) ✅ (v1, без каналов доставки)
 - Переосмысление пустого `/logs`: единый **читаемый/искомый/фильтруемый** вид — device-события (`/api/events`), история автоматизаций (`auto_history`), ops-логи (Serilog Mongo-sink `ops_logs`, **раздельно** с доменными по P0-5, объединение на уровне запроса/UI), алерты. Фильтры по источнику/severity/устройству/времени. Каналы доставки (push/telegram/email) — под-часть, ближе к концу.
 - **DoD:** один экран отвечает «что произошло и почему», ищется/фильтруется; аномалия датчика (из 2B) и сбой автоматизации видны; ≥1 канал доставки.
@@ -802,9 +852,25 @@ en — параллельный); MUI-компонентов со встроен
 бандлится → новый язык в пикере требует пересборки; правка контента существующих — уже без пересборки),
 динамический реестр языков с бэкенда, MUI/`ruRU` + `date-fns`-локали при появлении таких компонентов.
 
-### Эпик 2H. LLM — коннекторы-заглушки ⬜
+### Эпик 2H. LLM — коннекторы-заглушки ✅
 - Точка расширения под будущий LLM (NL-авторинг → `Proposed`-правило через 2C; объяснения «почему» прозой поверх 1F), **без** реальной модели (нет железа — разработка на ноутбуке).
 - **DoD:** интерфейс/коннектор + фича-флаг есть; реальная интеграция — позже.
+
+> **✅ Реализовано (Epic 2H — заглушка).** Провайдер-агностичная точка расширения в
+> `AutomationService/Services/Assistant/`: интерфейс [`IAssistantConnector`](../../src/Services/Domovoy.AutomationService/Services/Assistant/IAssistantConnector.cs)
+> с двумя способностями **вне контура управления** — `AuthorRuleAsync` (естественный язык → `Proposed`-правило
+> через очередь 2C + валидация реплеем 1F) и `ExplainAsync` (атрибуция 1F «почему» → фраза). Поставляемая
+> реализация — no-op [`DisabledAssistantConnector`](../../src/Services/Domovoy.AutomationService/Services/Assistant/DisabledAssistantConnector.cs):
+> каждый запрос деградирует мягко (`Available=false` + сообщение), а не падает. **Фича-флаг**
+> [`AssistantOptions`](../../src/Services/Domovoy.AutomationService/Configuration/AssistantOptions.cs) (`Assistant:Enabled`
+> off по умолчанию + `Provider`); `IsAvailable` = флаг **и** назван провайдер (встроенных нет → инертна).
+> Эндпоинты `GET /api/assistant/status`, `POST /api/assistant/author-rule|explain` + прокси `AssistantController`.
+> WebUI: **без чат-аватара** (анти-принцип «духа дома») — только read-only карточка статуса на `/status`
+> («Не настроен — точка расширения…»), i18n ru/en. Реальный бэкенд = будущая конфиг-выбираемая реализация того
+> же интерфейса либо внепроцессный плагин (1C) — вызовы уже идут через интерфейс, дописать позже без правок
+> здесь. **Тесты:** 6 офлайн-юнит (гейтинг флага, мягкая деградация author/explain, реклама способностей).
+> Полное решение собирается 0 ошибок; WebUI tsc/lint/build + 29 тестов зелёные. **Наименования в коде** —
+> функциональные (`assistant`/natural-language), провайдер-агностичные.
 
 ### Эпик 2J. Адаптер ESPHome (ESP32/ESP8266) через MQTT ✅ (v1)
 
@@ -943,7 +1009,7 @@ ML-уставки + правила) он **почти ничего не доба
 | **0. Фундамент** | ✅ заложен | ядро пригодно к росту | контракт, capability-модель, зоны, event-log (Mongo TS), снятие auth-трения + чистка |
 | **1. Автоматизация** | ✅ функц. закрыта | дом работает по сценариям; копятся данные; действия объяснимы | AutomationService (1A ✅), режимы дома+присутствие (1G ✅), платформа данных телеметрии (1B ✅), объяснимость+реплей (1F ✅), control blocks (1H ✅ E1), climate/heating/irrigation контуры (1D ✅), Integration SDK (1C ✅ супервизор), визуальный flow-редактор (1E ✅) |
 | **1.5 Верификация** | 🚧 в работе | стек проверен вживую | ✅ интеграционный data-path тест (P0-4) против реальных RabbitMQ/Mongo (Testcontainers); 🚧 offline-smoke в CI + живой 3-оконный прогон |
-| **2. Интеллект** | 🚧 начата | дом подсказывает; сам ищет закономерности; умнее распознаёт устройства; читаемый центр активности | типизация устройств (2D ✅), центр активности (2G ✅), ML-субстрат на ML.NET (2A ✅), ML-термостат shadow→bounded→full (2B ✅), очередь предложений (2C ✅), **движок поиска закономерностей (2F)**, роли (2E), LLM-заглушки (2H), **адаптер ESPHome через MQTT (2J ✅)** |
+| **2. Интеллект** | ✅ эпики закрыты (v1) | дом подсказывает; сам ищет закономерности; умнее распознаёт устройства; читаемый центр активности | типизация устройств (2D ✅), центр активности (2G ✅), ML-субстрат на ML.NET (2A ✅), ML-термостат shadow→bounded→full (2B ✅), очередь предложений (2C ✅), роли (2E ✅), движок поиска закономерностей (2F ✅ v1 тип A), LLM-заглушки (2H ✅), **адаптер ESPHome через MQTT (2J ✅)** |
 | **3. Автономность** | долгосрочно | самоуправление + голос + видео + доступ | видеоаналитика, голосовой ассистент, active-ML, Matter/Thread, **полная безопасность + умные замки** (из Ф2), облачные плагины |
 
 ## Сквозные направления (на всех фазах)
