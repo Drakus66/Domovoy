@@ -18,6 +18,7 @@ import ExtensionRoundedIcon from '@mui/icons-material/ExtensionRounded';
 import AccountTreeRoundedIcon2 from '@mui/icons-material/SchemaRounded';
 import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
 import RuleRoundedIcon from '@mui/icons-material/RuleRounded';
+import GroupRoundedIcon from '@mui/icons-material/GroupRounded';
 import ColorModeToggle from '../theme/ColorModeToggle';
 import ThemePicker from '../theme/ThemePicker';
 import LanguagePicker from '../i18n/LanguagePicker';
@@ -35,6 +36,7 @@ const navItems = [
   { key: 'blocks', path: '/blocks', icon: <AccountTreeRoundedIcon /> },
   { key: 'models', path: '/models', icon: <PsychologyRoundedIcon /> },
   { key: 'proposals', path: '/proposals', icon: <RuleRoundedIcon /> },
+  { key: 'users', path: '/users', icon: <GroupRoundedIcon /> },
   { key: 'plugins', path: '/plugins', icon: <ExtensionRoundedIcon /> },
   { key: 'zigbee', path: '/zigbee', icon: <BluetoothSearchingRoundedIcon /> },
   { key: 'status', path: '/status', icon: <MonitorHeartRoundedIcon /> },
