@@ -128,4 +128,23 @@ public class AutomationOptions
 
     /// <summary>Max candidates queued per scan (a noisy window can't flood the approval queue).</summary>
     public int DiscoveryMaxProposals { get; set; } = 10;
+
+    /// <summary>
+    /// Granger-causality gate (roadmap Epic 2F): a screened pair also has to show the sensor's <i>previous</i>
+    /// slot predicts the action <i>now</i> at this significance (p ≤ alpha). Kills co-variation without temporal
+    /// precedence. <b>Opt-in (0 disables)</b> — it needs denser consecutive-slot history than the as-of MI screen,
+    /// so it can over-prune sparse homelab data; enable it once enough history has accrued.
+    /// </summary>
+    public double DiscoveryGrangerAlpha { get; set; } = 0.0;
+
+    // --- Setpoint-preference mining (roadmap Epic 2F, type B — learned numeric setpoints) ---
+
+    /// <summary>Numeric writable capabilities whose repeated user settings are mined into a scheduled preference.</summary>
+    public string[] SetpointPreferenceCapabilities { get; set; } = { "temperature_setpoint" };
+
+    /// <summary>Minimum times a user set a setpoint in a time-of-day bucket before a preference is proposed.</summary>
+    public int SetpointMinSupport { get; set; } = 4;
+
+    /// <summary>Max standard deviation (in the setpoint's unit) for a bucket's settings to count as a stable preference.</summary>
+    public double SetpointMaxStdDev { get; set; } = 1.0;
 }

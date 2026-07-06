@@ -796,10 +796,17 @@ generic-губернатор (он уже почти весь написан в 
 > снятие конфаундера, χ²-survival vs критические значения, BH-FDR) + `PatternMiner` на синтетике (находит
 > presence→light булевым и dark→light числовым порогом; отсекает self-wiring, non-user, несвязанное). Полное
 > решение собирается 0 ошибок; WebUI tsc/lint/build + 29 тестов зелёные. **Решение по объёму:** v1 — **тип A**
-> (дискретные политики → правила 1A) на MI/FDR-скрининге; **тип B** (уставки-предпочтения → ML-блок 2B) и
-> **тип C** (feedforward/inverse-plant для контуров 1H) + полный Granger/FP-growth/PrefixSpan/out-of-time-бэктест
-> реплеем внутри движка — дальше (умозрительны без реальной истории, ждут Фазу 1.5). Валидация реплеем 1F
-> доступна ревьюеру кнопкой «Simulate» на предложении (как в 2C).
+> (дискретные политики → правила 1A) на MI/FDR-скрининге. Валидация реплеем 1F доступна ревьюеру кнопкой
+> «Simulate» на предложении (как в 2C).
+> **✅ Хвост (2026-07-06):** **Granger-скрининг** [`GrangerCausality`](../../src/Services/Domovoy.AutomationService/Services/Discovery/GrangerCausality.cs)
+> — дискретный LR G-тест на счётчиках (вложенные мультиномиальные модели: `P(action_t|action_{t-1})` vs
+> `+sensor_{t-1}` → χ²), опциональный гейт в Stage 1 (`DiscoveryGrangerAlpha`, **off by default** — строже
+> as-of MI, требует плотной consecutive-slot истории; 3 юнит-теста). **Тип B** — майнер уставок-предпочтений
+> [`SetpointPreferenceMiner`](../../src/Services/Domovoy.AutomationService/Services/Discovery/SetpointPreferenceMiner.cs):
+> находит стабильные user-заданные числовые уставки (`temperature_setpoint`) по 6ч-бакетам (support+stddev,
+> anti-loop=только user) → DiscoveryEngine эмитит **time-triggered** предложение «в HH:00 установить cap=V»
+> (переиспользует Rule-proposal + replay-валидацию); 4 юнит-теста (131 .NET-юнит). **Тип C** (feedforward
+> `возмущения→u_ss` для контуров 1H) — остаётся Фазе 3: нужны closed-loop данные контура + inverse-plant.
 
 ### Эпик 2G. Центр активности (события + логи + уведомления) ✅ (v1, без каналов доставки)
 - Переосмысление пустого `/logs`: единый **читаемый/искомый/фильтруемый** вид — device-события (`/api/events`), история автоматизаций (`auto_history`), ops-логи (Serilog Mongo-sink `ops_logs`, **раздельно** с доменными по P0-5, объединение на уровне запроса/UI), алерты. Фильтры по источнику/severity/устройству/времени. Каналы доставки (push/telegram/email) — под-часть, ближе к концу.

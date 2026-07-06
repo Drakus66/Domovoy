@@ -67,7 +67,8 @@ public sealed class DiscoveryEngine : BackgroundService
         if (events is null) return new ScanResult(0, 0, "event-log unavailable");
 
         var patterns = PatternMiner.Mine(events, _options);
-        if (patterns.Count == 0) return new ScanResult(0, 0, "no patterns found");
+        var preferences = SetpointPreferenceMiner.Mine(events, _options); // Epic 2F type B
+        if (patterns.Count == 0 && preferences.Count == 0) return new ScanResult(0, 0, "no patterns found");
 
         var rules = await _db.GetUserRulesAsync(ct) ?? new List<AutomationRule>();
         var openProposals = await _db.GetProposalsAsync(ct, nameof(ProposalStatus.Proposed)) ?? new List<Proposal>();
@@ -107,10 +108,80 @@ public sealed class DiscoveryEngine : BackgroundService
             if (++created >= _options.DiscoveryMaxProposals) break;
         }
 
-        _logger.LogInformation("Pattern discovery: {Created} new candidate(s) from {Patterns} patterns / {Events} events",
-            created, patterns.Count, events.Count);
-        return new ScanResult(patterns.Count, created, created == 0 ? "all patterns already known" : "ok");
+        // Type-B (Epic 2F): learned setpoint preferences → time-triggered "set this value" proposals.
+        foreach (var pref in preferences)
+        {
+            if (created >= _options.DiscoveryMaxProposals) break;
+            if (SetpointAlreadyWired(rules, pref)) continue;
+
+            var title = SetpointTitle(pref, nameById);
+            if (openProposals.Any(x => string.Equals(x.Title, title, StringComparison.Ordinal))) continue;
+
+            var rule = BuildSetpointRule(pref, title);
+            var savedRule = await _db.CreateRuleAsync(rule, ct);
+            if (savedRule is null) continue;
+
+            var proposal = new Proposal
+            {
+                Kind = ProposalKind.Rule,
+                Title = title,
+                Rationale = SetpointRationale(pref),
+                Source = "discovery",
+                RuleId = savedRule.Id,
+            };
+            var savedProposal = await _db.CreateProposalAsync(proposal, ct);
+            if (savedProposal is null) continue;
+
+            openProposals.Add(savedProposal);
+            created++;
+        }
+
+        _logger.LogInformation(
+            "Pattern discovery: {Created} new candidate(s) from {Patterns} patterns + {Prefs} setpoint prefs / {Events} events",
+            created, patterns.Count, preferences.Count, events.Count);
+        return new ScanResult(patterns.Count + preferences.Count, created,
+            created == 0 ? "all patterns already known" : "ok");
     }
+
+    // ----- Type-B setpoint-preference proposals (Epic 2F) -----
+
+    // A scheduled preference: at the bucket's start each day, set the numeric setpoint to the learned value.
+    private static AutomationRule BuildSetpointRule(SetpointPreferenceMiner.SetpointPreference pref, string title)
+    {
+        var hour = pref.Bucket * 6;
+        return new AutomationRule
+        {
+            Name = title,
+            Description = "Found by setpoint-preference discovery (Epic 2F, type B). Validate with Simulate before approving.",
+            Status = RuleStatus.Proposed,
+            Triggers = { new RuleTrigger { Type = TriggerType.Time, Cron = $"0 {hour} * * *" } },
+            Actions =
+            {
+                new RuleAction
+                {
+                    Type = ActionType.Command,
+                    DeviceId = pref.DeviceId,
+                    Set = new Dictionary<string, object?> { [pref.CapabilityId] = pref.Value },
+                },
+            },
+        };
+    }
+
+    private static bool SetpointAlreadyWired(IEnumerable<AutomationRule> rules, SetpointPreferenceMiner.SetpointPreference pref) =>
+        rules.Any(r => r.Actions.Any(a => a.Type == ActionType.Command
+            && string.Equals(a.DeviceId, pref.DeviceId, StringComparison.Ordinal)
+            && a.Set is not null && a.Set.ContainsKey(pref.CapabilityId))
+            && r.Triggers.Any(t => t.Type == TriggerType.Time && (t.Cron?.StartsWith($"0 {pref.Bucket * 6} ") ?? false)));
+
+    private static string SetpointTitle(SetpointPreferenceMiner.SetpointPreference pref, IReadOnlyDictionary<string, string> nameById)
+    {
+        var device = nameById.GetValueOrDefault(pref.DeviceId, pref.DeviceId);
+        return $"Set \"{device}\" {pref.CapabilityId} to {pref.Value} at {pref.FromTime}–{pref.ToTime}";
+    }
+
+    private static string SetpointRationale(SetpointPreferenceMiner.SetpointPreference pref) =>
+        $"Discovered: a person set {pref.CapabilityId} to ~{pref.Value} {pref.Support}× during {pref.FromTime}–{pref.ToTime} "
+        + $"(spread ±{pref.StdDev}). Validate with Simulate before approving.";
 
     private static AutomationRule BuildRule(PatternMiner.DiscoveredPattern p, string title)
     {

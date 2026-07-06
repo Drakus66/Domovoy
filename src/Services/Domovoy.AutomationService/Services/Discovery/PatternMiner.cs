@@ -140,7 +140,14 @@ public static class PatternMiner
                 var df = Math.Max(1, nz * (nx - 1) * (ny - 1));
                 var p = ChiSquared.SurvivalFunction(ChiSquared.GStatistic(cmi, xs.Count), df);
 
-                scored.Add(new PairScore(skey.Dev, skey.Cap, adev, series.Numeric, t1, t2, xs, ys, zs, cmi, p));
+                // Granger screen (Epic 2F): does the sensor's *previous* slot predict the action *now*? Computed
+                // on the full-length slot series (consecutive lags), so it complements the as-of MI screen with
+                // temporal precedence. 0 alpha disables it.
+                var grangerP = options.DiscoveryGrangerAlpha > 0
+                    ? GrangerCausality.PValue(binned, y, present)
+                    : 0.0;
+
+                scored.Add(new PairScore(skey.Dev, skey.Cap, adev, series.Numeric, t1, t2, xs, ys, zs, cmi, p, grangerP));
             }
         }
 
@@ -148,11 +155,14 @@ public static class PatternMiner
 
         var accepted = Statistics.BenjaminiHochberg(scored.Select(s => s.PValue).ToList(), options.DiscoveryFdrQ);
 
-        // ----- Stages 2 + 3: mine the condition, apply support/confidence/lift gates -----
+        // ----- Stages 2 + 3: mine the condition, apply support/confidence/lift (+ Granger) gates -----
         var patterns = new List<DiscoveredPattern>();
         for (var i = 0; i < scored.Count; i++)
         {
             if (!accepted[i]) continue;
+            // Granger gate (Epic 2F): drop pairs where the sensor's past doesn't lead the action, even if the
+            // as-of dependency survived FDR — kills co-variation without precedence.
+            if (options.DiscoveryGrangerAlpha > 0 && scored[i].GrangerP > options.DiscoveryGrangerAlpha) continue;
             var pattern = MineCondition(scored[i], options);
             if (pattern is not null) patterns.Add(pattern);
         }
@@ -246,7 +256,7 @@ public static class PatternMiner
     // Which screened pair, with the aligned label arrays and the tertile edges for numeric sensors.
     private sealed record PairScore(
         string SensorDev, string SensorCap, string ActuatorDev, bool Numeric, double T1, double T2,
-        List<int> X, List<int> Y, List<int> Z, double Cmi, double PValue);
+        List<int> X, List<int> Y, List<int> Z, double Cmi, double PValue, double GrangerP);
 
     // Mark, for each slot, whether any timestamp falls within it (two-pointer; timestamps sorted ascending).
     private static int[] MarkSlots(List<DateTime> times, DateTime from, TimeSpan slot, int slotCount)
