@@ -50,6 +50,9 @@ public static class CapabilityIds
     public const string Battery = "battery";                       // number, %
     public const string Illuminance = "illuminance";               // number, lux
     public const string LinkQuality = "link_quality";              // number, 0..255
+    public const string Position = "position";                     // number, 0..100 (%) — cover/blind position
+    public const string HvacMode = "hvac_mode";                    // enum — off/heat/cool/auto (climate)
+    public const string FanSpeed = "fan_speed";                    // number, 0..100 (%) — fan speed
 }
 
 /// <summary>

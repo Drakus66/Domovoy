@@ -993,8 +993,14 @@ ML-уставки + правила) он **почти ничего не доба
 > назначит 2D по `adapterSource=EspHome`). **Тесты:** 13 юнит на codec (маппинг каждого компонента, decode/
 > encode, группировка платы, availability, аббревиатуры) — 82/82 .NET-юнит зелёные. **Известный риск**
 > (retained на wildcard в RabbitMQ MQTT — см. Native) держим в чек-листе живого прогона: митигация — ESPHome
-> переопубликовывает discovery на реконнекте + birth. **Дальше:** `cover`/`climate`/`fan` (многотопиковые),
-> JSON-schema света, нативный ESPHome API как внепроцессный плагин (BLE-proxy/камеры).
+> переопубликовывает discovery на реконнекте + birth.
+> **✅ Хвост (2026-07-06):** добавлены многотопиковые компоненты **`cover`** (open/close→`on_off` + `position`
+> 0..100), **`climate`** (`temperature_setpoint` + read `temperature` + enum `hvac_mode` по `modes`), **`fan`**
+> (`on_off` + `fan_speed` 0..100 по percentage-топикам) и **`light` со `schema:json`** (один JSON-payload на
+> топик → `on_off`+`brightness` из общего топика). Адаптер: один state-топик теперь раздаётся **нескольким
+> каналам** (JSON-light) → объединённый `DeviceStateReportV1`. Новые capability-id `position`/`hvac_mode`/
+> `fan_speed`. 4 новых codec-теста (17 codec-юнит). **Дальше:** presets/oscillation/stop/tilt, нативный
+> ESPHome API как внепроцессный плагин (BLE-proxy/камеры).
 
 > **Порядок (реком.):** Фаза 1.5 → **2D + 2G** рано (фундамент UX/данных, низкая зависимость) + **2A**
 > параллельно (пайплайн ML) → **2B → 2C** дозревают по мере накопления истории (ров «обучающаяся

@@ -39,8 +39,9 @@ public sealed class EspHomeMqttAdapter : IProtocolAdapter
     private readonly ConcurrentDictionary<string, EspDevice> _devices = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<Guid, EspDevice> _devicesById = new();
 
-    // Fast inbound routing: state topic → the owning device + channel; availability topic → the boards on it.
-    private readonly ConcurrentDictionary<string, (Guid DeviceId, EspChannel Channel)> _channelByStateTopic = new(StringComparer.Ordinal);
+    // Fast inbound routing: state topic → the owning device + its channel(s) on that topic (a JSON-schema
+    // light shares one topic across several capabilities); availability topic → the boards on it.
+    private readonly ConcurrentDictionary<string, StateBinding> _channelByStateTopic = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, AvailBinding> _availByTopic = new(StringComparer.Ordinal);
 
     // Topics we've claimed (so CanHandleTopic routes them) and dynamically subscribed to (dedup).
@@ -94,7 +95,7 @@ public sealed class EspHomeMqttAdapter : IProtocolAdapter
             if (topic.StartsWith(DiscoveryPrefix, StringComparison.Ordinal) && topic.EndsWith("/config", StringComparison.Ordinal))
                 await HandleDiscoveryAsync(topic, payload);
             else if (_channelByStateTopic.TryGetValue(topic, out var route))
-                await HandleStateAsync(route.DeviceId, route.Channel, payload);
+                await HandleStateAsync(route, payload);
             else if (_availByTopic.TryGetValue(topic, out var avail))
                 await HandleAvailabilityAsync(avail, payload);
         }
@@ -133,7 +134,8 @@ public sealed class EspHomeMqttAdapter : IProtocolAdapter
             device.ChannelsByCap[channel.CapabilityId] = channel;
             if (channel.StateTopic is { } st)
             {
-                _channelByStateTopic[st] = (device.DeviceId, channel);
+                var binding = _channelByStateTopic.GetOrAdd(st, _ => new StateBinding(device.DeviceId));
+                binding.Channels[channel.CapabilityId] = channel; // dedup/replace by capability on re-discovery
                 await EnsureSubscribedAsync(st);
             }
         }
@@ -173,16 +175,21 @@ public sealed class EspHomeMqttAdapter : IProtocolAdapter
             device.Name, device.DeviceId, capabilities.Count, string.Join(", ", capabilities.Select(c => c.Id)));
     }
 
-    private async Task HandleStateAsync(Guid deviceId, EspChannel channel, string payload)
+    private async Task HandleStateAsync(StateBinding binding, string payload)
     {
-        var value = channel.Decode(payload);
-        if (value is null) return;
+        // One topic may feed several capabilities (JSON-schema light): decode each and report the non-null set.
+        var state = new Dictionary<string, object?>();
+        foreach (var channel in binding.Channels.Values)
+            if (channel.Decode(payload) is { } value)
+                state[channel.CapabilityId] = value;
+
+        if (state.Count == 0) return;
 
         var envelope = Envelope<DeviceStateReportV1>.Create(
             MessageTypes.DeviceState,
             source: $"connectivity/{Name}",
-            data: new DeviceStateReportV1(deviceId, new Dictionary<string, object?> { [channel.CapabilityId] = value }),
-            subject: deviceId.ToString());
+            data: new DeviceStateReportV1(binding.DeviceId, state),
+            subject: binding.DeviceId.ToString());
 
         await _messageBus.PublishAsync(BusTopology.StateExchange, BusTopology.DeviceStateUpdatedKey, envelope);
     }
@@ -263,6 +270,15 @@ public sealed class EspHomeMqttAdapter : IProtocolAdapter
 
         /// <summary>capability id → its latest channel (decode/encode + topics).</summary>
         public ConcurrentDictionary<string, EspChannel> ChannelsByCap { get; } = new(StringComparer.Ordinal);
+    }
+
+    /// <summary>State-topic binding: the owning device + the channel(s) that decode this topic's payload.</summary>
+    private sealed class StateBinding(Guid deviceId)
+    {
+        public Guid DeviceId { get; } = deviceId;
+
+        /// <summary>capability id → channel (several when one JSON topic feeds multiple capabilities).</summary>
+        public ConcurrentDictionary<string, EspChannel> Channels { get; } = new(StringComparer.Ordinal);
     }
 
     /// <summary>Availability (birth/LWT) topic binding: online/offline payloads + the boards it governs.</summary>

@@ -175,8 +175,91 @@ public sealed class EspHomeCodecTests
     }
 
     [Fact]
+    public void Cover_OpenClose_AndPosition()
+    {
+        var e = Build("cover", "garage", """
+            {"name":"Garage","state_topic":"s","command_topic":"c",
+             "position_topic":"ps","set_position_topic":"pc","device":{"identifiers":["esp1"]}}
+            """);
+
+        var onOff = Cap(e, CapabilityIds.OnOff);
+        Assert.Equal(true, onOff.Decode("open"));
+        Assert.Equal(false, onOff.Decode("closed"));
+        Assert.Equal("OPEN", onOff.Encode!(true));
+        Assert.Equal("CLOSE", onOff.Encode!(false));
+
+        var pos = Cap(e, CapabilityIds.Position);
+        Assert.True(pos.Capability.IsWritable);
+        Assert.Equal(60d, Assert.IsType<double>(pos.Decode("60")));
+        Assert.Equal("60", pos.Encode!(60));
+    }
+
+    [Fact]
+    public void Climate_Setpoint_CurrentTemp_AndMode()
+    {
+        var e = Build("climate", "thermostat", """
+            {"name":"Thermostat","temperature_command_topic":"tc","temperature_state_topic":"ts",
+             "current_temperature_topic":"ct","mode_command_topic":"mc","mode_state_topic":"ms",
+             "modes":["off","heat","cool"],"min_temp":10,"max_temp":30,"temp_step":0.5,
+             "device":{"identifiers":["esp1"]}}
+            """);
+
+        var sp = Cap(e, CapabilityIds.TemperatureSetpoint);
+        Assert.True(sp.Capability.IsWritable);
+        Assert.Equal("21.5", sp.Encode!(21.5));
+
+        var cur = Cap(e, CapabilityIds.Temperature);
+        Assert.False(cur.Capability.IsWritable);
+        Assert.Equal(19.4, Assert.IsType<double>(cur.Decode("19.4")));
+
+        var mode = Cap(e, CapabilityIds.HvacMode);
+        Assert.Equal(CapabilityKind.Enum, mode.Capability.Kind);
+        Assert.Equal("heat", mode.Decode("heat"));
+        Assert.Equal("cool", mode.Encode!("cool"));
+    }
+
+    [Fact]
+    public void Fan_OnOff_AndSpeed()
+    {
+        var e = Build("fan", "vent", """
+            {"name":"Vent","state_topic":"s","command_topic":"c",
+             "percentage_state_topic":"ps","percentage_command_topic":"pc","device":{"identifiers":["esp1"]}}
+            """);
+
+        var onOff = Cap(e, CapabilityIds.OnOff);
+        Assert.Equal("ON", onOff.Encode!(true));
+
+        var speed = Cap(e, CapabilityIds.FanSpeed);
+        Assert.True(speed.Capability.IsWritable);
+        Assert.Equal(75d, Assert.IsType<double>(speed.Decode("75")));
+        Assert.Equal("40", speed.Encode!(40));
+    }
+
+    [Fact]
+    public void JsonLight_SharedTopic_DecodesStateAndBrightness()
+    {
+        var e = Build("light", "lamp", """
+            {"name":"Lamp","schema":"json","state_topic":"st","command_topic":"cm","brightness":true,
+             "device":{"identifiers":["esp1"]}}
+            """);
+
+        var onOff = Cap(e, CapabilityIds.OnOff);
+        var bri = Cap(e, CapabilityIds.Brightness);
+        // Both channels share the one JSON state topic.
+        Assert.Equal("st", onOff.StateTopic);
+        Assert.Equal("st", bri.StateTopic);
+
+        Assert.Equal(true, onOff.Decode("""{"state":"ON","brightness":128}"""));
+        Assert.Equal(50, Assert.IsType<int>(bri.Decode("""{"state":"ON","brightness":128}""")));  // 128/255 ≈ 50%
+
+        Assert.Equal("""{"state":"ON"}""", onOff.Encode!(true));
+        Assert.Equal("""{"state":"OFF"}""", onOff.Encode!(false));
+        Assert.Equal("""{"state":"ON","brightness":255}""", bri.Encode!(100));
+    }
+
+    [Fact]
     public void UnsupportedComponent_ReturnsNull() =>
-        Assert.Null(EspHomeCodec.TryBuildEntity("cover", "garage", """{"name":"Garage","device":{"identifiers":["esp1"]}}"""));
+        Assert.Null(EspHomeCodec.TryBuildEntity("camera", "cam", """{"name":"Cam","device":{"identifiers":["esp1"]}}"""));
 
     [Fact]
     public void EmptyPayload_ReturnsNull() =>

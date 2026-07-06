@@ -126,7 +126,20 @@ public static class EspHomeCodec
             }
 
             case "light":
-                return BuildLightChannels(cfg, stateTopic, commandTopic);
+                // JSON schema carries all attributes as one JSON payload on a single topic; the default
+                // schema splits them across per-attribute topics.
+                return string.Equals(Str(cfg, "schema", "schema"), "json", StringComparison.OrdinalIgnoreCase)
+                    ? BuildJsonLightChannels(cfg, stateTopic, commandTopic)
+                    : BuildLightChannels(cfg, stateTopic, commandTopic);
+
+            case "cover":
+                return BuildCoverChannels(cfg, stateTopic, commandTopic);
+
+            case "climate":
+                return BuildClimateChannels(cfg, unit);
+
+            case "fan":
+                return BuildFanChannels(cfg, stateTopic, commandTopic);
 
             case "number":
             {
@@ -165,8 +178,7 @@ public static class EspHomeCodec
             }
 
             default:
-                // cover / climate / fan and friends are richer multi-topic entities — deferred past v1
-                // (the DoD scope is sensors + switch/relay + number-setpoint + light). Unknown → no channels.
+                // Unknown/unsupported component (e.g. camera, text, event) → no channels.
                 return new();
         }
     }
@@ -194,6 +206,126 @@ public static class EspHomeCodec
                 CapabilityIds.Brightness, bri, briState, briCommand,
                 p => DecodeScaled(p, scale),
                 briCommand is null ? null : v => EncodeScaled(v, scale)));
+        }
+
+        return channels;
+    }
+
+    // JSON-schema light: one JSON payload ({state, brightness, …}) on the state/command topic. Each channel
+    // decodes its own field from the shared payload and encodes a partial JSON command (the device merges it).
+    private static List<EspChannel> BuildJsonLightChannels(JsonElement cfg, string? stateTopic, string? commandTopic)
+    {
+        var channels = new List<EspChannel>();
+
+        var onOff = WellKnownCapabilities.OnOff(writable: commandTopic is not null);
+        channels.Add(new EspChannel(
+            CapabilityIds.OnOff, onOff, stateTopic, commandTopic,
+            DecodeJsonState,
+            commandTopic is null ? null : v => ToBool(v) ? "{\"state\":\"ON\"}" : "{\"state\":\"OFF\"}"));
+
+        if (Flag(cfg, "brightness", "bri"))
+        {
+            var scale = Num(cfg, "brightness_scale", "bri_scl") ?? 255;
+            var bri = WellKnownCapabilities.Brightness(writable: commandTopic is not null);
+            channels.Add(new EspChannel(
+                CapabilityIds.Brightness, bri, stateTopic, commandTopic,
+                p => DecodeJsonBrightness(p, scale),
+                commandTopic is null ? null : v => EncodeJsonBrightness(v, scale)));
+        }
+
+        return channels;
+    }
+
+    // Cover (blind/garage/gate): open/close as on_off (on = open), plus an optional 0..100 position channel.
+    // Stop and tilt are out of v1 scope.
+    private static List<EspChannel> BuildCoverChannels(JsonElement cfg, string? stateTopic, string? commandTopic)
+    {
+        var channels = new List<EspChannel>();
+
+        var stateOpen = Str(cfg, "state_open", "stat_open") ?? "open";
+        var stateClosed = Str(cfg, "state_closed", "stat_clsd") ?? "closed";
+        var payloadOpen = Str(cfg, "payload_open", "pl_open") ?? "OPEN";
+        var payloadClose = Str(cfg, "payload_close", "pl_cls") ?? "CLOSE";
+
+        var onOff = WellKnownCapabilities.OnOff(writable: commandTopic is not null);
+        channels.Add(new EspChannel(
+            CapabilityIds.OnOff, onOff, stateTopic, commandTopic,
+            p => DecodeCoverState(p, stateOpen, stateClosed),
+            commandTopic is null ? null : v => ToBool(v) ? payloadOpen : payloadClose));
+
+        var posState = Str(cfg, "position_topic", "pos_t");
+        var posCommand = Str(cfg, "set_position_topic", "set_pos_t");
+        if (posState is not null || posCommand is not null)
+        {
+            var pos = WellKnownCapabilities.Number(CapabilityIds.Position, "%", 0, 100, 1, writable: posCommand is not null);
+            channels.Add(new EspChannel(
+                CapabilityIds.Position, pos, posState, posCommand, DecodeDouble,
+                posCommand is null ? null : EncodeNumber));
+        }
+
+        return channels;
+    }
+
+    // Climate (thermostat): a writable temperature_setpoint, a read current-temperature, and an hvac mode enum.
+    private static List<EspChannel> BuildClimateChannels(JsonElement cfg, string? unit)
+    {
+        var channels = new List<EspChannel>();
+
+        var tempCommand = Str(cfg, "temperature_command_topic", "temp_cmd_t");
+        var tempState = Str(cfg, "temperature_state_topic", "temp_stat_t");
+        if (tempCommand is not null || tempState is not null)
+        {
+            var min = Num(cfg, "min_temp", "min_temp");
+            var max = Num(cfg, "max_temp", "max_temp");
+            var step = Num(cfg, "temp_step", "temp_step");
+            var sp = WellKnownCapabilities.Number(
+                CapabilityIds.TemperatureSetpoint, unit ?? "°C", min, max, step, writable: tempCommand is not null);
+            channels.Add(new EspChannel(
+                CapabilityIds.TemperatureSetpoint, sp, tempState, tempCommand, DecodeDouble,
+                tempCommand is null ? null : EncodeNumber));
+        }
+
+        var currentTemp = Str(cfg, "current_temperature_topic", "curr_temp_t");
+        if (currentTemp is not null)
+            channels.Add(new EspChannel(
+                CapabilityIds.Temperature, WellKnownCapabilities.Temperature(), currentTemp, null, DecodeDouble, null));
+
+        var modeCommand = Str(cfg, "mode_command_topic", "mode_cmd_t");
+        var modeState = Str(cfg, "mode_state_topic", "mode_stat_t");
+        if (modeCommand is not null || modeState is not null)
+        {
+            var modes = StrArray(cfg, "modes", "modes");
+            if (modes.Count == 0) modes = new[] { "off", "heat", "cool", "auto" };
+            var cap = WellKnownCapabilities.Enum(CapabilityIds.HvacMode, modes, writable: modeCommand is not null);
+            channels.Add(new EspChannel(
+                CapabilityIds.HvacMode, cap, modeState, modeCommand,
+                p => string.IsNullOrEmpty(p) ? null : p,
+                modeCommand is null ? null : v => v?.ToString()));
+        }
+
+        return channels;
+    }
+
+    // Fan: on/off plus an optional 0..100 speed (percentage) channel. Presets/oscillation are out of v1 scope.
+    private static List<EspChannel> BuildFanChannels(JsonElement cfg, string? stateTopic, string? commandTopic)
+    {
+        var channels = new List<EspChannel>();
+
+        var on = Str(cfg, "payload_on", "pl_on") ?? "ON";
+        var off = Str(cfg, "payload_off", "pl_off") ?? "OFF";
+        var onOff = WellKnownCapabilities.OnOff(writable: commandTopic is not null);
+        channels.Add(new EspChannel(
+            CapabilityIds.OnOff, onOff, stateTopic, commandTopic,
+            p => DecodeBool(p, on, off), commandTopic is null ? null : v => ToBool(v) ? on : off));
+
+        var pctState = Str(cfg, "percentage_state_topic", "pct_stat_t");
+        var pctCommand = Str(cfg, "percentage_command_topic", "pct_cmd_t");
+        if (pctState is not null || pctCommand is not null)
+        {
+            var speed = WellKnownCapabilities.Number(CapabilityIds.FanSpeed, "%", 0, 100, 1, writable: pctCommand is not null);
+            channels.Add(new EspChannel(
+                CapabilityIds.FanSpeed, speed, pctState, pctCommand, DecodeDouble,
+                pctCommand is null ? null : EncodeNumber));
         }
 
         return channels;
@@ -310,6 +442,56 @@ public static class EspHomeCodec
         };
     }
 
+    // Cover state → on_off (on = open). Opening/closing transients follow their destination.
+    private static object? DecodeCoverState(string payload, string open, string closed)
+    {
+        var p = payload.Trim();
+        if (string.Equals(p, open, StringComparison.OrdinalIgnoreCase)) return true;
+        if (string.Equals(p, closed, StringComparison.OrdinalIgnoreCase)) return false;
+        return p.ToUpperInvariant() switch
+        {
+            "OPEN" or "OPENING" => true,
+            "CLOSED" or "CLOSING" => false,
+            _ => ParseBoolish(p),
+        };
+    }
+
+    // JSON-schema light: pull the "state" field (ON/OFF) out of the shared JSON payload.
+    private static object? DecodeJsonState(string payload)
+    {
+        try
+        {
+            using var d = JsonDocument.Parse(payload);
+            if (d.RootElement.ValueKind == JsonValueKind.Object &&
+                d.RootElement.TryGetProperty("state", out var s) && s.ValueKind == JsonValueKind.String)
+                return DecodeBool(s.GetString() ?? "", "ON", "OFF");
+        }
+        catch (JsonException) { }
+        return null;
+    }
+
+    // JSON-schema light: pull "brightness" (0..scale) out of the shared JSON payload, normalized to 0..100.
+    private static object? DecodeJsonBrightness(string payload, double scale)
+    {
+        try
+        {
+            using var d = JsonDocument.Parse(payload);
+            if (d.RootElement.ValueKind == JsonValueKind.Object &&
+                d.RootElement.TryGetProperty("brightness", out var b) &&
+                b.ValueKind == JsonValueKind.Number && b.TryGetDouble(out var raw) && scale > 0)
+                return (int)Math.Round(Clamp(raw, 0, scale) / scale * 100.0);
+        }
+        catch (JsonException) { }
+        return null;
+    }
+
+    // JSON-schema light brightness command: a partial JSON object (state ON implied by a non-zero brightness).
+    private static string EncodeJsonBrightness(object? v, double scale)
+    {
+        var scaled = (int)Math.Round(Clamp(ToDouble(v), 0, 100) / 100.0 * scale);
+        return $"{{\"state\":\"ON\",\"brightness\":{scaled.ToString(CultureInfo.InvariantCulture)}}}";
+    }
+
     private static object? DecodeScaled(string payload, double scale) =>
         double.TryParse(payload, NumberStyles.Any, CultureInfo.InvariantCulture, out var raw) && double.IsFinite(raw) && scale > 0
             ? (object)(int)Math.Round(Clamp(raw, 0, scale) / scale * 100.0)
@@ -365,6 +547,15 @@ public static class EspHomeCodec
 
     private static double? Num(JsonElement obj, string key, string abbrev) =>
         TryProp(obj, out var v, key, abbrev) && v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var d) ? d : null;
+
+    // A boolean-ish config flag: JSON true, or a "true"/"1" string (publishers vary).
+    private static bool Flag(JsonElement obj, string key, string abbrev)
+    {
+        if (!TryProp(obj, out var v, key, abbrev)) return false;
+        return v.ValueKind == JsonValueKind.True
+            || (v.ValueKind == JsonValueKind.String && bool.TryParse(v.GetString(), out var b) && b)
+            || (v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var d) && d != 0);
+    }
 
     private static IReadOnlyList<string> StrArray(JsonElement obj, string key, string abbrev)
     {
