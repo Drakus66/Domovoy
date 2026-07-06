@@ -92,4 +92,34 @@ public class AutomationOptions
 
     /// <summary>Sensor capabilities whose "became active" transition is treated as a candidate trigger.</summary>
     public string[] ProposalTriggerCapabilities { get; set; } = { "presence", "occupancy", "motion" };
+
+    // --- Pattern-discovery engine (roadmap Epic 2F; the full MI/FDR funnel over the 2C heuristic) ---
+
+    /// <summary>How often the discovery engine scans history for patterns (0 disables the periodic scan; manual endpoint still works).</summary>
+    public int DiscoveryScanHours { get; set; } = 12;
+
+    /// <summary>History window (days) the discovery engine mines.</summary>
+    public int DiscoveryWindowDays { get; set; } = 21;
+
+    /// <summary>Slot size (seconds) history is bucketed into for transition-aligned MI screening.</summary>
+    public int DiscoverySlotSeconds { get; set; } = 300;
+
+    /// <summary>Sensor capabilities considered as candidate drivers — booleans and numerics (illuminance for "dark→light", co2, temperature…).</summary>
+    public string[] DiscoverySensorCapabilities { get; set; } =
+        { "presence", "occupancy", "motion", "contact", "illuminance", "temperature", "co2", "humidity" };
+
+    /// <summary>Benjamini-Hochberg target false-discovery rate for the screening stage.</summary>
+    public double DiscoveryFdrQ { get; set; } = 0.05;
+
+    /// <summary>Minimum times a mined condition must co-occur with the action (support).</summary>
+    public int DiscoveryMinSupport { get; set; } = 4;
+
+    /// <summary>Minimum P(action | condition) (confidence) before a pattern is proposed.</summary>
+    public double DiscoveryMinConfidence { get; set; } = 0.6;
+
+    /// <summary>Minimum lift (confidence ÷ base rate) — how much the condition beats the action's overall frequency.</summary>
+    public double DiscoveryMinLift { get; set; } = 1.5;
+
+    /// <summary>Max candidates queued per scan (a noisy window can't flood the approval queue).</summary>
+    public int DiscoveryMaxProposals { get; set; } = 10;
 }

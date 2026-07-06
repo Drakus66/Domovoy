@@ -42,6 +42,11 @@ public class ProposalsController : ControllerBase
     public Task<IActionResult> Suggest(CancellationToken ct)
         => Forward("automation-service", HttpMethod.Post, "api/proposals/suggest", ct);
 
+    /// <summary>Run the pattern-discovery engine now (Epic 2F); the full MI/FDR funnel over history → queued proposals.</summary>
+    [HttpPost("discover")]
+    public Task<IActionResult> Discover(CancellationToken ct)
+        => Forward("automation-service", HttpMethod.Post, "api/discovery/scan", ct);
+
     private async Task<IActionResult> Forward(string client, HttpMethod method, string path, CancellationToken ct)
     {
         var relativePath = Request.QueryString.HasValue ? $"{path}{Request.QueryString.Value}" : path;

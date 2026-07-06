@@ -31,6 +31,13 @@ export interface SuggestResult {
   note: string;
 }
 
+/** Outcome of a discovery scan (matches AutomationService DiscoveryEngine.ScanResult, Epic 2F). */
+export interface DiscoverResult {
+  patterns: number;
+  created: number;
+  note: string;
+}
+
 /** Fields the UI supplies when queuing a proposal; the server assigns id/status/decision. */
 export type NewProposal = Pick<Proposal, 'kind' | 'title'> &
   Partial<Pick<Proposal, 'rationale' | 'source' | 'ruleId' | 'blockId' | 'fromStage' | 'toStage' | 'modelVersion' | 'modelId' | 'metric' | 'score'>>;
@@ -55,4 +62,8 @@ export const proposalsApi = {
   /** Run the heuristic proposer now — mines the event-log for candidate rules (Epic 2C, precursor to 2F). */
   suggest: (): Promise<SuggestResult> =>
     apiClient.post<SuggestResult>('/api/proposals/suggest').then((r) => r.data),
+
+  /** Run the full pattern-discovery engine now — MI/FDR funnel over history (Epic 2F). */
+  discover: (): Promise<DiscoverResult> =>
+    apiClient.post<DiscoverResult>('/api/proposals/discover').then((r) => r.data),
 };
