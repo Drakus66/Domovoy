@@ -61,5 +61,9 @@
     "authorityStage": "authority stage",
     "outputsSummary": "Outputs: {{list}}",
     "writable": "writable"
+  },
+  "view": {
+    "list": "List",
+    "graph": "Graph"
   }
 }

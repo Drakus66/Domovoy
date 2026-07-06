@@ -4,15 +4,17 @@ import i18n from 'i18next';
 import {
   Container, Box, Typography, Stack, Button, IconButton, LinearProgress, Alert,
   Card, CardContent, Tooltip, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, MenuItem, Divider,
+  TextField, MenuItem, Divider, ToggleButtonGroup, ToggleButton,
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
+import ViewListRoundedIcon from '@mui/icons-material/ViewListRounded';
 import PublishRoundedIcon from '@mui/icons-material/PublishRounded';
 import { blocksApi, BlockCatalogEntry, ControlBlock, NewBlock, PortBinding } from '../api/blocks';
 import { capabilityDevicesApi, CapabilityDevice } from '../api/capabilityDevices';
 import { proposalsApi } from '../api/proposals';
+import BlockGraph from '../components/blocks/BlockGraph';
 
 const stageName = (s: number) =>
   i18n.t(s >= 2 ? 'blocks:stageName.full' : s === 1 ? 'blocks:stageName.bounded' : 'blocks:stageName.shadow');
@@ -46,6 +48,7 @@ export default function Blocks() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [draft, setDraft] = useState<BlockDraft | null>(null);
+  const [view, setView] = useState<'list' | 'graph'>('list');
 
   const load = useCallback(async () => {
     setError(null);
@@ -145,6 +148,10 @@ export default function Blocks() {
               {t('subtitle')}
             </Typography>
           </Box>
+          <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v) => v && setView(v)}>
+            <ToggleButton value="list"><ViewListRoundedIcon fontSize="small" sx={{ mr: 0.5 }} />{t('view.list')}</ToggleButton>
+            <ToggleButton value="graph"><AccountTreeRoundedIcon fontSize="small" sx={{ mr: 0.5 }} />{t('view.graph')}</ToggleButton>
+          </ToggleButtonGroup>
         </Stack>
 
         {/* Catalog — one "New" per built-in type (typed authoring, roadmap Epic 1H). */}
@@ -162,7 +169,9 @@ export default function Blocks() {
         {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
         {info && <Alert severity="info" sx={{ mb: 2 }} onClose={() => setInfo(null)}>{info}</Alert>}
 
-        {blocks.length === 0 && !loading ? (
+        {view === 'graph' ? (
+          <BlockGraph blocks={blocks} devices={devices} />
+        ) : blocks.length === 0 && !loading ? (
           <Box textAlign="center" py={8}>
             <AccountTreeRoundedIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
             <Typography color="text.secondary">

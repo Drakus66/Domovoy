@@ -61,5 +61,9 @@
     "authorityStage": "уровень полномочий",
     "outputsSummary": "Выходы: {{list}}",
     "writable": "с записью"
+  },
+  "view": {
+    "list": "Список",
+    "graph": "Граф"
   }
 }
