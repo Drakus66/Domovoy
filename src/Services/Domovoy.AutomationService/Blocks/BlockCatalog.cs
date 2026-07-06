@@ -1,6 +1,7 @@
 using Domovoy.AutomationService.Configuration;
 using Domovoy.AutomationService.Ml;
 using Domovoy.AutomationService.Ml.Governors;
+using Domovoy.AutomationService.Services;
 using Domovoy.Contracts.Capabilities;
 using Domovoy.Contracts.Ml;
 
@@ -17,7 +18,7 @@ public sealed class BlockCatalog
 {
     private readonly Dictionary<string, IBlockType> _types;
 
-    public BlockCatalog(MlModelService models, IOptions<AutomationOptions> options)
+    public BlockCatalog(MlModelService models, SunCalculator sun, IOptions<AutomationOptions> options)
     {
         var o = options.Value;
         var types = new List<IBlockType>
@@ -26,6 +27,7 @@ public sealed class BlockCatalog
             new ThermostatType(),
             new Co2VentilationType(),
             new IrrigationSequencerType(),
+            new SunGateType(sun),                                     // Epic 1D: outdoor lighting by sun
             new MlSetpointType(models, o.SetpointMin, o.SetpointMax), // Epic 2A: ML-driven setpoint
         };
 

@@ -39,13 +39,18 @@ public sealed class SunCalculator
         return (FromJulian(jTransit - omega / 360.0), FromJulian(jTransit + omega / 360.0));
     }
 
-    /// <summary>True if the given instant is before sunrise or after sunset (i.e. dark).</summary>
-    public bool IsDark(DateTimeOffset nowUtc)
+    /// <summary>
+    /// True if the given instant is before sunrise or after sunset (i.e. dark). A positive
+    /// <paramref name="offsetMinutes"/> widens the dark window on both ends (lights come on before
+    /// sunset and stay on after sunrise) — the hook for outdoor lighting that leads dusk.
+    /// </summary>
+    public bool IsDark(DateTimeOffset nowUtc, double offsetMinutes = 0)
     {
         var (sunrise, sunset) = ForDate(nowUtc.UtcDateTime);
         if (sunrise is null || sunset is null) return false; // polar fallback
         var t = nowUtc.UtcDateTime;
-        return t < sunrise.Value || t > sunset.Value;
+        var offset = TimeSpan.FromMinutes(offsetMinutes);
+        return t < sunrise.Value + offset || t > sunset.Value - offset;
     }
 
     private static double ToJulian(DateTime utc) => utc.ToOADate() + 2415018.5;

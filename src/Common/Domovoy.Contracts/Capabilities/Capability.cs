@@ -32,7 +32,8 @@ public enum CapabilityKind
 /// </summary>
 public static class CapabilityIds
 {
-    public const string OnOff = "on_off";                          // bool
+    public const string OnOff = "on_off";                          // bool (generic/heating demand)
+    public const string CoolDemand = "cool_demand";                // bool (cooling demand — thermostat cool/heat-cool)
     public const string Brightness = "brightness";                 // number, 0..100 (%)
     public const string Color = "color";                           // color (hex)
     public const string ColorTemp = "color_temp";                  // number, Kelvin
