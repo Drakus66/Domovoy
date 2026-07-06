@@ -5,7 +5,8 @@ import {
 } from '@mui/material';
 import ModelTrainingRoundedIcon from '@mui/icons-material/ModelTrainingRounded';
 import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
-import { mlApi, MlModel, ModelScope } from '../api/ml';
+import CategoryRoundedIcon from '@mui/icons-material/CategoryRounded';
+import { mlApi, MlModel, ModelScope, ArchetypeDisagreement } from '../api/ml';
 import ScorecardChart from '../components/charts/ScorecardChart';
 import { fmtDateTime } from '../i18n/format';
 
@@ -19,6 +20,8 @@ export default function Models() {
   const [training, setTraining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [classifying, setClassifying] = useState(false);
+  const [disagreements, setDisagreements] = useState<ArchetypeDisagreement[] | null>(null);
 
   // Scope label along the zone → zone_kind → global chain (Epic 2I).
   const scopeLabel = (s?: ModelScope | null): string =>
@@ -59,6 +62,23 @@ export default function Models() {
     }
   };
 
+  const classify = async () => {
+    setClassifying(true); setError(null); setInfo(null); setDisagreements(null);
+    try {
+      const r = await mlApi.classifyArchetypes();
+      if (!r.trained) {
+        setInfo(t('classify.notTrained', { note: r.note }));
+      } else {
+        setDisagreements(r.disagreements);
+        setInfo(t('classify.done', { trainedOn: r.trainedOn, count: r.disagreements.length }));
+      }
+    } catch {
+      setError(t('classify.error'));
+    } finally {
+      setClassifying(false);
+    }
+  };
+
   return (
     <Container maxWidth="lg">
       <Box py={{ xs: 3, md: 4 }}>
@@ -69,14 +89,38 @@ export default function Models() {
               {t('caption')}
             </Typography>
           </Box>
-          <Button variant="contained" startIcon={<ModelTrainingRoundedIcon />} onClick={train} disabled={training}>
-            {t('actions.trainNow')}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button variant="outlined" startIcon={<CategoryRoundedIcon />} onClick={classify} disabled={classifying}>
+              {t('classify.action')}
+            </Button>
+            <Button variant="contained" startIcon={<ModelTrainingRoundedIcon />} onClick={train} disabled={training}>
+              {t('actions.trainNow')}
+            </Button>
+          </Stack>
         </Stack>
 
-        {(loading || training) && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
+        {(loading || training || classifying) && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
         {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
         {info && <Alert severity="info" sx={{ mb: 2 }} onClose={() => setInfo(null)}>{info}</Alert>}
+
+        {disagreements && disagreements.length > 0 && (
+          <Card variant="outlined" sx={{ mb: 2 }}>
+            <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+              <Typography variant="subtitle2" gutterBottom>{t('classify.reviewTitle')}</Typography>
+              <Stack spacing={0.75}>
+                {disagreements.map((d) => (
+                  <Stack key={d.deviceId} direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                    <Typography variant="body2" fontWeight={600}>{d.name}</Typography>
+                    <Chip size="small" variant="outlined" label={d.current} />
+                    <Typography variant="caption" color="text.secondary">→</Typography>
+                    <Chip size="small" color="primary" label={d.predicted} />
+                    <Typography variant="caption" color="text.secondary">{(d.confidence * 100).toFixed(0)}%</Typography>
+                  </Stack>
+                ))}
+              </Stack>
+            </CardContent>
+          </Card>
+        )}
 
         {models.length === 0 && !loading ? (
           <Box textAlign="center" py={8}>

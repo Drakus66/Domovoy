@@ -86,6 +86,7 @@ internal static class Program
             builder.Services.AddHostedService(sp => sp.GetRequiredService<MlTrainingService>());
             builder.Services.AddSingleton<RuleSuggester>();         // 2C: heuristic rule proposer (stub-precursor to 2F)
             builder.Services.AddHostedService(sp => sp.GetRequiredService<RuleSuggester>());
+            builder.Services.AddSingleton<Ml.ArchetypeAdvisor>();  // 2D: ML.NET archetype classifier (advisory)
             builder.Services.AddSingleton<Services.Discovery.DiscoveryEngine>(); // 2F: full MI/FDR pattern-discovery funnel
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Services.Discovery.DiscoveryEngine>());
             // 2H: natural-language assistant extension point — the shipped connector is a disabled stub.
@@ -119,6 +120,11 @@ internal static class Program
             // Run the pattern-discovery engine now (roadmap Epic 2F): MI/FDR funnel over history → queued proposals.
             app.MapPost("/api/discovery/scan", async (Services.Discovery.DiscoveryEngine engine, CancellationToken ct) =>
                 Results.Ok(await engine.ScanOnceAsync(ct)));
+
+            // ML.NET archetype classifier (roadmap Epic 2D): train on the device population, surface devices the
+            // model would type differently (review candidates). Advisory — never mutates the read-model.
+            app.MapPost("/api/ml/classify-archetypes", async (Ml.ArchetypeAdvisor advisor, CancellationToken ct) =>
+                Results.Ok(await advisor.RunAsync(ct)));
 
             // Natural-language assistant extension point (roadmap Epic 2H). Stubbed until a backend is wired: the
             // connector reports availability and every call degrades gracefully (Available=false) while disabled.

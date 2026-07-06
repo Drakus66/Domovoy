@@ -1,6 +1,7 @@
 using Domovoy.AutomationService.Configuration;
 using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Capabilities;
+using Domovoy.Contracts.Devices;
 using Domovoy.Contracts.Proposals;
 
 using Microsoft.Extensions.Options;
@@ -72,6 +73,8 @@ public sealed class DiscoveryEngine : BackgroundService
         var openProposals = await _db.GetProposalsAsync(ct, nameof(ProposalStatus.Proposed)) ?? new List<Proposal>();
         var devices = await _db.GetDevicesAsync(ct) ?? new List<DbGatewayClient.DeviceSnapshot>();
         var nameById = devices.ToDictionary(d => d.Id, d => string.IsNullOrEmpty(d.Name) ? d.Id : d.Name);
+        // Epic 2D: device archetypes annotate the proposal so a reviewer sees the semantics of the pair.
+        var archetypeById = devices.ToDictionary(d => d.Id, d => d.EffectiveArchetype);
 
         var created = 0;
         foreach (var p in patterns)
@@ -89,7 +92,7 @@ public sealed class DiscoveryEngine : BackgroundService
             {
                 Kind = ProposalKind.Rule,
                 Title = title,
-                Rationale = RationaleFor(p),
+                Rationale = RationaleFor(p) + ArchetypeNote(p, archetypeById),
                 Source = "discovery",
                 RuleId = savedRule.Id,
             };
@@ -163,6 +166,17 @@ public sealed class DiscoveryEngine : BackgroundService
             : $"\"{trigger}\" {p.TriggerCapability} {(p.TriggerOperator == "lt" ? "<" : ">")} {p.TriggerValue}";
         var window = p.FromTime is not null ? $" ({p.FromTime}–{p.ToTime})" : string.Empty;
         return $"Turn on \"{action}\" when {when}{window}";
+    }
+
+    // Epic 2D: annotate the pair with device archetypes (e.g. "motion → light") so the reviewer sees the
+    // semantics at a glance. Silent when either archetype is unknown.
+    private static string ArchetypeNote(PatternMiner.DiscoveredPattern p, IReadOnlyDictionary<string, string> archetypeById)
+    {
+        var trigger = archetypeById.GetValueOrDefault(p.TriggerDeviceId, DeviceArchetypes.Unknown);
+        var action = archetypeById.GetValueOrDefault(p.ActionDeviceId, DeviceArchetypes.Unknown);
+        var known = !string.Equals(trigger, DeviceArchetypes.Unknown, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(action, DeviceArchetypes.Unknown, StringComparison.OrdinalIgnoreCase);
+        return known ? $" [{trigger} → {action}]" : string.Empty;
     }
 
     private static string RationaleFor(PatternMiner.DiscoveredPattern p) =>

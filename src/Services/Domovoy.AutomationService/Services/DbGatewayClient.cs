@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Blocks;
@@ -313,13 +314,29 @@ public sealed class DbGatewayClient
         public string? Kind { get; set; }
     }
 
-    /// <summary>Subset of the capability-device read-model the engine needs (zone + current state).</summary>
+    /// <summary>Subset of the capability-device read-model the engine needs (zone + state + archetype/caps, 2D).</summary>
     public sealed class DeviceSnapshot
     {
         public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string ZoneId { get; set; } = string.Empty;
         public Dictionary<string, JsonElement> State { get; set; } = new();
+
+        // Epic 2D: semantic archetype + capability signature (for archetype-aware proposals + ML classifier).
+        public List<CapabilitySnapshot> Capabilities { get; set; } = new();
+        public string AutoArchetype { get; set; } = Contracts.Devices.DeviceArchetypes.Unknown;
+        public string? Archetype { get; set; }
+
+        /// <summary>User override wins over the auto-inferred archetype (mirrors the WebUI/read-model rule).</summary>
+        [JsonIgnore]
+        public string EffectiveArchetype => string.IsNullOrWhiteSpace(Archetype) ? AutoArchetype : Archetype!;
+    }
+
+    /// <summary>One capability of a device (id + writability) from the read-model.</summary>
+    public sealed class CapabilitySnapshot
+    {
+        public string Id { get; set; } = string.Empty;
+        public bool Writable { get; set; }
     }
 
     /// <summary>One event-log delta as served by <c>GET /api/events</c> (mirrors DbGateway EventLogDto).</summary>

@@ -39,5 +39,12 @@
       "actual": "actual",
       "predicted": "predicted"
     }
+  },
+  "classify": {
+    "action": "Classify devices",
+    "done": "Trained on {{trainedOn}} device(s); {{count}} disagreement(s).",
+    "notTrained": "Not classified: {{note}}.",
+    "error": "Failed to classify devices.",
+    "reviewTitle": "Archetype review candidates (model disagrees)"
   }
 }

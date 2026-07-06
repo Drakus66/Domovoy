@@ -637,7 +637,16 @@ generic-губернатор (он уже почти весь написан в 
 > + прокси. WebUI: эффективный архетип (`override ?? auto`) задаёт категорию/иконку (откат к старой эвристике при
 > unknown), чип типа + селектор override в drawer. **Тесты:** 12 юнит (классификатор) + интеграционный assert на
 > discovery против реального Mongo (поймал баг writable-over-bus). 10 .NET-проектов + WebUI `tsc`/lint/26 тестов
-> зелёные. **Дальше:** ML.NET-классификатор; использование архетипа в ML-предложениях (2C).
+> зелёные.
+> **✅ Хвост (2026-07-06):** **ML.NET-классификатор** [`ArchetypeClassifier`](../../src/Services/Domovoy.AutomationService/Ml/ArchetypeClassifier.cs)
+> (мультикласс SDCA maximum-entropy над multi-hot сигнатурой capability + флаг writable-`on_off`) — обучается на
+> популяции устройств (лейбл = эффективный архетип, override > эвристика) и обобщает на невиданные сигнатуры.
+> **Advisory-раннер** [`ArchetypeAdvisor`](../../src/Services/Domovoy.AutomationService/Ml/ArchetypeAdvisor.cs) +
+> `POST /api/ml/classify-archetypes` (прокси `MlController`) — выявляет **расхождения** (устройства, которые модель
+> типизировала бы иначе → кандидаты на пересмотр); не мутирует read-модель (как 1F «предлагай, не действуй»).
+> WebUI `/models`: кнопка «Классифицировать» + список расхождений. **Архетипы в предложениях (2F):** `DeviceSnapshot`
+> обогащён capabilities+архетипом; DiscoveryEngine аннотирует rationale парой `[motion → light]`. 4 юнит-теста
+> классификатора (124 .NET-юнит). **Дальше:** обучение на override-корректировках как отдельный сигнал.
 
 ### Эпик 2E. Модель ролей ✅ (без enforcement)
 - Локальные пользователи/роли/права (манифест плагина уже несёт `permissions`); назначение ролей. **Без** логина/токенов/сессий — enforcement в Фазе 3.

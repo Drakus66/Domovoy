@@ -48,6 +48,24 @@ export interface Backtest {
   points: BacktestPoint[];
 }
 
+/** One device the ML archetype classifier would type differently than it currently is (Epic 2D). */
+export interface ArchetypeDisagreement {
+  deviceId: string;
+  name: string;
+  current: string;
+  predicted: string;
+  confidence: number;
+}
+
+/** Outcome of running the ML.NET archetype classifier over the device population (Epic 2D). */
+export interface ArchetypeClassifyResult {
+  trained: boolean;
+  devices: number;
+  trainedOn: number;
+  disagreements: ArchetypeDisagreement[];
+  note: string;
+}
+
 export const mlApi = {
   /** List registered models, newest first. */
   getModels: (): Promise<MlModel[]> =>
@@ -60,4 +78,8 @@ export const mlApi = {
   /** Backtest scorecard: the loaded model's prediction vs actual telemetry over the last `days`. */
   backtest: (days = 7): Promise<Backtest> =>
     apiClient.get<Backtest>(`/api/ml/backtest?days=${days}`).then((r) => r.data),
+
+  /** Run the ML.NET archetype classifier over the device population; returns disagreements (Epic 2D). */
+  classifyArchetypes: (): Promise<ArchetypeClassifyResult> =>
+    apiClient.post<ArchetypeClassifyResult>('/api/ml/classify-archetypes').then((r) => r.data),
 };

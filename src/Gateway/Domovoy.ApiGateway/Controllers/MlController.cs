@@ -30,6 +30,11 @@ public class MlController : ControllerBase
     public Task<IActionResult> Backtest([FromQuery] int days, CancellationToken ct)
         => Forward("automation-service", HttpMethod.Get, $"api/ml/backtest?days={(days > 0 ? days : 7)}", ct);
 
+    /// <summary>ML archetype classifier (Epic 2D): train on the device population, list disagreements.</summary>
+    [HttpPost("classify-archetypes")]
+    public Task<IActionResult> ClassifyArchetypes(CancellationToken ct)
+        => Forward("automation-service", HttpMethod.Post, "api/ml/classify-archetypes", ct);
+
     private async Task<IActionResult> Forward(string client, HttpMethod method, string path, CancellationToken ct)
     {
         var http = _httpClientFactory.CreateClient(client);
