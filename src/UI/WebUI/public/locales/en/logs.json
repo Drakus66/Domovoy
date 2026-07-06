@@ -25,5 +25,14 @@
   "errors": {
     "load": "Failed to load activity. Check ApiGateway / DbGateway connection."
   },
-  "empty": "No activity in the selected window."
+  "empty": "No activity in the selected window.",
+  "channels": {
+    "title": "Notification delivery",
+    "none": "No channels enabled — notifications are logged only.",
+    "enabled": "Enabled:",
+    "test": "Send test",
+    "testOk": "Delivered to {{count}} channel(s).",
+    "testNone": "No channels enabled to deliver to.",
+    "testError": "Failed to send test notification."
+  }
 }

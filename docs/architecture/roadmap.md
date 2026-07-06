@@ -797,7 +797,14 @@ generic-губернатор (он уже почти весь написан в 
 > detail/deviceId/kind/service), сортировка/фильтры/поиск; прокси в ApiGateway. **WebUI:** пустой `/logs`
 > переделан в «Activity» — фильтры по источнику (Devices/Automations/System) и severity, поиск, окно (1ч/24ч/7д),
 > цветовая полоса severity, резолв deviceId→имя. 10 .NET-проектов + WebUI `tsc`/lint/26 тестов + 15 .NET-тестов
-> зелёные. **Дальше:** каналы доставки (push/telegram), аномалии из 2B.
+> зелёные.
+> **✅ Хвост — каналы доставки (2026-07-06):** провайдер-агностичная доставка в AutomationService
+> (`Services/Notifications`): `INotificationChannel` + `TelegramChannel` (Bot API) + `WebhookChannel`
+> (generic JSON POST — покрывает ntfy/Gotify/Discord/Slack/push) + `NotificationDispatcher` (fan-out,
+> изоляция сбоев каналов). **Env-gated, off by default** — без каналов уведомление только логируется
+> (offline-first инвариант сохранён). Notify-действия правил (1A) идут через диспетчер (Shadow не шлёт).
+> Endpoints `GET /api/notifications/channels` + `POST /api/notifications/test` + прокси `NotificationsController`;
+> WebUI: карточка каналов + «Отправить тест» на `/logs`. **Дальше:** аномалии из 2B → уведомления.
 
 ### UI-направление: «дух дома» в интерфейсе 🚧 (v1 — 2026-07-04)
 

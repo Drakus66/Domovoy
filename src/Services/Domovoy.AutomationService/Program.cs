@@ -33,8 +33,17 @@ internal static class Program
                 builder.Configuration.GetSection(AutomationOptions.SectionName));
             builder.Services.Configure<AssistantOptions>(
                 builder.Configuration.GetSection(AssistantOptions.SectionName)); // 2H: NL-assistant feature flag
+            builder.Services.Configure<NotificationOptions>(
+                builder.Configuration.GetSection(NotificationOptions.SectionName)); // 2G: delivery channels
             builder.Services.Configure<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMQ"));
             builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
+
+            // 2G: provider-agnostic notification delivery channels (env-gated, off by default). Notify
+            // actions (1A) and future anomaly alerts (2B) fan out through the dispatcher.
+            builder.Services.AddHttpClient();
+            builder.Services.AddSingleton<Services.Notifications.INotificationChannel, Services.Notifications.TelegramChannel>();
+            builder.Services.AddSingleton<Services.Notifications.INotificationChannel, Services.Notifications.WebhookChannel>();
+            builder.Services.AddSingleton<Services.Notifications.NotificationDispatcher>();
 
             // Typed HttpClient to the DbGateway (rules + device read-model + event-log for replay).
             builder.Services.AddHttpClient<DbGatewayClient>((sp, client) =>
@@ -124,6 +133,19 @@ internal static class Program
             app.MapPost("/api/assistant/explain",
                 async (Services.Assistant.AssistantExplainRequest req, Services.Assistant.IAssistantConnector assistant, CancellationToken ct) =>
                     Results.Ok(await assistant.ExplainAsync(req, ct)));
+
+            // Notification delivery channels (roadmap Epic 2G): report which channels are enabled, and
+            // send a test message through them (surfaced on the Activity page).
+            app.MapGet("/api/notifications/channels", (Services.Notifications.NotificationDispatcher dispatcher) =>
+                Results.Ok(new { all = dispatcher.AllChannels, enabled = dispatcher.EnabledChannels }));
+
+            app.MapPost("/api/notifications/test",
+                async (Services.Notifications.NotificationDispatcher dispatcher, CancellationToken ct) =>
+                {
+                    var delivered = await dispatcher.DispatchAsync(
+                        new Services.Notifications.NotificationMessage("Domovoy", "Test notification", "info"), ct);
+                    return Results.Ok(new { delivered, enabled = dispatcher.EnabledChannels });
+                });
 
             // Control-block catalog (roadmap Epic 1H): the built-in types' schema for the authoring UI.
             app.MapGet("/api/blocks/catalog", (BlockCatalog catalog) => Results.Ok(

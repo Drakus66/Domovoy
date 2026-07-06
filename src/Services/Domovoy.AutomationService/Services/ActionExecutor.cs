@@ -1,3 +1,4 @@
+using Domovoy.AutomationService.Services.Notifications;
 using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Messaging;
 using Domovoy.MessageBus;
@@ -14,13 +15,15 @@ namespace Domovoy.AutomationService.Services;
 public sealed class ActionExecutor
 {
     private readonly IMessageBus _bus;
+    private readonly NotificationDispatcher _notifications;
     private readonly ILogger<ActionExecutor> _logger;
 
     private static readonly TimeSpan MaxDelay = TimeSpan.FromHours(24);
 
-    public ActionExecutor(IMessageBus bus, ILogger<ActionExecutor> logger)
+    public ActionExecutor(IMessageBus bus, NotificationDispatcher notifications, ILogger<ActionExecutor> logger)
     {
         _bus = bus;
+        _notifications = notifications;
         _logger = logger;
     }
 
@@ -75,9 +78,19 @@ public sealed class ActionExecutor
                             break;
 
                         case ActionType.Notify:
-                            _logger.LogInformation("[{Rule}]{Shadow} notify: {Message}",
-                                rule.Name, shadow ? " SHADOW" : "", action.Message);
-                            if (shadow) wouldRun++; else executed++;
+                            if (shadow)
+                            {
+                                _logger.LogInformation("[{Rule}] SHADOW notify: {Message}", rule.Name, action.Message);
+                                wouldRun++;
+                            }
+                            else
+                            {
+                                // Fan the message out to every enabled delivery channel (Epic 2G); with none
+                                // configured this logs only, so the box stays functional offline.
+                                await _notifications.DispatchAsync(
+                                    new NotificationMessage(rule.Name, action.Message ?? "", "info"), ct);
+                                executed++;
+                            }
                             break;
                     }
                 }

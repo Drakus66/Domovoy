@@ -3,15 +3,18 @@ import { useTranslation } from 'react-i18next';
 import { fmtDateTime } from '../i18n/format';
 import {
   Container, Box, Typography, Stack, Chip, TextField, MenuItem, InputAdornment,
-  LinearProgress, Alert, Card, IconButton, Tooltip, Divider,
+  LinearProgress, Alert, Card, IconButton, Tooltip, Divider, Button,
 } from '@mui/material';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import DevicesRoundedIcon from '@mui/icons-material/DevicesRounded';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import TerminalRoundedIcon from '@mui/icons-material/TerminalRounded';
+import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
+import SendRoundedIcon from '@mui/icons-material/SendRounded';
 import { activityApi, ActivityEntry, ActivitySource, ActivitySeverity } from '../api/activity';
 import { capabilityDevicesApi } from '../api/capabilityDevices';
+import { notificationsApi, NotificationChannels } from '../api/notifications';
 
 const SOURCE_META: Record<ActivitySource, { icon: JSX.Element; color: 'primary' | 'secondary' | 'default' }> = {
   device: { icon: <DevicesRoundedIcon fontSize="small" />, color: 'primary' },
@@ -43,6 +46,8 @@ export default function Logs() {
   const [severity, setSeverity] = useState<ActivitySeverity | 'all'>('all');
   const [hours, setHours] = useState(24);
   const [search, setSearch] = useState('');
+  const [channels, setChannels] = useState<NotificationChannels | null>(null);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
 
   const since = useMemo(() => new Date(Date.now() - hours * 3600 * 1000).toISOString(), [hours]);
 
@@ -76,6 +81,21 @@ export default function Logs() {
       .catch(() => undefined);
   }, []);
 
+  // Notification delivery channels (Epic 2G) — status + a test button.
+  useEffect(() => {
+    notificationsApi.getChannels().then(setChannels).catch(() => undefined);
+  }, []);
+
+  const sendTest = useCallback(async () => {
+    setTestMsg(null);
+    try {
+      const r = await notificationsApi.sendTest();
+      setTestMsg(r.delivered > 0 ? t('channels.testOk', { count: r.delivered }) : t('channels.testNone'));
+    } catch {
+      setTestMsg(t('channels.testError'));
+    }
+  }, [t]);
+
   return (
     <Container maxWidth="lg">
       <Box py={{ xs: 3, md: 4 }}>
@@ -88,6 +108,27 @@ export default function Logs() {
           </Box>
           <Tooltip title={t('refresh')}><IconButton onClick={load} disabled={loading}><RefreshRoundedIcon /></IconButton></Tooltip>
         </Stack>
+
+        <Card variant="outlined" sx={{ px: 2, py: 1.25, mb: 2 }}>
+          <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+            <NotificationsRoundedIcon fontSize="small" color="action" />
+            <Typography variant="body2" fontWeight={600}>{t('channels.title')}</Typography>
+            {channels && channels.enabled.length > 0 ? (
+              <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Typography variant="caption" color="text.secondary">{t('channels.enabled')}</Typography>
+                {channels.enabled.map((c) => <Chip key={c} size="small" label={c} color="primary" variant="outlined" />)}
+              </Stack>
+            ) : (
+              <Typography variant="caption" color="text.secondary">{t('channels.none')}</Typography>
+            )}
+            <Box flex={1} />
+            {testMsg && <Typography variant="caption" color="text.secondary">{testMsg}</Typography>}
+            <Button size="small" variant="outlined" startIcon={<SendRoundedIcon />}
+              disabled={!channels || channels.enabled.length === 0} onClick={sendTest}>
+              {t('channels.test')}
+            </Button>
+          </Stack>
+        </Card>
 
         <Stack direction="row" spacing={1.5} mb={2} flexWrap="wrap" useFlexGap alignItems="center">
           <TextField
