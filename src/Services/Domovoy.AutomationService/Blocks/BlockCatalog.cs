@@ -1,3 +1,4 @@
+using Domovoy.AutomationService.Blocks.Composite;
 using Domovoy.AutomationService.Configuration;
 using Domovoy.AutomationService.Ml;
 using Domovoy.AutomationService.Ml.Governors;
@@ -37,6 +38,38 @@ public sealed class BlockCatalog
         types.AddRange(MlGovernors(models, o));
 
         _types = types.ToDictionary(t => t.TypeId, StringComparer.OrdinalIgnoreCase);
+
+        // Epic 1H E2: composite blocks are declarative (DSL) documents, not code — parsed against the primitives
+        // above and added as first-class types. A new composite is a config entry (built-in example + options),
+        // so it needs no rebuild. Composites reference primitives only in v1, so the dict is complete here.
+        foreach (var composite in CompositeDefinitions(o))
+            _types[composite.TypeId] = new CompositeBlockType(composite, Get);
+    }
+
+    // Built-in example composite + any authored via config, each parsed defensively (a malformed one is skipped,
+    // not fatal). The canonical loop: raw temperature → EWMA smoothing → hysteresis thermostat, as one line.
+    private List<CompositeDefinition> CompositeDefinitions(AutomationOptions o)
+    {
+        var specs = new List<CompositeSpec>
+        {
+            new()
+            {
+                TypeId = "climate_loop",
+                Title = "Climate loop (EWMA → thermostat)",
+                Description = "Smooths a temperature with an EWMA filter, then drives a hysteresis thermostat — the canonical filter→controller composite.",
+                Dsl = "input(temperature) |> ewma_filter(tau=300) |> thermostat(setpoint=21, hysteresis=0.5)",
+            },
+        };
+        if (o.Composites is not null) specs.AddRange(o.Composites);
+
+        var defs = new List<CompositeDefinition>();
+        foreach (var c in specs)
+        {
+            if (string.IsNullOrWhiteSpace(c.TypeId) || string.IsNullOrWhiteSpace(c.Dsl)) continue;
+            try { defs.Add(BlockDsl.Parse(c.TypeId, c.Title ?? c.TypeId, c.Description ?? "", c.Dsl!, Get)); }
+            catch (FormatException) { /* skip a malformed composite rather than fail the whole catalog */ }
+        }
+        return defs;
     }
 
     /// <summary>The configured ML governor instances (Epic 2I). They share one predictor over the loaded model.</summary>

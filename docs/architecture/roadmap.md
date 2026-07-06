@@ -337,8 +337,17 @@
 > `DeviceIdFactory` при создании) + прокси `BlocksController` (CRUD→DbGateway, `catalog`→AutomationService) +
 > WebUI `/blocks` (создание по каталогу с полями параметров и привязкой портов, живой вывод). 8 .NET-проектов +
 > `tsc`/lint/26 тестов зелёные. **Не проверено вживую** против RabbitMQ/Mongo.
-> **Дальше:** E2 композитные блоки (без кода/рестарта), 3-й примитив (секвенсор полива), DSL-авторинг (B),
-> визуальный node-редактор (C, в 1E); E3 скрипты / E4 плагины — позже.
+> **✅ Хвост — E2 композиты + DSL (2026-07-06):** композитный блок — **декларативный документ** (без кода/
+> рестарта): [`CompositeDefinition`](../../src/Services/Domovoy.AutomationService/Blocks/Composite/CompositeDefinition.cs)
+> (узлы-примитивы + внутренние биндинги + внешние порты), [`CompositeBlockType`/`CompositeBlock`](../../src/Services/Domovoy.AutomationService/Blocks/Composite/CompositeBlock.cs)
+> — first-class `IBlockType`, тикает дочерние примитивы по внутреннему blackboard (`InternalContext` мостит
+> внешние порты к родительскому контексту, состояние namespaced по узлу, внутр. сигналы живут между тиками).
+> **DSL (авторинг B)** [`BlockDsl`](../../src/Services/Domovoy.AutomationService/Blocks/Composite/BlockDsl.cs):
+> пайп `input(temperature) |> ewma_filter(tau=300) |> thermostat(setpoint=21)` → определение (+ round-trip
+> Serialize). Встроенный композит `climate_loop` + из конфига `Automation:Composites` — новый тип = запись
+> конфига, компилируется в каталог. Node-редактор (C) закрыт граф-view в 1E; 3-й примитив (секвенсор полива)
+> сделан в 1D. 4 юнит-теста (135 .NET-юнит). **Дальше:** ветвящиеся композиты, композит-в-композите, hot-reload
+> из DB; E3 скрипты (Jint/MoonSharp) / E4 плагины — позже.
 
 **Проблема.** Правило (1A) — реактивное и без состояния («событие → условие → действие»). Но многое требует
 **состояния + периодичности + обратной связи**, при этом каждый такой блок «слишком мал» для отдельного сервиса:

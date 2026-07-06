@@ -147,4 +147,23 @@ public class AutomationOptions
 
     /// <summary>Max standard deviation (in the setpoint's unit) for a bucket's settings to count as a stable preference.</summary>
     public double SetpointMaxStdDev { get; set; } = 1.0;
+
+    // --- Composite control blocks (roadmap Epic 1H E2) ---
+
+    /// <summary>
+    /// Declarative composite block types (roadmap Epic 1H E2), authored via the pipe DSL — a new composite is a
+    /// config entry, not code. Parsed against the built-in primitives and added to the catalog at startup.
+    /// </summary>
+    public CompositeSpec[]? Composites { get; set; }
+}
+
+/// <summary>A config-authored composite block: a stable type id + the pipe DSL that defines its subgraph.</summary>
+public sealed class CompositeSpec
+{
+    public string TypeId { get; set; } = string.Empty;
+    public string? Title { get; set; }
+    public string? Description { get; set; }
+
+    /// <summary>Pipe DSL, e.g. <c>input(temperature) |&gt; ewma_filter(tau=300) |&gt; thermostat(setpoint=21)</c>.</summary>
+    public string? Dsl { get; set; }
 }
