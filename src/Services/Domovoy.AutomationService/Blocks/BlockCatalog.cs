@@ -41,14 +41,13 @@ public sealed class BlockCatalog
 
         // Epic 1H E2: composite blocks are declarative (DSL) documents, not code — parsed against the primitives
         // above and added as first-class types. A new composite is a config entry (built-in example + options),
-        // so it needs no rebuild. Composites reference primitives only in v1, so the dict is complete here.
-        foreach (var composite in CompositeDefinitions(o))
-            _types[composite.TypeId] = new CompositeBlockType(composite, Get);
+        // so it needs no rebuild.
+        RegisterComposites(CompositeSpecs(o));
     }
 
-    // Built-in example composite + any authored via config, each parsed defensively (a malformed one is skipped,
-    // not fatal). The canonical loop: raw temperature → EWMA smoothing → hysteresis thermostat, as one line.
-    private List<CompositeDefinition> CompositeDefinitions(AutomationOptions o)
+    // Built-in example composites + any authored via config. The canonical loop: raw temperature → EWMA smoothing
+    // → hysteresis thermostat, as one line; plus a nested example proving composite-in-composite.
+    private static List<CompositeSpec> CompositeSpecs(AutomationOptions o)
     {
         var specs = new List<CompositeSpec>
         {
@@ -59,17 +58,59 @@ public sealed class BlockCatalog
                 Description = "Smooths a temperature with an EWMA filter, then drives a hysteresis thermostat — the canonical filter→controller composite.",
                 Dsl = "input(temperature) |> ewma_filter(tau=300) |> thermostat(setpoint=21, hysteresis=0.5)",
             },
+            new()
+            {
+                // Epic 1D multi-zone irrigation as a branching composite: one shared rain/soil inhibit fans out to
+                // several irrigation_sequencer nodes, each surfaced as its own valve output. Authored in the graph
+                // DSL (no |>), proving fan-out + multiple outputs end-to-end through the catalog.
+                TypeId = "irrigation_multizone",
+                Title = "Multi-zone irrigation",
+                Description = "Runs several irrigation zones on independent schedules from one shared rain/soil inhibit.",
+                Dsl = """
+                    in inhibit
+                    z1 = irrigation_sequencer(intervalHours=24, runMinutes=15) <- inhibit
+                    z2 = irrigation_sequencer(intervalHours=24, runMinutes=20) <- inhibit
+                    z3 = irrigation_sequencer(intervalHours=48, runMinutes=10) <- inhibit
+                    out zone1 = z1.on_off
+                    out zone2 = z2.on_off
+                    out zone3 = z3.on_off
+                    """,
+            },
         };
         if (o.Composites is not null) specs.AddRange(o.Composites);
+        return specs;
+    }
 
-        var defs = new List<CompositeDefinition>();
-        foreach (var c in specs)
+    // Parse + register composites iteratively (roadmap Epic 1H E2). A composite may reference another composite
+    // (nesting), so we can't assume the referenced type exists on the first pass: each round registers every spec
+    // whose referenced types now resolve, and repeats while it makes progress. An UnknownBlockTypeException means
+    // "defer — maybe a later-registered composite"; any other FormatException is a malformed DSL and is dropped.
+    // When a round adds nothing, whatever remains references a truly-unknown type (or forms a cycle) and is dropped
+    // — a bad composite is skipped, never fatal to the catalog.
+    private void RegisterComposites(List<CompositeSpec> specs)
+    {
+        var pending = specs
+            .Where(c => !string.IsNullOrWhiteSpace(c.TypeId) && !string.IsNullOrWhiteSpace(c.Dsl))
+            .ToList();
+
+        bool progressed = true;
+        while (progressed && pending.Count > 0)
         {
-            if (string.IsNullOrWhiteSpace(c.TypeId) || string.IsNullOrWhiteSpace(c.Dsl)) continue;
-            try { defs.Add(BlockDsl.Parse(c.TypeId, c.Title ?? c.TypeId, c.Description ?? "", c.Dsl!, Get)); }
-            catch (FormatException) { /* skip a malformed composite rather than fail the whole catalog */ }
+            progressed = false;
+            for (var i = pending.Count - 1; i >= 0; i--)
+            {
+                var c = pending[i];
+                try
+                {
+                    var def = BlockDsl.Parse(c.TypeId, c.Title ?? c.TypeId, c.Description ?? "", c.Dsl!, Get);
+                    _types[def.TypeId] = new CompositeBlockType(def, Get);
+                    pending.RemoveAt(i);
+                    progressed = true;
+                }
+                catch (UnknownBlockTypeException) { /* defer: a referenced composite may register in a later round */ }
+                catch (FormatException) { pending.RemoveAt(i); /* malformed → drop, don't fail the catalog */ }
+            }
         }
-        return defs;
     }
 
     /// <summary>The configured ML governor instances (Epic 2I). They share one predictor over the loaded model.</summary>
