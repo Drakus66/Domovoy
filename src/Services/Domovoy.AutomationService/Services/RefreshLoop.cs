@@ -17,11 +17,15 @@ public sealed class RefreshLoop : BackgroundService
     private readonly DeviceRegistry _registry;
     private readonly DbGatewayClient _db;
     private readonly HomeModeState _mode;
+    private readonly SunCalculator _sun;
+    private readonly SiteContext _site;
+    private readonly CalendarContext _calendar;
     private readonly AutomationOptions _options;
     private readonly ILogger<RefreshLoop> _logger;
 
     public RefreshLoop(
         RuleStore store, BlockStore blocks, DeviceRegistry registry, DbGatewayClient db, HomeModeState mode,
+        SunCalculator sun, SiteContext site, CalendarContext calendar,
         IOptions<AutomationOptions> options, ILogger<RefreshLoop> logger)
     {
         _store = store;
@@ -29,6 +33,9 @@ public sealed class RefreshLoop : BackgroundService
         _registry = registry;
         _db = db;
         _mode = mode;
+        _sun = sun;
+        _site = site;
+        _calendar = calendar;
         _options = options.Value;
         _logger = logger;
     }
@@ -44,6 +51,8 @@ public sealed class RefreshLoop : BackgroundService
             await _blocks.RefreshAsync(stoppingToken);
             await RefreshDevices(stoppingToken);
             await RefreshMode(stoppingToken);
+            await RefreshLocation(stoppingToken);
+            await RefreshCalendar(stoppingToken);
 
             try { await Task.Delay(period, stoppingToken); }
             catch (OperationCanceledException) { break; }
@@ -72,5 +81,35 @@ public sealed class RefreshLoop : BackgroundService
     {
         var mode = await _db.GetModeAsync(ct);
         if (mode is not null) _mode.Set(mode);
+    }
+
+    // Repoint the sunrise/sunset calculator at the persisted site location (2K). The location is now edited
+    // from the WebUI (runtime-mutable), so this picks up a change without a redeploy. If the gateway is
+    // unreachable the calculator keeps its last-known (or appsettings-seeded) coordinates — offline-first.
+    private async Task RefreshLocation(CancellationToken ct)
+    {
+        var location = await _db.GetLocationAsync(ct);
+        if (location is null) return;
+
+        if (Math.Abs(location.Latitude - _sun.Latitude) > 1e-9 ||
+            Math.Abs(location.Longitude - _sun.Longitude) > 1e-9)
+        {
+            _sun.Update(location.Latitude, location.Longitude);
+            _logger.LogInformation(
+                "Site location updated to {Lat},{Lon} ({Label})",
+                location.Latitude, location.Longitude, location.Label ?? "unnamed");
+        }
+
+        // Timezone for local sunrise/sunset rendering on the system Sun sensor (2L).
+        if (_site.SetTimeZone(location.TimeZoneId))
+            _logger.LogInformation("Site timezone set to {TimeZone}", _site.TimeZone.Id);
+    }
+
+    // Refresh the calendar config (2L) feeding the system Calendar sensor. Gateway unreachable → keep the
+    // last-known weekend/holiday set (offline-first).
+    private async Task RefreshCalendar(CancellationToken ct)
+    {
+        var settings = await _db.GetCalendarSettingsAsync(ct);
+        if (settings is not null) _calendar.Update(settings.WeekendDays, settings.Holidays);
     }
 }

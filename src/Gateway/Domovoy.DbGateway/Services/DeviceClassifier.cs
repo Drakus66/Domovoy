@@ -24,6 +24,16 @@ public static class DeviceClassifier
         if (string.Equals(adapterSource, "ControlBlock", StringComparison.OrdinalIgnoreCase))
             return DeviceArchetypes.ControlBlock;
 
+        // 2b) System virtual sensors (2L: sun/time/calendar) carry AdapterSource "System" and a
+        // "system/<kind>" model. The kind after the slash is the archetype when it's a known token.
+        if (string.Equals(adapterSource, "System", StringComparison.OrdinalIgnoreCase))
+        {
+            var kind = model is not null && model.StartsWith("system/", StringComparison.OrdinalIgnoreCase)
+                ? model["system/".Length..]
+                : null;
+            return DeviceArchetypes.IsKnown(kind) ? kind!.ToLowerInvariant() : DeviceArchetypes.Sensor;
+        }
+
         var caps = capabilities as IReadOnlyList<Capability> ?? capabilities.ToList();
         var ids = caps.Select(c => c.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         bool Has(string id) => ids.Contains(id);

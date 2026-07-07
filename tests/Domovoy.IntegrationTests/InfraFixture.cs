@@ -1,13 +1,10 @@
 using Domovoy.DbGateway.Config;
-using Domovoy.DbGateway.Serializers;
 using Domovoy.DbGateway.Services;
 using Domovoy.MessageBus;
 
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
-using MongoDB.Bson.Serialization;
-using MongoDB.Bson.Serialization.Serializers;
 using MongoDB.Driver;
 
 using Testcontainers.MongoDb;
@@ -29,7 +26,6 @@ public sealed class InfraFixture : IAsyncLifetime
     private readonly RabbitMqContainer _rabbit = new RabbitMqBuilder().WithImage("rabbitmq:3.13-management").Build();
     private readonly MongoDbContainer _mongo = new MongoDbBuilder().WithImage("mongo:7").Build();
     private EventInterceptor? _interceptor;
-    private static int _serializersRegistered;
 
     public IMongoDatabase Db { get; private set; } = null!;
     public IMessageBus Bus { get; private set; } = null!;
@@ -39,12 +35,7 @@ public sealed class InfraFixture : IAsyncLifetime
         await Task.WhenAll(_rabbit.StartAsync(), _mongo.StartAsync());
 
         // Mirror DbGateway Program.cs serializer registration (global, once per process).
-        if (Interlocked.Exchange(ref _serializersRegistered, 1) == 0)
-        {
-            BsonSerializer.RegisterSerializer(new ObjectSerializer());
-            BsonSerializer.RegisterSerializer(new JsonElementSerializer());
-            BsonSerializer.RegisterSerializer(new JsonObjectDictionarySerializer());
-        }
+        BsonTestSerializers.EnsureRegistered();
 
         Db = new MongoClient(_mongo.GetConnectionString()).GetDatabase("DomovoyTest");
 

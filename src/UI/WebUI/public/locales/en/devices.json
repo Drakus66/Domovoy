@@ -10,6 +10,15 @@
     "run": "Run",
     "allOff": "All off"
   },
+  "geo": {
+    "pick": "Set location",
+    "clear": "Clear",
+    "title": "Pick a location",
+    "search": "Search",
+    "searchPlaceholder": "Search an address or place…",
+    "cancel": "Cancel",
+    "confirm": "Use this location"
+  },
   "filters": {
     "searchPlaceholder": "Search devices or zones…",
     "all": "All",
@@ -44,6 +53,11 @@
     "trends": "Trends · last 24h",
     "history": "History"
   },
+  "blockIo": {
+    "title": "Block wiring",
+    "reads": "Reads",
+    "drives": "Drives"
+  },
   "noCapabilities": "No capabilities reported.",
   "noHistory": "No recorded changes yet.",
   "historyVia": "via {{rule}}",
@@ -67,7 +81,19 @@
     "energy": "Energy",
     "battery": "Battery",
     "illuminance": "Illuminance",
-    "link_quality": "Link quality"
+    "link_quality": "Link quality",
+    "sun_elevation": "Sun elevation",
+    "sun_azimuth": "Sun azimuth",
+    "is_dark": "Dark",
+    "is_day": "Daylight",
+    "sunrise": "Sunrise",
+    "sunset": "Sunset",
+    "time_of_day": "Time of day",
+    "clock": "Clock",
+    "day_of_week": "Day of week",
+    "is_weekend": "Weekend",
+    "is_holiday": "Holiday",
+    "date": "Date"
   },
   "headline": {
     "on": "On",

@@ -1,0 +1,44 @@
+{
+  "title": "Settings",
+  "caption": "Installation-wide configuration",
+  "errors": {
+    "load": "Could not load settings.",
+    "save": "Could not save. Please try again."
+  },
+  "location": {
+    "title": "Location",
+    "caption": "Sunrise/sunset for outdoor lighting is computed locally from these coordinates — no internet needed. Search a place, click the map, or enter coordinates by hand.",
+    "searchLabel": "Search for a place",
+    "searchPlaceholder": "City, address or landmark",
+    "searchAction": "Search",
+    "noResults": "Nothing found (search needs an internet connection — you can still enter coordinates below).",
+    "latitude": "Latitude",
+    "longitude": "Longitude",
+    "label": "Label",
+    "tzAuto": "Set timezone automatically",
+    "timezone": "Timezone",
+    "save": "Save location",
+    "saved": "Location saved."
+  },
+  "calendar": {
+    "title": "Calendar",
+    "caption": "Feeds the Calendar sensor: which weekdays are the weekend and which dates are holidays. Both work offline; the import only pre-fills holidays when online.",
+    "weekend": "Weekend days",
+    "holidays": "Holidays",
+    "noHolidays": "No holidays yet.",
+    "addHoliday": "Add a date",
+    "country": "Country",
+    "year": "Year",
+    "import": "Import holidays",
+    "importError": "Import failed (needs an internet connection).",
+    "save": "Save calendar",
+    "saved": "Calendar saved.",
+    "days": {
+      "mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri", "sat": "Sat", "sun": "Sun"
+    }
+  },
+  "appearance": {
+    "title": "Appearance",
+    "caption": "Language, theme and light/dark mode."
+  }
+}

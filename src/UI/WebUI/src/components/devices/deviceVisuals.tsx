@@ -17,6 +17,17 @@ import BatteryFullRoundedIcon from '@mui/icons-material/BatteryFullRounded';
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
 import NetworkCheckRoundedIcon from '@mui/icons-material/NetworkCheckRounded';
 import SensorsRoundedIcon from '@mui/icons-material/SensorsRounded';
+import WbSunnyRoundedIcon from '@mui/icons-material/WbSunnyRounded';
+import ExploreRoundedIcon from '@mui/icons-material/ExploreRounded';
+import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
+import WbTwilightRoundedIcon from '@mui/icons-material/WbTwilightRounded';
+import NightlightRoundedIcon from '@mui/icons-material/NightlightRounded';
+import ScheduleRoundedIcon from '@mui/icons-material/ScheduleRounded';
+import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
+import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
+import WeekendRoundedIcon from '@mui/icons-material/WeekendRounded';
+import CelebrationRoundedIcon from '@mui/icons-material/CelebrationRounded';
+import EventRoundedIcon from '@mui/icons-material/EventRounded';
 import DevicesOtherRoundedIcon from '@mui/icons-material/DevicesOtherRounded';
 import i18n from 'i18next';
 import type { Capability, CapabilityDevice } from '../../api/capabilityDevices';
@@ -63,6 +74,18 @@ const CAPABILITY_ICONS: Record<string, SvgIconComponent> = {
   battery: BatteryFullRoundedIcon,
   illuminance: LightModeRoundedIcon,
   link_quality: NetworkCheckRoundedIcon,
+  sun_elevation: WbSunnyRoundedIcon,
+  sun_azimuth: ExploreRoundedIcon,
+  is_dark: DarkModeRoundedIcon,
+  is_day: WbSunnyRoundedIcon,
+  sunrise: WbTwilightRoundedIcon,
+  sunset: NightlightRoundedIcon,
+  time_of_day: ScheduleRoundedIcon,
+  clock: AccessTimeRoundedIcon,
+  day_of_week: CalendarMonthRoundedIcon,
+  is_weekend: WeekendRoundedIcon,
+  is_holiday: CelebrationRoundedIcon,
+  date: EventRoundedIcon,
 };
 
 /** A readable label for a capability id (well-known or namespaced/custom). */
@@ -82,6 +105,7 @@ const writable = (device: CapabilityDevice, id: string) =>
 const ARCHETYPE_CATEGORY: Record<string, DeviceCategory> = {
   light: 'light', switch: 'switch', thermostat: 'climate', valve: 'climate',
   climate_sensor: 'sensor', motion: 'sensor', contact: 'sensor', sensor: 'sensor',
+  sun: 'sensor', clock: 'sensor', calendar: 'sensor',
   lock: 'security', energy_meter: 'energy', control_block: 'other',
 };
 
@@ -104,6 +128,7 @@ export function primaryCapability(device: CapabilityDevice): Capability | undefi
   const order = [
     'on_off', 'brightness', 'lock', 'temperature_setpoint', 'temperature',
     'occupancy', 'contact', 'humidity', 'co2', 'power', 'illuminance', 'battery',
+    'sun_elevation', 'clock', 'day_of_week',
   ];
   for (const id of order) {
     const cap = device.capabilities.find((c) => c.id === id);
@@ -193,12 +218,15 @@ function sensorHeadline(device: CapabilityDevice, state: Record<string, unknown>
   if ('occupancy' in state) return asBool(state.occupancy) ? t('headline.motion') : t('headline.clear');
   if ('contact' in state) return asBool(state.contact) ? t('headline.open') : t('headline.closed');
   if ('battery' in state) return fmtNum(state.battery, '%');
+  if ('sun_elevation' in state) return fmtNum(state.sun_elevation, '°');
+  if ('clock' in state) return String(state.clock);
+  if ('day_of_week' in state) return String(state.day_of_week);
   const prim = primaryCapability(device);
   if (prim && prim.id in state) return String(state[prim.id]);
   return '—';
 }
 
-function capabilityIconForCategory(category: DeviceCategory): SvgIconComponent {
+export function capabilityIconForCategory(category: DeviceCategory): SvgIconComponent {
   switch (category) {
     case 'light': return LightbulbRoundedIcon;
     case 'switch': return PowerSettingsNewRoundedIcon;

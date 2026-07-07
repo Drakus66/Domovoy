@@ -10,6 +10,12 @@ export interface Capability {
   unit?: string | null;
   min?: number | null;
   max?: number | null;
+  /** Numeric step for a Number control. */
+  step?: number | null;
+  /** Allowed values for an Enum capability (drives a dropdown). */
+  values?: string[] | null;
+  /** UI editor hint for a writable value: 'geo' (map picker) | 'time' (time input). */
+  editor?: string | null;
 }
 
 /** Capability device read-model (matches DbGateway CapabilityDeviceDocument). */
@@ -32,7 +38,7 @@ export interface CapabilityDevice {
 /** Well-known device archetypes (mirrors Domovoy.Contracts DeviceArchetypes, Epic 2D). */
 export const DEVICE_ARCHETYPES = [
   'light', 'switch', 'thermostat', 'climate_sensor', 'motion', 'contact',
-  'lock', 'valve', 'energy_meter', 'sensor', 'control_block', 'unknown',
+  'lock', 'valve', 'energy_meter', 'sensor', 'control_block', 'sun', 'clock', 'calendar', 'unknown',
 ] as const;
 
 /** Effective archetype = manual override if set, else the auto-inferred value. */

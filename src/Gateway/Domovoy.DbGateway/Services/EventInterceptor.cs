@@ -313,6 +313,14 @@ public class EventInterceptor : BackgroundService
         var correlated = _recentCommands.TryGetValue(report.DeviceId, out var recent)
             && (DateTime.UtcNow - recent!.At) <= CommandCorrelationWindow;
 
+        // System virtual sensors (Epic 2L) report continuously-varying values every minute (sun
+        // elevation/azimuth, clock/time_of_day, date). Those would swamp the activity event-log with
+        // meaningless per-tick deltas, so for a System device we log ONLY discrete capabilities
+        // (Boolean/Enum: is_dark, is_day, is_weekend, is_holiday, day_of_week) — the genuinely meaningful
+        // "it became dark / it's a new day" moments. Numeric values still go to telemetry (useful trends);
+        // text values (clock, sunrise, date) update only the read-model.
+        var isSystem = string.Equals(existing?.AdapterSource, "System", StringComparison.OrdinalIgnoreCase);
+
         var logs = new List<DeviceEventLog>();
         var readings = new List<SensorReading>();
         var deviceId = report.DeviceId.ToString();
@@ -324,6 +332,25 @@ public class EventInterceptor : BackgroundService
             var oldValue = oldRaw is null ? null : Normalize(oldRaw);
 
             if (ValuesEqual(oldValue, newValue)) continue; // only real deltas are events
+
+            var isNumeric = TryGetDouble(newValue, out var num);
+
+            if (isNumeric)
+                readings.Add(new SensorReading
+                {
+                    Timestamp = DateTime.UtcNow,
+                    Meta = new TelemetryMeta
+                    {
+                        DeviceId = deviceId,
+                        ZoneId = zoneId,
+                        CapabilityId = kv.Key,
+                        Unit = UnitOf(existing, kv.Key),
+                    },
+                    Value = num,
+                });
+
+            // For a System sensor, only discrete (Boolean/Enum) transitions belong in the activity log.
+            if (isSystem && !IsDiscreteCapability(existing, kv.Key)) continue;
 
             var commanded = correlated && recent!.Set.ContainsKey(kv.Key);
             logs.Add(new DeviceEventLog
@@ -337,20 +364,6 @@ public class EventInterceptor : BackgroundService
                 Mode = _currentMode,
                 CorrelationId = commanded ? recent!.CorrelationId : null,
             });
-
-            if (TryGetDouble(newValue, out var num))
-                readings.Add(new SensorReading
-                {
-                    Timestamp = DateTime.UtcNow,
-                    Meta = new TelemetryMeta
-                    {
-                        DeviceId = deviceId,
-                        ZoneId = zoneId,
-                        CapabilityId = kv.Key,
-                        Unit = UnitOf(existing, kv.Key),
-                    },
-                    Value = num,
-                });
         }
 
         if (logs.Count > 0) await EventLog.InsertManyAsync(logs);
@@ -458,6 +471,15 @@ public class EventInterceptor : BackgroundService
     private static string? UnitOf(CapabilityDeviceDocument? device, string capabilityId) =>
         device?.Capabilities.FirstOrDefault(c => c.Id == capabilityId)?.Unit;
 
+    /// <summary>True for a discrete (Boolean/Enum) capability — the only kinds a System sensor logs to the
+    /// activity event-log (its numeric/text values churn every minute; see <see cref="RecordStateDeltas"/>).</summary>
+    private static bool IsDiscreteCapability(CapabilityDeviceDocument? device, string capabilityId)
+    {
+        var kind = device?.Capabilities.FirstOrDefault(c => c.Id == capabilityId)?.Kind;
+        return string.Equals(kind, nameof(CapabilityKind.Boolean), StringComparison.OrdinalIgnoreCase)
+            || string.Equals(kind, nameof(CapabilityKind.Enum), StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string MapTriggerSource(string? source)
     {
         if (string.IsNullOrEmpty(source)) return TriggerSources.User;
@@ -480,7 +502,28 @@ public class EventInterceptor : BackgroundService
         Unit = AttrString(c.Attributes, CapabilityAttributeKeys.Unit),
         Min = AttrNumber(c.Attributes, CapabilityAttributeKeys.Min),
         Max = AttrNumber(c.Attributes, CapabilityAttributeKeys.Max),
+        Step = AttrNumber(c.Attributes, CapabilityAttributeKeys.Step),
+        Values = AttrStringArray(c.Attributes, CapabilityAttributeKeys.Values),
+        Editor = AttrString(c.Attributes, CapabilityAttributeKeys.Editor),
     };
+
+    /// <summary>Reads a string[] attribute (Enum <c>values</c>), robust to a JsonElement array over the bus.</summary>
+    private static List<string>? AttrStringArray(IReadOnlyDictionary<string, object?> attrs, string key)
+    {
+        if (!attrs.TryGetValue(key, out var v) || v is null) return null;
+        switch (v)
+        {
+            case IEnumerable<string> ss:
+                return ss.ToList();
+            case JsonElement e when e.ValueKind == JsonValueKind.Array:
+                return e.EnumerateArray()
+                    .Where(x => x.ValueKind == JsonValueKind.String)
+                    .Select(x => x.GetString()!)
+                    .ToList();
+            default:
+                return null;
+        }
+    }
 
     private static bool AttrBool(IReadOnlyDictionary<string, object?> attrs, string key) =>
         attrs.TryGetValue(key, out var v) && v switch

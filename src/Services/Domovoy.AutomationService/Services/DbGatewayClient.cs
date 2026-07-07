@@ -91,6 +91,37 @@ public sealed class DbGatewayClient
     private sealed record HomeStateDto(string Mode, string Source, DateTime UpdatedAt);
     private sealed record ModeUpdateDto(string Mode, string Source);
 
+    /// <summary>
+    /// Current site location (roadmap Epic 2K) for sunrise/sunset geometry. Null if the gateway is
+    /// unreachable — the engine then keeps its last-known coordinates (offline-first).
+    /// </summary>
+    public async Task<Domovoy.Contracts.Home.SiteLocation?> GetLocationAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<Domovoy.Contracts.Home.SiteLocation>("api/settings/location", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load site location from DbGateway");
+            return null;
+        }
+    }
+
+    /// <summary>Calendar settings (roadmap Epic 2L) for the Calendar sensor; null if the gateway is unreachable.</summary>
+    public async Task<Domovoy.Contracts.Home.CalendarSettings?> GetCalendarSettingsAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<Domovoy.Contracts.Home.CalendarSettings>("api/settings/calendar", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load calendar settings from DbGateway");
+            return null;
+        }
+    }
+
     public async Task<List<DeviceSnapshot>?> GetDevicesAsync(CancellationToken ct)
     {
         try

@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, Typography, Switch, Slider, Chip, Button, Stack, LinearProgress } from '@mui/material';
+import {
+  Box, Typography, Switch, Slider, Chip, Button, Stack, LinearProgress,
+  Select, MenuItem, TextField,
+} from '@mui/material';
 import type { Capability, CapabilityDevice } from '../../api/capabilityDevices';
 import {
   asBool, asNum, capabilityIcon, capabilityLabel, formatCapabilityValue,
 } from './deviceVisuals';
+import GeoPickerControl from './GeoPickerControl';
 
 export type CommandFn = (deviceId: string, set: Record<string, unknown>) => void;
 
@@ -45,6 +49,31 @@ function NumberSlider({
         onChangeCommitted={(_, v) => { dragging.current = false; onCommand(device.id, { [cap.id]: v as number }); }}
       />
     </Box>
+  );
+}
+
+/** Writable text → commits on blur or Enter (avoids a command per keystroke). */
+function TextControl({
+  device, cap, value, onCommand,
+}: { device: CapabilityDevice; cap: Capability; value: unknown; onCommand: CommandFn }) {
+  const [local, setLocal] = useState(typeof value === 'string' ? value : '');
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (!focused.current) setLocal(typeof value === 'string' ? value : '');
+  }, [value]);
+
+  const commit = () => { focused.current = false; if (local !== (value ?? '')) onCommand(device.id, { [cap.id]: local }); };
+
+  return (
+    <TextField
+      size="small" value={local} disabled={!device.isOnline}
+      onFocus={() => { focused.current = true; }}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); } }}
+      sx={{ maxWidth: 180 }}
+    />
   );
 }
 
@@ -100,6 +129,59 @@ export default function CapabilityControl({
             background: 'none', cursor: 'pointer',
           }}
         />
+      </Row>
+    );
+  }
+
+  // Writable location (editor "geo") → map picker
+  if (cap.writable && cap.editor === 'geo') {
+    return (
+      <Row icon={<Icon fontSize="small" />} label={label}>
+        <GeoPickerControl
+          value={value}
+          disabled={!device.isOnline}
+          allowClear
+          onSet={(v) => onCommand(device.id, { [cap.id]: v })}
+        />
+      </Row>
+    );
+  }
+
+  // Writable time (editor "time") → time input (empty allowed)
+  if (cap.writable && cap.editor === 'time') {
+    return (
+      <Row icon={<Icon fontSize="small" />} label={label}>
+        <TextField
+          type="time" size="small" value={typeof value === 'string' ? value : ''}
+          disabled={!device.isOnline}
+          onChange={(e) => onCommand(device.id, { [cap.id]: e.target.value })}
+          sx={{ width: 130 }}
+        />
+      </Row>
+    );
+  }
+
+  // Writable enum → dropdown of allowed values
+  if (cap.kind === 'Enum' && cap.writable && cap.values && cap.values.length > 0) {
+    return (
+      <Row icon={<Icon fontSize="small" />} label={label}>
+        <Select
+          size="small" value={cap.values.includes(String(value)) ? String(value) : ''}
+          disabled={!device.isOnline} displayEmpty
+          onChange={(e) => onCommand(device.id, { [cap.id]: e.target.value })}
+          sx={{ minWidth: 130 }}
+        >
+          {cap.values.map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+        </Select>
+      </Row>
+    );
+  }
+
+  // Writable text → commit-on-blur/Enter text field
+  if (cap.kind === 'Text' && cap.writable) {
+    return (
+      <Row icon={<Icon fontSize="small" />} label={label}>
+        <TextControl device={device} cap={cap} value={value} onCommand={onCommand} />
       </Row>
     );
   }

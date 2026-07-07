@@ -10,6 +10,15 @@
     "run": "Запустить",
     "allOff": "Выключить всё"
   },
+  "geo": {
+    "pick": "Указать место",
+    "clear": "Очистить",
+    "title": "Выбор места",
+    "search": "Найти",
+    "searchPlaceholder": "Адрес или название места…",
+    "cancel": "Отмена",
+    "confirm": "Выбрать это место"
+  },
   "filters": {
     "searchPlaceholder": "Поиск устройств или зон…",
     "all": "Все",
@@ -44,6 +53,11 @@
     "trends": "Тренды · за 24 ч",
     "history": "История"
   },
+  "blockIo": {
+    "title": "Связи блока",
+    "reads": "Читает",
+    "drives": "Управляет"
+  },
   "noCapabilities": "Возможности не заявлены.",
   "noHistory": "Пока нет записанных изменений.",
   "historyVia": "через {{rule}}",
@@ -67,7 +81,19 @@
     "energy": "Энергия",
     "battery": "Батарея",
     "illuminance": "Освещённость",
-    "link_quality": "Качество связи"
+    "link_quality": "Качество связи",
+    "sun_elevation": "Высота солнца",
+    "sun_azimuth": "Азимут солнца",
+    "is_dark": "Темно",
+    "is_day": "Светло",
+    "sunrise": "Восход",
+    "sunset": "Закат",
+    "time_of_day": "Время суток",
+    "clock": "Часы",
+    "day_of_week": "День недели",
+    "is_weekend": "Выходной",
+    "is_holiday": "Праздник",
+    "date": "Дата"
   },
   "headline": {
     "on": "Вкл",

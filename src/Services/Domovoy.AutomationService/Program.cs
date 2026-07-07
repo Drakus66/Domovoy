@@ -59,6 +59,8 @@ internal static class Program
                 var options = sp.GetRequiredService<IOptions<AutomationOptions>>().Value;
                 return new SunCalculator(options.Latitude, options.Longitude);
             });
+            builder.Services.AddSingleton<SiteContext>();     // 2L: site timezone for the Sun/Time sensors' local times
+            builder.Services.AddSingleton<CalendarContext>(); // 2L: weekend/holiday config for the Calendar sensor
             builder.Services.AddSingleton<RuleStore>();
             builder.Services.AddSingleton<RuleEvaluator>();
             builder.Services.AddSingleton<ActionExecutor>();
@@ -82,7 +84,9 @@ internal static class Program
             builder.Services.AddHostedService<AutomationScheduler>();
             builder.Services.AddHostedService<HomeModeMonitor>();   // 1G: track current home mode from the bus
             builder.Services.AddHostedService<PresenceMonitor>();   // 1G: presence-driven Home/Away switching
-            builder.Services.AddHostedService<BlockRuntime>();      // 1H: tick control blocks as virtual devices
+            builder.Services.AddSingleton<BlockRuntime>();          // 1H: tick control blocks as virtual devices
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<BlockRuntime>()); // + expose runtime health
+            builder.Services.AddHostedService<SystemSensorService>(); // 2L: publish platform virtual sensors (Sun)
             builder.Services.AddSingleton<MlTrainingService>();     // 2A: train + keep the model loaded
             builder.Services.AddHostedService(sp => sp.GetRequiredService<MlTrainingService>());
             builder.Services.AddSingleton<RuleSuggester>();         // 2C: heuristic rule proposer (stub-precursor to 2F)
@@ -153,6 +157,11 @@ internal static class Program
                         new Services.Notifications.NotificationMessage("Domovoy", "Test notification", "info"), ct);
                     return Results.Ok(new { delivered, enabled = dispatcher.EnabledChannels });
                 });
+
+            // Control-block runtime health (roadmap Epic 1H): last-tick/error per loaded block so the UI can
+            // tell a running block from a stalled or misconfigured one. Owned here (the runtime lives here),
+            // separate from the DbGateway CRUD.
+            app.MapGet("/api/blocks/status", (BlockRuntime runtime) => Results.Ok(runtime.Snapshot()));
 
             // Control-block catalog (roadmap Epic 1H): the built-in types' schema for the authoring UI.
             app.MapGet("/api/blocks/catalog", (BlockCatalog catalog) => Results.Ok(

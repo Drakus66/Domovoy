@@ -65,6 +65,23 @@ internal static class Program
             // Seed the built-in roles (admin/resident/guest) so the roles model is usable out of the box (Epic 2E).
             builder.Services.AddHostedService<Services.SecuritySeeder>();
 
+            // Optional geocoder for the site-location editor (Epic 2K). Network-only and best-effort — a failure
+            // degrades to manual lat/lon entry, so the location feature stays fully usable offline.
+            builder.Services.AddHttpClient<Services.IGeocoder, Services.NominatimGeocoder>(client =>
+            {
+                client.BaseAddress = new Uri("https://nominatim.openstreetmap.org/");
+                client.Timeout = TimeSpan.FromSeconds(8);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Domovoy/1.0 (home-automation)");
+            });
+
+            // Optional online public-holiday import for the Calendar sensor (Epic 2L). Best-effort — a
+            // failure degrades to the hand-edited holiday list, keeping the calendar usable offline.
+            builder.Services.AddHttpClient<Services.IHolidayImporter, Services.NagerHolidayImporter>(client =>
+            {
+                client.BaseAddress = new Uri("https://date.nager.at/");
+                client.Timeout = TimeSpan.FromSeconds(8);
+            });
+
             // Add services to the container
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddOpenApi();
@@ -92,6 +109,8 @@ internal static class Program
             app.MapProposalsEndpoints();
             app.MapRoleEndpoints();
             app.MapUserEndpoints();
+            app.MapSettingsEndpoints();
+            app.MapDashboardEndpoints();
             app.MapMetrics();
 
             // Health check endpoint
