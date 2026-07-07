@@ -4,24 +4,10 @@ import {
   Container, Box, Typography, Stack, LinearProgress, Alert, Card, CardActionArea,
   CardContent, Chip, Divider, List, ListItem, ListItemText,
 } from '@mui/material';
-import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
-import DirectionsWalkRoundedIcon from '@mui/icons-material/DirectionsWalkRounded';
-import BedtimeRoundedIcon from '@mui/icons-material/BedtimeRounded';
-import BeachAccessRoundedIcon from '@mui/icons-material/BeachAccessRounded';
-import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import { modeApi, HomeState } from '../api/mode';
 import { historyApi, EventLogEntry } from '../api/history';
 import { fmtDateTime } from '../i18n/format';
-
-/** Icon per well-known mode; unknown custom modes fall back to a generic look. */
-const MODE_ICONS: Record<string, JSX.Element> = {
-  Home: <HomeRoundedIcon />,
-  Away: <DirectionsWalkRoundedIcon />,
-  Night: <BedtimeRoundedIcon />,
-  Vacation: <BeachAccessRoundedIcon />,
-};
-
-const iconFor = (mode: string) => MODE_ICONS[mode] ?? <TuneRoundedIcon />;
+import { MODE_ICONS, modeIcon as iconFor } from '../components/modes/modeVisuals';
 
 export default function Modes() {
   const { t } = useTranslation('modes');

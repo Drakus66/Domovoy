@@ -25,6 +25,13 @@ export default function Users() {
   // dot-free subkey for the label lookup and fall back to the raw id if a translation is missing.
   const permLabel = (perm: string) => t(`perm.${perm.replace(/\./g, '_')}`, { defaultValue: perm });
 
+  // Built-in role name/description are seeded in English in the DB; translate them by stable role id and
+  // fall back to the stored value for operator-created roles.
+  const roleLabel = (r: Role) =>
+    r.isBuiltIn ? t(`builtInRole.${r.id}.name`, { defaultValue: r.name }) : r.name;
+  const roleDesc = (r: Role) =>
+    r.isBuiltIn ? t(`builtInRole.${r.id}.description`, { defaultValue: r.description ?? '' }) : r.description;
+
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -56,7 +63,7 @@ export default function Users() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const roleName = useMemo(() => new Map(roles.map((r) => [r.id, r.name])), [roles]);
+  const roleName = useMemo(() => new Map(roles.map((r) => [r.id, roleLabel(r)])), [roles]);
 
   // --- user dialog ---
   const openCreateUser = () => { setEditingUser(null); setUserDraft({ ...EMPTY_USER }); };
@@ -101,7 +108,7 @@ export default function Users() {
     } catch { setError(t('errors.save')); }
   };
   const removeRole = async (r: Role) => {
-    if (!window.confirm(i18n.t('users:deleteRoleConfirm', { name: r.name }))) return;
+    if (!window.confirm(i18n.t('users:deleteRoleConfirm', { name: roleLabel(r) }))) return;
     try { await securityApi.deleteRole(r.id); await fetchAll(); } catch { setError(t('errors.deleteRole')); }
   };
   const toggleRolePerm = (perm: string) => {
@@ -115,7 +122,7 @@ export default function Users() {
     [users],
   );
   const sortedRoles = useMemo(
-    () => [...roles].sort((a, b) => Number(b.isBuiltIn) - Number(a.isBuiltIn) || a.name.localeCompare(b.name)),
+    () => [...roles].sort((a, b) => Number(b.isBuiltIn) - Number(a.isBuiltIn) || roleLabel(a).localeCompare(roleLabel(b))),
     [roles],
   );
 
@@ -186,12 +193,12 @@ export default function Users() {
                     <BadgeRoundedIcon color="primary" sx={{ mt: 0.25 }} />
                     <Box flex={1} minWidth={0}>
                       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                        <Typography fontWeight={700}>{r.name}</Typography>
+                        <Typography fontWeight={700}>{roleLabel(r)}</Typography>
                         {r.isBuiltIn && (
                           <Chip size="small" icon={<LockRoundedIcon sx={{ fontSize: 14 }} />} label={t('builtIn')} variant="outlined" />
                         )}
                       </Stack>
-                      {r.description && <Typography variant="body2" color="text.secondary">{r.description}</Typography>}
+                      {roleDesc(r) && <Typography variant="body2" color="text.secondary">{roleDesc(r)}</Typography>}
                       <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap mt={0.75}>
                         {r.permissions.map((p) => (
                           <Chip key={p} size="small" label={permLabel(p)} variant="filled" sx={{ bgcolor: 'action.hover' }} />
@@ -239,7 +246,7 @@ export default function Users() {
                       <FormControlLabel
                         key={r.id}
                         control={<Checkbox checked={userDraft.roleIds.includes(r.id)} onChange={() => toggleUserRole(r.id)} />}
-                        label={r.name}
+                        label={roleLabel(r)}
                       />
                     ))}
                   </Stack>

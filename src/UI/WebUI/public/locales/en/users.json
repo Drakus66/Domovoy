@@ -44,6 +44,20 @@
     "permissions": "Permissions",
     "builtInNameLocked": "Built-in role name cannot be changed"
   },
+  "builtInRole": {
+    "admin": {
+      "name": "Administrator",
+      "description": "Full control of the home, including users and system settings."
+    },
+    "resident": {
+      "name": "Resident",
+      "description": "Everyday household member — control devices, modes, automations and approve suggestions."
+    },
+    "guest": {
+      "name": "Guest",
+      "description": "Can see devices and their state, but cannot change anything."
+    }
+  },
   "perm": {
     "devices_view": "View devices",
     "devices_control": "Control devices",
