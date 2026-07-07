@@ -19,6 +19,7 @@ import Users from './pages/Users';
 import Logs from './pages/Logs';
 import SystemStatus from './pages/SystemStatus';
 import ZigbeeDevices from './pages/ZigbeeDevices';
+import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
 import { NotificationContainer } from './components/common';
 
@@ -33,6 +34,8 @@ function App() {
           <Routes>
             <Route path="/" element={<Layout />}>
               <Route index element={<Devices />} />
+              {/* Deep link to a dashboard tab: all / sphere:<category> / dashboard id. */}
+              <Route path="t/:tabId" element={<Devices />} />
               <Route path="zones" element={<Zones />} />
               <Route path="modes" element={<Modes />} />
               <Route path="automations" element={<Automations />} />
@@ -45,6 +48,7 @@ function App() {
               <Route path="logs" element={<Logs />} />
               <Route path="status" element={<SystemStatus />} />
               <Route path="zigbee" element={<ZigbeeDevices />} />
+              <Route path="settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Route>
           </Routes>

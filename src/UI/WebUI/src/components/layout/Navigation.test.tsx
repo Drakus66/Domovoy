@@ -40,8 +40,11 @@ describe('Navigation Responsive Behavior', () => {
 
     renderNavigation();
 
-    // Desktop links should be visible
+    // Dashboard lives in the "home" group, auto-expanded because the active route is "/".
     expect(screen.getByRole('link', { name: dashboard })).toBeInTheDocument();
+
+    // Logs lives in the collapsed "system" group — expand it, then the link is reachable.
+    fireEvent.click(screen.getByText(i18n.t('nav:groups.system')));
     expect(screen.getByRole('link', { name: logs })).toBeInTheDocument();
 
     // Mobile menu button should not be visible

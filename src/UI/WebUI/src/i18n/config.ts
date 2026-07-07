@@ -14,6 +14,7 @@ export const namespaces = [
   'common',
   'nav',
   'devices',
+  'dashboards',
   'zones',
   'modes',
   'automations',

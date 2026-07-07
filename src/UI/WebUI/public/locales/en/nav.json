@@ -7,9 +7,16 @@
   "blocks": "Control blocks",
   "models": "ML models",
   "proposals": "Proposals",
-  "users": "Users & roles",
+  "users": "Users",
   "plugins": "Plugins",
   "zigbee": "Zigbee",
-  "status": "System Status",
-  "logs": "Logs"
+  "status": "Status",
+  "logs": "Logs",
+  "settings": "Settings",
+  "groups": {
+    "home": "Home",
+    "automation": "Automation",
+    "devices": "Devices",
+    "system": "System"
+  }
 }

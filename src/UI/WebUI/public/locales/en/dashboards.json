@@ -1,0 +1,86 @@
+{
+  "tabs": {
+    "all": "All"
+  },
+  "spheres": {
+    "light": "Light",
+    "switch": "Switches",
+    "climate": "Climate",
+    "sensor": "Sensors",
+    "security": "Security",
+    "energy": "Energy",
+    "other": "Other"
+  },
+  "actions": {
+    "newTab": "New tab",
+    "editTab": "Edit tab",
+    "manage": "Manage tabs",
+    "addSection": "Add section",
+    "addItem": "Add items",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete tab",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "remove": "Remove",
+    "back": "Back",
+    "add": "Add",
+    "edit": "Edit"
+  },
+  "manage": {
+    "spheres": "Spheres",
+    "sphereHint": "Spheres gather themselves from what lives in the house. Hide the ones you don't need.",
+    "customTabs": "Your tabs",
+    "noCustomTabs": "No tabs of your own yet."
+  },
+  "editor": {
+    "createTitle": "New tab",
+    "editTitle": "Tab settings",
+    "name": "Name",
+    "icon": "Icon",
+    "sections": "Sections",
+    "sectionTitle": "Section title",
+    "noSections": "Add the first section — tiles live inside sections.",
+    "emptySection": "No items in this section yet.",
+    "deleteConfirm": "Delete the \"{{name}}\" tab? The devices stay in the house — only the tab goes away.",
+    "pickType": "What to add",
+    "types": {
+      "device": "Device",
+      "capability": "Single value",
+      "chart": "Chart",
+      "modes": "Home modes"
+    },
+    "typeHints": {
+      "device": "A full device tile with its quick control.",
+      "capability": "One value of a device — e.g. just the humidity of a multi-sensor.",
+      "chart": "A telemetry trend for a numeric value.",
+      "modes": "A switcher for Home / Away / Night / Vacation."
+    },
+    "pickDevices": "Pick devices",
+    "pickDevice": "Pick a device",
+    "pickCapability": "Value",
+    "searchDevices": "Search…",
+    "chartWindow": "Window",
+    "window": {
+      "6": "6 hours",
+      "24": "24 hours",
+      "168": "Week"
+    }
+  },
+  "empty": {
+    "dashboard": "This shelf is still empty — open the editor and tell me what to keep an eye on here.",
+    "section": "Nothing here yet."
+  },
+  "placeholder": {
+    "deviceGone": "This one seems to have moved out. I kept its place — edit the tab to tidy up.",
+    "unknownType": "I don't know how to show this yet."
+  },
+  "errors": {
+    "load": "I couldn't fetch your tabs — showing the house as is.",
+    "save": "I couldn't save that — please try again.",
+    "delete": "I couldn't delete that — please try again."
+  },
+  "widgets": {
+    "modes": "Home mode"
+  }
+}

@@ -1,36 +1,42 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from 'i18next';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Container, Box, Typography, Grid, IconButton, LinearProgress, Alert, Tooltip,
-  Stack, TextField, InputAdornment, Chip, Divider,
+  Container, Box, Typography, IconButton, LinearProgress, Alert, Tooltip, Stack,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
-import DevicesIcon from '@mui/icons-material/Devices';
 import { HubConnection } from '@microsoft/signalr';
 import { capabilityDevicesApi, CapabilityDevice, isUnassignedZone } from '../api/capabilityDevices';
 import { zonesApi, Zone } from '../api/zones';
+import type { Dashboard } from '../api/dashboards';
 import { buildDeviceHubConnection, startDeviceHub } from '../api/deviceHub';
-import DeviceTile from '../components/devices/DeviceTile';
 import DeviceDetailDrawer from '../components/devices/DeviceDetailDrawer';
 import type { CommandFn } from '../components/devices/CapabilityControls';
 import { asBool, asNum } from '../components/devices/deviceVisuals';
 import DomovoyDigest from '../components/common/DomovoyDigest';
+import AllDevicesTab from '../components/dashboard/AllDevicesTab';
+import SphereTab from '../components/dashboard/SphereTab';
+import CustomDashboardTab from '../components/dashboard/CustomDashboardTab';
+import DashboardTabs from '../components/dashboard/DashboardTabs';
+import DashboardEditorDialog from '../components/dashboard/editor/DashboardEditorDialog';
+import { deriveSpheres, sphereCategoryFromTabId } from '../components/dashboard/spheres';
+import { useDashboardStore } from '../store/dashboardStore';
 import { useUIStore } from '../store/uiStore';
 
 const REFRESH_INTERVAL_MS = 20_000;
 
 export default function Devices() {
   const { t } = useTranslation('devices');
+  const navigate = useNavigate();
+  const { tabId } = useParams();
   const [devices, setDevices] = useState<CapabilityDevice[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [adapter, setAdapter] = useState<string>('all');
-  const [onlineOnly, setOnlineOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorTarget, setEditorTarget] = useState<Dashboard | null>(null);
   const hubRef = useRef<HubConnection | null>(null);
   // Device ids seen by the last successful fetch; null until the baseline load,
   // so restarts don't announce the whole house as "new residents".
@@ -123,33 +129,45 @@ export default function Devices() {
     capabilityDevicesApi.setArchetype(deviceId, archetype).catch(() => setError(t('errors.setArchetype')));
   }, [t]);
 
-  const adapters = useMemo(
-    () => Array.from(new Set(devices.map((d) => d.adapterSource))).sort(),
-    [devices],
+  // Custom dashboards + hidden-spheres preference (shared cache; also used by the editor).
+  const {
+    dashboards, hiddenSpheres, loaded: dashboardsLoaded,
+    load: loadDashboards, reorder, setHiddenSpheres,
+  } = useDashboardStore();
+  useEffect(() => { loadDashboards(); }, [loadDashboards]);
+
+  const spheres = useMemo(() => deriveSpheres(devices, hiddenSpheres), [devices, hiddenSpheres]);
+  const allSpheres = useMemo(() => deriveSpheres(devices, []), [devices]);
+
+  // Active tab: "all" (bare /), "sphere:<category>" or a dashboard id (route /t/:tabId).
+  const activeTab = tabId ?? 'all';
+  const sphereCategory = sphereCategoryFromTabId(activeTab);
+  const activeSphere = sphereCategory !== null && spheres.some((s) => s.category === sphereCategory)
+    ? sphereCategory
+    : null;
+  const activeDashboard = useMemo(
+    () => dashboards.find((d) => d.id === activeTab) ?? null,
+    [dashboards, activeTab],
   );
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return devices.filter((d) =>
-      (adapter === 'all' || d.adapterSource === adapter) &&
-      (!onlineOnly || d.isOnline) &&
-      (!q || d.name.toLowerCase().includes(q) || zoneName(d.zoneId).toLowerCase().includes(q)),
-    );
-  }, [devices, search, adapter, onlineOnly, zoneName]);
-
-  // Group by zone name, with stable ordering (Unassigned last).
-  const grouped = useMemo(() => {
-    const map = new Map<string, CapabilityDevice[]>();
-    for (const d of filtered) {
-      const key = zoneName(d.zoneId);
-      const bucket = map.get(key) ?? [];
-      bucket.push(d);
-      map.set(key, bucket);
+  // A deep link to a deleted dashboard / hidden or empty sphere falls back to All —
+  // but only once both devices and dashboards have actually loaded.
+  useEffect(() => {
+    if (loading || !dashboardsLoaded) return;
+    if (activeTab !== 'all' && !activeSphere && !activeDashboard) {
+      navigate('/', { replace: true });
     }
-    return Array.from(map.entries())
-      .sort(([a], [b]) => (a === unassignedLabel ? 1 : b === unassignedLabel ? -1 : a.localeCompare(b)))
-      .map(([zone, items]) => ({ zone, items: items.sort((x, y) => x.name.localeCompare(y.name)) }));
-  }, [filtered, zoneName, unassignedLabel]);
+  }, [loading, dashboardsLoaded, activeTab, activeSphere, activeDashboard, navigate]);
+
+  const selectTab = useCallback(
+    (id: string) => navigate(id === 'all' ? '/' : `/t/${id}`),
+    [navigate],
+  );
+
+  const openEditor = useCallback((target: Dashboard | null) => {
+    setEditorTarget(target);
+    setEditorOpen(true);
+  }, []);
 
   const onlineCount = devices.filter((d) => d.isOnline).length;
   const lightsOn = devices.filter((d) => 'on_off' in (d.state ?? {}) && asBool(d.state.on_off)
@@ -178,77 +196,60 @@ export default function Devices() {
           </Tooltip>
         </Stack>
 
-        <Stack direction="row" spacing={1.5} mb={3} flexWrap="wrap" useFlexGap alignItems="center">
-          <TextField
-            size="small"
-            placeholder={t('filters.searchPlaceholder')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{ minWidth: 240, flex: { xs: '1 1 100%', sm: '0 1 320px' } }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start"><SearchRoundedIcon fontSize="small" /></InputAdornment>
-              ),
-            }}
-          />
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <Chip
-              label={t('filters.all')}
-              variant={adapter === 'all' ? 'filled' : 'outlined'}
-              color={adapter === 'all' ? 'primary' : 'default'}
-              onClick={() => setAdapter('all')}
-            />
-            {adapters.map((a) => (
-              <Chip
-                key={a}
-                label={a}
-                variant={adapter === a ? 'filled' : 'outlined'}
-                color={adapter === a ? 'primary' : 'default'}
-                onClick={() => setAdapter(a)}
-              />
-            ))}
-            <Chip
-              label={t('filters.onlineOnly')}
-              variant={onlineOnly ? 'filled' : 'outlined'}
-              color={onlineOnly ? 'success' : 'default'}
-              onClick={() => setOnlineOnly((v) => !v)}
-            />
-          </Stack>
-        </Stack>
+        <DashboardTabs
+          spheres={spheres}
+          allSpheres={allSpheres}
+          dashboards={dashboards}
+          hiddenSpheres={hiddenSpheres}
+          activeId={activeDashboard ? activeDashboard.id : activeSphere ? `sphere:${activeSphere}` : 'all'}
+          onSelect={selectTab}
+          onCreate={() => openEditor(null)}
+          onEdit={openEditor}
+          onToggleSphere={(category, hidden) =>
+            setHiddenSpheres(hidden
+              ? [...hiddenSpheres, category]
+              : hiddenSpheres.filter((c) => c !== category))}
+          onReorder={reorder}
+        />
 
         {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
         {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
-        {filtered.length === 0 && !loading ? (
-          <Box textAlign="center" py={8}>
-            <DevicesIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-            <Typography color="text.secondary">
-              {devices.length === 0
-                ? t('empty.noDevices')
-                : t('empty.noMatches')}
-            </Typography>
-          </Box>
+        {activeDashboard ? (
+          <CustomDashboardTab
+            dashboard={activeDashboard}
+            devices={devices}
+            onOpen={(d) => setSelectedId(d.id)}
+            onCommand={handleCommand}
+            onEdit={() => openEditor(activeDashboard)}
+          />
+        ) : activeSphere ? (
+          <SphereTab
+            category={activeSphere}
+            devices={devices}
+            zoneName={zoneName}
+            onOpen={(d) => setSelectedId(d.id)}
+            onCommand={handleCommand}
+          />
         ) : (
-          <Stack spacing={4}>
-            {grouped.map(({ zone, items }) => (
-              <Box key={zone}>
-                <Stack direction="row" alignItems="center" spacing={1.5} mb={1.5}>
-                  <Typography variant="h6" fontWeight={700}>{zone}</Typography>
-                  <Chip size="small" label={items.length} variant="outlined" />
-                  <Divider sx={{ flex: 1 }} />
-                </Stack>
-                <Grid container spacing={2}>
-                  {items.map((device) => (
-                    <Grid item xs={12} sm={6} md={4} lg={3} key={device.id}>
-                      <DeviceTile device={device} onOpen={(d) => setSelectedId(d.id)} onCommand={handleCommand} />
-                    </Grid>
-                  ))}
-                </Grid>
-              </Box>
-            ))}
-          </Stack>
+          <AllDevicesTab
+            devices={devices}
+            zoneName={zoneName}
+            loading={loading}
+            onOpen={(d) => setSelectedId(d.id)}
+            onCommand={handleCommand}
+          />
         )}
       </Box>
+
+      <DashboardEditorDialog
+        open={editorOpen}
+        dashboard={editorTarget}
+        devices={devices}
+        onClose={() => setEditorOpen(false)}
+        onSaved={(d) => selectTab(d.id)}
+        onDeleted={(id) => { if (activeTab === id) selectTab('all'); }}
+      />
 
       <DeviceDetailDrawer
         device={selected}

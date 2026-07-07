@@ -62,6 +62,14 @@ export const handlers = [
   http.get('/api/logs', () => {
     return HttpResponse.json({ data: [], totalCount: 0 });
   }),
+  // Custom dashboards: the main page loads these on every mount (wildcard host —
+  // the axios client uses an absolute base URL).
+  http.get('*/api/dashboards', () => {
+    return HttpResponse.json([]);
+  }),
+  http.get('*/api/dashboards/prefs', () => {
+    return HttpResponse.json({ id: 'current', hiddenSpheres: [], updatedAt: new Date().toISOString() });
+  }),
 ];
 
 export const server = setupServer(...handlers);
