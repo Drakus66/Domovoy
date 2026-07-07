@@ -10,6 +10,20 @@ using Domovoy.MessageBus;
 namespace Domovoy.AutomationService.Blocks;
 
 /// <summary>
+/// Runtime health of a single control block, reported to the authoring UI (roadmap Epic 1H).
+/// <paramref name="LastTickAt"/> is null until the block first ticks; <paramref name="LastError"/> holds
+/// the message of the most recent failing tick (cleared on the next success).
+/// </summary>
+public sealed record BlockStatus(
+    string BlockId,
+    bool Enabled,
+    DateTime? LastTickAt,
+    long TickCount,
+    int LastEmittedCount,
+    string? LastError,
+    DateTime? LastErrorAt);
+
+/// <summary>
 /// Hosts and ticks control-block instances (roadmap Epic 1H) — the stateful middle layer. On its own
 /// fast cadence (separate from the 1-minute rule scheduler) it: syncs running instances with the configs
 /// in <see cref="BlockStore"/>; reads each block's bound inputs from the shared <see cref="DeviceRegistry"/>
@@ -114,10 +128,18 @@ public sealed class BlockRuntime : BackgroundService
             try
             {
                 rb.Block.Tick(new BlockContext(rb, _registry, _zones, now, emitted, _logger));
+                // Successful tick: stamp health so the UI can tell the block is alive and clear a stale error.
+                rb.LastTickAt = DateTime.UtcNow;
+                rb.TickCount++;
+                rb.LastEmittedCount = emitted.Count;
+                rb.LastError = null;
+                rb.LastErrorAt = null;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Block {Id} ({Type}) tick threw", rb.Config.Id, rb.Config.TypeId);
+                rb.LastError = ex.Message;
+                rb.LastErrorAt = DateTime.UtcNow;
                 continue;
             }
 
@@ -202,6 +224,18 @@ public sealed class BlockRuntime : BackgroundService
             ? id
             : DeviceIdFactory.Derive("ControlBlock", config.Id);
 
+    /// <summary>
+    /// Runtime health of every loaded block for the authoring UI (roadmap Epic 1H): so a user can tell
+    /// "is this block actually running?" beyond just its emitted output. A block that is enabled but has
+    /// never ticked, or whose last tick threw, is surfaced here.
+    /// </summary>
+    public IReadOnlyList<BlockStatus> Snapshot() =>
+        _running.Values
+            .Select(rb => new BlockStatus(
+                rb.Config.Id, rb.Config.Enabled, rb.LastTickAt, rb.TickCount,
+                rb.LastEmittedCount, rb.LastError, rb.LastErrorAt))
+            .ToList();
+
     /// <summary>Live per-instance state of a running block.</summary>
     private sealed class RunningBlock
     {
@@ -221,6 +255,13 @@ public sealed class BlockRuntime : BackgroundService
         public Dictionary<string, object?> Commanded { get; } = new();
         /// <summary>Last value sent to each bound output's target (actuation dedup, Epic 1D).</summary>
         public Dictionary<string, object?> LastCommanded { get; } = new();
+
+        // --- health (surfaced via Snapshot for the UI) ---
+        public DateTime? LastTickAt { get; set; }
+        public long TickCount { get; set; }
+        public int LastEmittedCount { get; set; }
+        public string? LastError { get; set; }
+        public DateTime? LastErrorAt { get; set; }
     }
 
     /// <summary>Per-tick view handed to a block: inputs from the blackboard, params, commands, state.</summary>

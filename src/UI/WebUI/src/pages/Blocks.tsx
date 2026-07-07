@@ -8,16 +8,49 @@ import {
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
 import ViewListRoundedIcon from '@mui/icons-material/ViewListRounded';
 import PublishRoundedIcon from '@mui/icons-material/PublishRounded';
-import { blocksApi, BlockCatalogEntry, ControlBlock, NewBlock, PortBinding } from '../api/blocks';
+import CircleIcon from '@mui/icons-material/Circle';
+import { blocksApi, BlockCatalogEntry, BlockStatus, ControlBlock, NewBlock, PortBinding } from '../api/blocks';
 import { capabilityDevicesApi, CapabilityDevice } from '../api/capabilityDevices';
 import { proposalsApi } from '../api/proposals';
+import { fmtDateTime } from '../i18n/format';
 import BlockGraph from '../components/blocks/BlockGraph';
 
 const stageName = (s: number) =>
   i18n.t(s >= 2 ? 'blocks:stageName.full' : s === 1 ? 'blocks:stageName.bounded' : 'blocks:stageName.shadow');
+
+// Human-readable parameter label/description: prefer a per-type i18n string (blocks:param.<type>.<name>),
+// fall back to a shared governor entry (param._common), then to the catalog's raw name/English description.
+// This is what turns the bare "coolSetpoint / hysteresis" keys into localized fields (issue #2).
+const paramLabel = (typeId: string, p: { name: string; unit?: string | null }): string => {
+  const specific = `blocks:param.${typeId}.${p.name}.label`;
+  const common = `blocks:param._common.${p.name}.label`;
+  const base = i18n.exists(specific) ? i18n.t(specific) : i18n.exists(common) ? i18n.t(common) : p.name;
+  return p.unit ? `${base} (${p.unit})` : base;
+};
+const paramDesc = (typeId: string, p: { name: string; description: string }): string => {
+  const specific = `blocks:param.${typeId}.${p.name}.desc`;
+  const common = `blocks:param._common.${p.name}.desc`;
+  return i18n.exists(specific) ? i18n.t(specific) : i18n.exists(common) ? i18n.t(common) : p.description;
+};
+
+// Live health of a block, folded into a single chip (issue #3): is it actually ticking, idle, or errored?
+type BlockHealth = { label: string; color: 'success' | 'warning' | 'error' | 'default'; hint: string };
+const blockHealth = (block: ControlBlock, status: BlockStatus | undefined): BlockHealth => {
+  if (!block.enabled) return { label: i18n.t('blocks:status.disabled'), color: 'default', hint: i18n.t('blocks:status.disabledHint') };
+  if (!status) return { label: i18n.t('blocks:status.idle'), color: 'default', hint: i18n.t('blocks:status.unknownHint') };
+  if (status.lastError) return { label: i18n.t('blocks:status.error'), color: 'error', hint: i18n.t('blocks:status.errorHint', { error: status.lastError }) };
+  if (!status.lastTickAt) return { label: i18n.t('blocks:status.idle'), color: 'warning', hint: i18n.t('blocks:status.idleHint') };
+  const ageMs = Date.now() - new Date(status.lastTickAt).getTime();
+  if (ageMs > 60_000) return { label: i18n.t('blocks:status.stalled'), color: 'warning', hint: i18n.t('blocks:status.stalledHint') };
+  return {
+    label: i18n.t('blocks:status.running'), color: 'success',
+    hint: i18n.t('blocks:status.runningHint', { when: fmtDateTime(status.lastTickAt), count: status.tickCount }),
+  };
+};
 
 // The authority ladder phrased as trust in the house spirit (2B staging):
 // it starts by watching, then acts carefully, then runs the loop on its own.
@@ -32,8 +65,10 @@ const fmt = (v: unknown): string => {
 };
 
 interface BlockDraft {
+  id?: string; // present ⇒ editing an existing block (issue #4)
   name: string;
   typeId: string;
+  enabled: boolean;
   params: Record<string, number>;
   inputs: Record<string, PortBinding>;
   outputs: Record<string, PortBinding>;
@@ -44,6 +79,7 @@ export default function Blocks() {
   const [blocks, setBlocks] = useState<ControlBlock[]>([]);
   const [catalog, setCatalog] = useState<BlockCatalogEntry[]>([]);
   const [devices, setDevices] = useState<CapabilityDevice[]>([]);
+  const [statuses, setStatuses] = useState<BlockStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -68,24 +104,44 @@ export default function Blocks() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Poll live output (blocks are virtual devices) so demand/setpoint update on screen.
+  // Poll live output (blocks are virtual devices) + runtime health so state/status update on screen.
   useEffect(() => {
-    const t = setInterval(() => {
+    const refresh = () => {
       capabilityDevicesApi.getDevices().then(setDevices).catch(() => undefined);
-    }, 5000);
-    return () => clearInterval(t);
+      blocksApi.getStatus().then(setStatuses).catch(() => undefined);
+    };
+    refresh();
+    const timer = setInterval(refresh, 5000);
+    return () => clearInterval(timer);
   }, []);
 
   const deviceById = useMemo(() => new Map(devices.map((d) => [d.id, d])), [devices]);
   const typeById = useMemo(() => new Map(catalog.map((t) => [t.typeId, t])), [catalog]);
+  const statusById = useMemo(() => new Map(statuses.map((s) => [s.blockId, s])), [statuses]);
 
   const startCreate = (entry: BlockCatalogEntry) => {
     setDraft({
       name: '',
       typeId: entry.typeId,
+      enabled: true,
       params: Object.fromEntries(entry.params.map((p) => [p.name, p.default])),
       inputs: Object.fromEntries(entry.inputs.map((p) => [p.name, { deviceId: '', capabilityId: '' }])),
       outputs: Object.fromEntries(entry.outputs.map((o) => [o.id, { deviceId: '', capabilityId: '' }])),
+    });
+  };
+
+  // Open the same authoring dialog pre-filled with an existing block (issue #4). Every catalog port is
+  // seeded so unbound ports still render; the block's saved bindings overwrite the ones it has.
+  const startEdit = (b: ControlBlock) => {
+    const entry = typeById.get(b.typeId);
+    setDraft({
+      id: b.id,
+      name: b.name,
+      typeId: b.typeId,
+      enabled: b.enabled,
+      params: { ...Object.fromEntries((entry?.params ?? []).map((p) => [p.name, p.default])), ...b.params },
+      inputs: { ...Object.fromEntries((entry?.inputs ?? []).map((p) => [p.name, { deviceId: '', capabilityId: '' }])), ...b.inputs },
+      outputs: { ...Object.fromEntries((entry?.outputs ?? []).map((o) => [o.id, { deviceId: '', capabilityId: '' }])), ...b.outputs },
     });
   };
 
@@ -99,14 +155,15 @@ export default function Blocks() {
       Object.entries(draft.outputs).filter(([, b]) => b.deviceId && b.capabilityId),
     );
     const payload: NewBlock = {
-      name: draft.name.trim(), typeId: draft.typeId, enabled: true, params: draft.params, inputs, outputs,
+      name: draft.name.trim(), typeId: draft.typeId, enabled: draft.enabled, params: draft.params, inputs, outputs,
     };
     try {
-      await blocksApi.createBlock(payload);
+      if (draft.id) await blocksApi.updateBlock(draft.id, payload);
+      else await blocksApi.createBlock(payload);
       setDraft(null);
       await load();
     } catch {
-      setError(t('errors.create'));
+      setError(t(draft.id ? 'errors.update' : 'errors.create'));
     }
   };
 
@@ -186,6 +243,7 @@ export default function Blocks() {
               // ML governor blocks carry a `stage` param; below Full they can be promoted via the queue.
               const isGovernor = type?.params.some((p) => p.name === 'stage') ?? false;
               const stage = Math.round(b.params.stage ?? 0);
+              const health = blockHealth(b, statusById.get(b.id));
               return (
                 <Card key={b.id} variant="outlined">
                   <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
@@ -194,7 +252,10 @@ export default function Blocks() {
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap mb={0.5}>
                           <Typography fontWeight={700}>{b.name}</Typography>
                           <Chip size="small" variant="outlined" label={type?.title ?? b.typeId} />
-                          {!b.enabled && <Chip size="small" label={t('chip.disabled')} color="default" variant="outlined" />}
+                          <Tooltip title={health.hint}>
+                            <Chip size="small" variant="outlined" color={health.color}
+                              icon={<CircleIcon sx={{ fontSize: '0.7rem !important' }} />} label={health.label} />
+                          </Tooltip>
                           {isGovernor && (
                             <Tooltip title={stageHint(stage)}>
                               <Chip size="small" variant="outlined" color={stage === 0 ? 'default' : 'primary'}
@@ -234,6 +295,9 @@ export default function Blocks() {
                             </Button>
                           </Tooltip>
                         )}
+                        <Tooltip title={t('actions.edit')}>
+                          <IconButton onClick={() => startEdit(b)}><EditOutlinedIcon /></IconButton>
+                        </Tooltip>
                         <Tooltip title={t('actions.delete')}>
                           <IconButton onClick={() => remove(b)}><DeleteOutlineRoundedIcon /></IconButton>
                         </Tooltip>
@@ -268,10 +332,13 @@ function CreateDialog({
   const { t } = useTranslation('blocks');
   const type = draft ? catalog.get(draft.typeId) : undefined;
   const capsOf = (deviceId: string) => devices.find((d) => d.id === deviceId)?.capabilities ?? [];
+  const isEdit = !!draft?.id;
 
   return (
     <Dialog open={draft !== null} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{t('dialog.title', { type: type?.title ?? t('dialog.blockFallback') })}</DialogTitle>
+      <DialogTitle>
+        {t(isEdit ? 'dialog.editTitle' : 'dialog.title', { type: type?.title ?? t('dialog.blockFallback') })}
+      </DialogTitle>
       <DialogContent>
         {draft && type && (
           <Stack spacing={2.5} mt={1}>
@@ -344,10 +411,11 @@ function CreateDialog({
                   {type.params.map((p) => (
                     p.name === 'stage' ? (
                       // ML authority stage (Epic 2B): a friendly selector over the numeric 0/1/2 param.
+                      // Locked while editing — the stage moves through the approval queue (Promote), not here.
                       <TextField
-                        key={p.name} select label={t('dialog.authorityStage')}
+                        key={p.name} select label={t('dialog.authorityStage')} disabled={isEdit}
                         value={draft.params[p.name] ?? p.default}
-                        helperText={p.description}
+                        helperText={isEdit ? t('dialog.stageLocked') : paramDesc(draft.typeId, p)}
                         onChange={(e) => onChange({
                           ...draft, params: { ...draft.params, [p.name]: Number(e.target.value) },
                         })}
@@ -356,11 +424,25 @@ function CreateDialog({
                         <MenuItem value={1}>{t('stageOption.bounded')}</MenuItem>
                         <MenuItem value={2}>{t('stageOption.full')}</MenuItem>
                       </TextField>
+                    ) : p.name === 'mode' ? (
+                      // Thermostat mode (numeric 0/1/2) shown as a readable selector instead of a bare number.
+                      <TextField
+                        key={p.name} select label={paramLabel(draft.typeId, p)}
+                        value={draft.params[p.name] ?? p.default}
+                        helperText={paramDesc(draft.typeId, p)}
+                        onChange={(e) => onChange({
+                          ...draft, params: { ...draft.params, [p.name]: Number(e.target.value) },
+                        })}
+                      >
+                        <MenuItem value={0}>{t('modeOption.heat')}</MenuItem>
+                        <MenuItem value={1}>{t('modeOption.cool')}</MenuItem>
+                        <MenuItem value={2}>{t('modeOption.both')}</MenuItem>
+                      </TextField>
                     ) : (
                       <TextField
-                        key={p.name} type="number" label={`${p.name}${p.unit ? ` (${p.unit})` : ''}`}
+                        key={p.name} type="number" label={paramLabel(draft.typeId, p)}
                         value={draft.params[p.name] ?? p.default}
-                        helperText={p.description}
+                        helperText={paramDesc(draft.typeId, p)}
                         onChange={(e) => onChange({
                           ...draft, params: { ...draft.params, [p.name]: Number(e.target.value) },
                         })}
@@ -382,7 +464,9 @@ function CreateDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t('actions.cancel')}</Button>
-        <Button variant="contained" onClick={onSave} disabled={!draft?.name.trim()}>{t('actions.create')}</Button>
+        <Button variant="contained" onClick={onSave} disabled={!draft?.name.trim()}>
+          {t(isEdit ? 'actions.save' : 'actions.create')}
+        </Button>
       </DialogActions>
     </Dialog>
   );

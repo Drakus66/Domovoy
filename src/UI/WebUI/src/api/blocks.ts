@@ -25,6 +25,17 @@ export type NewBlock = Pick<ControlBlock, 'name' | 'typeId' | 'enabled' | 'param
   zoneId?: string | null;
 };
 
+/** Runtime health of one block (matches AutomationService BlockStatus, Epic 1H). */
+export interface BlockStatus {
+  blockId: string;
+  enabled: boolean;
+  lastTickAt: string | null;
+  tickCount: number;
+  lastEmittedCount: number;
+  lastError: string | null;
+  lastErrorAt: string | null;
+}
+
 /** Block-type schema from the catalog (drives the typed authoring form). */
 export interface BlockCatalogEntry {
   typeId: string;
@@ -42,8 +53,16 @@ export const blocksApi = {
   getCatalog: (): Promise<BlockCatalogEntry[]> =>
     apiClient.get<BlockCatalogEntry[]>('/api/blocks/catalog').then((r) => r.data),
 
+  /** Live per-block runtime health (last-tick / error), keyed by block id. */
+  getStatus: (): Promise<BlockStatus[]> =>
+    apiClient.get<BlockStatus[]>('/api/blocks/status').then((r) => r.data),
+
   createBlock: (block: NewBlock): Promise<ControlBlock> =>
     apiClient.post<ControlBlock>('/api/blocks', block).then((r) => r.data),
+
+  /** Update an existing block (name/params/bindings/enabled). The virtual device id stays stable. */
+  updateBlock: (id: string, block: NewBlock): Promise<void> =>
+    apiClient.put(`/api/blocks/${encodeURIComponent(id)}`, block).then(() => undefined),
 
   deleteBlock: (id: string): Promise<void> =>
     apiClient.delete(`/api/blocks/${encodeURIComponent(id)}`).then(() => undefined),

@@ -8,10 +8,13 @@ import {
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import CircleIcon from '@mui/icons-material/Circle';
 import ArrowRightAltRoundedIcon from '@mui/icons-material/ArrowRightAltRounded';
-import { CapabilityDevice, isUnassignedZone, DEVICE_ARCHETYPES, effectiveArchetype } from '../../api/capabilityDevices';
+import {
+  CapabilityDevice, capabilityDevicesApi, isUnassignedZone, DEVICE_ARCHETYPES, effectiveArchetype,
+} from '../../api/capabilityDevices';
 import type { Zone } from '../../api/zones';
 import { historyApi, EventLogEntry } from '../../api/history';
 import { automationsApi } from '../../api/automations';
+import { blocksApi, PortBinding } from '../../api/blocks';
 import CapabilityControl, { type CommandFn } from './CapabilityControls';
 import { describeDevice } from './deviceVisuals';
 import { fmtDateTime } from '../../i18n/format';
@@ -100,6 +103,25 @@ function DrawerBody({
     return ruleNames[id] ?? (id ? t('aRule') : null);
   };
 
+  // A control block appears here as a virtual device (Model "block/<type>"). Beyond its capabilities/state
+  // (e.g. the setpoint), surface what it reads and what it drives so its role is visible (issue #5).
+  const isBlock = device.model?.startsWith('block/') ?? false;
+  const [wiring, setWiring] = useState<{ inputs: [string, PortBinding][]; outputs: [string, PortBinding][] } | null>(null);
+  const [deviceNames, setDeviceNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!isBlock) { setWiring(null); return; }
+    let cancelled = false;
+    Promise.all([blocksApi.getBlocks(), capabilityDevicesApi.getDevices()])
+      .then(([blocks, devs]) => {
+        if (cancelled) return;
+        setDeviceNames(Object.fromEntries(devs.map((d) => [d.id, d.name])));
+        const block = blocks.find((b) => b.deviceId === device.id);
+        setWiring(block ? { inputs: Object.entries(block.inputs), outputs: Object.entries(block.outputs) } : null);
+      })
+      .catch(() => { if (!cancelled) setWiring(null); });
+    return () => { cancelled = true; };
+  }, [device.id, isBlock]);
+
   const controls = device.capabilities.filter((c) => c.writable || c.kind === 'Action');
   const sensors = device.capabilities.filter((c) => !c.writable && c.kind !== 'Action');
   // Numeric sensors get a 24h trend chart (roadmap Epic 1B).
@@ -182,6 +204,25 @@ function DrawerBody({
       </TextField>
 
       <Box sx={{ flex: 1, overflowY: 'auto', mx: -0.5, px: 0.5 }}>
+        {wiring && (wiring.inputs.length > 0 || wiring.outputs.length > 0) && (
+          <Section title={t('blockIo.title')}>
+            <Stack spacing={0.75}>
+              {wiring.inputs.map(([port, bind]) => (
+                <Typography key={`in-${port}`} variant="body2" color="text.secondary">
+                  <b>{t('blockIo.reads')}</b>{' '}
+                  {port} ← {deviceNames[bind.deviceId] ?? bind.deviceId}.{bind.capabilityId}
+                </Typography>
+              ))}
+              {wiring.outputs.map(([cap, bind]) => (
+                <Typography key={`out-${cap}`} variant="body2" color="text.secondary">
+                  <b>{t('blockIo.drives')}</b>{' '}
+                  {cap} → {deviceNames[bind.deviceId] ?? bind.deviceId}.{bind.capabilityId}
+                </Typography>
+              ))}
+            </Stack>
+          </Section>
+        )}
+
         {controls.length > 0 && (
           <Section title={t('sections.controls')} action={
             controls.some((c) => c.id === 'on_off')

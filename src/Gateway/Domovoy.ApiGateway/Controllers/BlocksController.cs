@@ -21,6 +21,11 @@ public class BlocksController : ControllerBase
     public Task<IActionResult> Catalog(CancellationToken ct)
         => Forward("automation-service", HttpMethod.Get, "api/blocks/catalog", ct);
 
+    // Runtime health (last-tick/error per block) also lives in the AutomationService (owns the runtime).
+    [HttpGet("status")]
+    public Task<IActionResult> Status(CancellationToken ct)
+        => Forward("automation-service", HttpMethod.Get, "api/blocks/status", ct);
+
     [HttpGet]
     public Task<IActionResult> List(CancellationToken ct)
         => Forward("db-gateway", HttpMethod.Get, "api/blocks", ct);

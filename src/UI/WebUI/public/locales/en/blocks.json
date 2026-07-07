@@ -4,6 +4,7 @@
   "errors": {
     "load": "Failed to load control blocks. Check ApiGateway / AutomationService connection.",
     "create": "Failed to create block.",
+    "update": "Failed to update block.",
     "delete": "Failed to delete block.",
     "promote": "Failed to queue promotion proposal."
   },
@@ -41,13 +42,67 @@
     "rationale": "Review the backtest scorecard on /models before approving.",
     "queued": "Queued a promotion proposal for \"{{name}}\". Approve it on the Proposals page."
   },
+  "status": {
+    "running": "running",
+    "idle": "idle",
+    "stalled": "stalled",
+    "error": "error",
+    "disabled": "disabled",
+    "runningHint": "Ticking every 15 s — last run {{when}}, {{count}} ticks",
+    "idleHint": "Enabled but hasn't produced output yet — check its input wiring",
+    "stalledHint": "Enabled but hasn't ticked recently — the runtime may be down",
+    "errorHint": "Last tick failed: {{error}}",
+    "disabledHint": "Turned off — not ticking",
+    "unknownHint": "No runtime status yet"
+  },
   "actions": {
     "delete": "Delete",
+    "edit": "Edit",
     "cancel": "Cancel",
-    "create": "Create"
+    "create": "Create",
+    "save": "Save"
+  },
+  "modeOption": {
+    "heat": "Heat only",
+    "cool": "Cool only",
+    "both": "Heat + cool"
+  },
+  "param": {
+    "_common": {
+      "baseline": { "label": "Baseline setpoint", "desc": "Reference the model is nudged around (tracks the loop's live setpoint)" },
+      "band": { "label": "Band (±)", "desc": "How far the proposal may move from the baseline (Bounded stage)" },
+      "driftThreshold": { "label": "Drift threshold", "desc": "Auto-demote to Shadow when the mean error exceeds this" },
+      "driftWindowMin": { "label": "Drift window (min)", "desc": "Rolling window used to measure drift" },
+      "model_version": { "label": "Model version", "desc": "Pinned model version (0 = always latest)" },
+      "probThreshold": { "label": "On threshold", "desc": "Probability at/above which the device is commanded on" },
+      "boundedMargin": { "label": "Bounded margin", "desc": "Extra probability margin required to flip (hysteresis)" },
+      "minDwellMin": { "label": "Min dwell (min)", "desc": "Minimum time to hold a state before flipping (anti-chatter)" },
+      "maxClassStep": { "label": "Max step", "desc": "Max positions to move along the value order per change (Bounded stage)" }
+    },
+    "ewma_filter": {
+      "tau": { "label": "Smoothing constant", "desc": "Larger = smoother / slower to react" }
+    },
+    "thermostat": {
+      "setpoint": { "label": "Target temperature", "desc": "Initial setpoint (commandable live)" },
+      "hysteresis": { "label": "Hysteresis (dead-band)", "desc": "Insensitivity zone around the setpoint so the relay doesn't chatter" },
+      "mode": { "label": "Mode", "desc": "Heat, cool, or both" },
+      "coolSetpoint": { "label": "Cooling target", "desc": "Upper target, used only in heat + cool mode" }
+    },
+    "co2_ventilation": {
+      "threshold": { "label": "CO₂ threshold", "desc": "CO₂ level that calls for ventilation" },
+      "hysteresis": { "label": "Hysteresis", "desc": "Dead-band around the threshold" }
+    },
+    "irrigation_sequencer": {
+      "intervalHours": { "label": "Interval between cycles", "desc": "Time between watering cycles" },
+      "runMinutes": { "label": "Run time", "desc": "How long the valve stays open each cycle" }
+    },
+    "sun_gate": {
+      "offsetMinutes": { "label": "Offset (min)", "desc": "Turn on this many minutes before sunset and off after sunrise" }
+    }
   },
   "dialog": {
     "title": "New {{type}}",
+    "editTitle": "Edit {{type}}",
     "blockFallback": "block",
     "name": "Name",
     "inputsSection": "Inputs (wiring)",
@@ -59,6 +114,7 @@
     "none": "None",
     "outputHelper": "Leave empty to only report (no actuation)",
     "authorityStage": "authority stage",
+    "stageLocked": "Change the stage via Promote (approval queue), not here",
     "outputsSummary": "Outputs: {{list}}",
     "writable": "writable"
   },
