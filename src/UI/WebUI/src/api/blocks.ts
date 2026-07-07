@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import apiClient from './client';
 
 /** Binds a block input port to a source device capability (matches DbGateway PortBinding). */

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import { Box, Card, CardActionArea, Stack, Switch, Typography, LinearProgress, Tooltip } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import CircleIcon from '@mui/icons-material/Circle';

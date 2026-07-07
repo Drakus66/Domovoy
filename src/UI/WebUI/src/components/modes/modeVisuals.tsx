@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
 import DirectionsWalkRoundedIcon from '@mui/icons-material/DirectionsWalkRounded';
 import BedtimeRoundedIcon from '@mui/icons-material/BedtimeRounded';

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 // Supported UI languages. Data-driven so adding a language later is a matter of
 // (1) adding an entry here and (2) dropping public/locales/<code>/*.json — no code
 // change in the picker or the i18n init. Russian is the product default (the house

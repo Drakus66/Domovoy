@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import type { SvgIconComponent } from '@mui/icons-material';
 import LightbulbRoundedIcon from '@mui/icons-material/LightbulbRounded';
 import PaletteRoundedIcon from '@mui/icons-material/PaletteRounded';

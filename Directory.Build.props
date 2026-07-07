@@ -1,0 +1,21 @@
+<Project>
+  <!--
+    Shared licensing and authorship metadata for every .NET project in the
+    repository. MSBuild auto-imports this file for all projects underneath it,
+    so the AGPL license expression and copyright are stamped into every built
+    assembly without per-project duplication.
+
+    Domovoy is licensed under the GNU Affero General Public License v3.0 or
+    later (AGPL-3.0-or-later). See the LICENSE file in the repository root.
+  -->
+  <PropertyGroup>
+    <Authors>Ilya Dryagin</Authors>
+    <Company>Domovoy</Company>
+    <Product>Domovoy</Product>
+    <Copyright>Copyright (C) 2025-2026 Ilya Dryagin</Copyright>
+    <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Drakus66/Domovoy</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Drakus66/Domovoy</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+</Project>
