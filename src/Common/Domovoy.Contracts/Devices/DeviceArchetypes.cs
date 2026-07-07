@@ -21,12 +21,16 @@ public static class DeviceArchetypes
     public const string EnergyMeter = "energy_meter";    // power/energy metering
     public const string Sensor = "sensor";               // generic read-only sensor
     public const string ControlBlock = "control_block";  // a virtual device projected by a control block (1H)
+    public const string Sun = "sun";                     // system sun sensor (elevation/azimuth/is_dark…) (2L)
+    public const string Clock = "clock";                 // system time sensor (time_of_day/clock) (2L)
+    public const string Calendar = "calendar";           // system calendar sensor (day_of_week/weekend/holiday) (2L)
     public const string Unknown = "unknown";
 
     /// <summary>Canonical list for UI selection (open set — custom archetypes may also appear).</summary>
     public static readonly IReadOnlyList<string> All = new[]
     {
-        Light, Switch, Thermostat, ClimateSensor, Motion, Contact, Lock, Valve, EnergyMeter, Sensor, ControlBlock, Unknown,
+        Light, Switch, Thermostat, ClimateSensor, Motion, Contact, Lock, Valve, EnergyMeter, Sensor,
+        ControlBlock, Sun, Clock, Calendar, Unknown,
     };
 
     public static bool IsKnown(string? archetype) =>

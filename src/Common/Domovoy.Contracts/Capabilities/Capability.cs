@@ -53,6 +53,20 @@ public static class CapabilityIds
     public const string Position = "position";                     // number, 0..100 (%) — cover/blind position
     public const string HvacMode = "hvac_mode";                    // enum — off/heat/cool/auto (climate)
     public const string FanSpeed = "fan_speed";                    // number, 0..100 (%) — fan speed
+
+    // --- System virtual sensors (roadmap Epic 2L) — reported by the platform, no physical device ---
+    public const string SunElevation = "sun_elevation";            // number, ° above horizon (negative = below)
+    public const string SunAzimuth = "sun_azimuth";                // number, ° clockwise from north (0=N, 90=E)
+    public const string IsDark = "is_dark";                        // bool — sun below the horizon at the site
+    public const string IsDay = "is_day";                          // bool — sun above the horizon at the site
+    public const string Sunrise = "sunrise";                       // text, local HH:mm of today's sunrise
+    public const string Sunset = "sunset";                         // text, local HH:mm of today's sunset
+    public const string TimeOfDay = "time_of_day";                 // number, local minutes since midnight (0..1439)
+    public const string Clock = "clock";                           // text, local HH:mm
+    public const string DayOfWeek = "day_of_week";                 // enum — Monday..Sunday (local)
+    public const string IsWeekend = "is_weekend";                  // bool — today is a configured weekend day
+    public const string IsHoliday = "is_holiday";                  // bool — today is a configured holiday
+    public const string CalendarDate = "date";                     // text, local yyyy-MM-dd
 }
 
 /// <summary>
@@ -68,6 +82,21 @@ public static class CapabilityAttributeKeys
     public const string Writable = "writable"; // bool — can be commanded
     public const string Readable = "readable"; // bool — reports state
     public const string Values = "values";     // string[] — allowed values for Enum kind
+    public const string Editor = "editor";     // string — UI editor hint for a writable value (see CapabilityEditors)
+}
+
+/// <summary>
+/// Well-known values for <see cref="CapabilityAttributeKeys.Editor"/> — a hint to the UI on how to edit a
+/// writable capability whose raw <see cref="CapabilityKind"/> isn't specific enough. The value stays a plain
+/// string on the wire; the editor only changes the input control the dashboard renders.
+/// </summary>
+public static class CapabilityEditors
+{
+    /// <summary>A geographic location, value <c>"lat,lon"</c> (optionally <c>"lat,lon|Label"</c>) — map picker.</summary>
+    public const string Geo = "geo";
+
+    /// <summary>A wall-clock time of day, value <c>"HH:mm"</c> — time input (empty allowed).</summary>
+    public const string Time = "time";
 }
 
 /// <summary>

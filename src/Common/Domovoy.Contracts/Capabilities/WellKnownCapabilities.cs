@@ -49,6 +49,48 @@ public static class WellKnownCapabilities
     public static Capability Power() =>
         Number(CapabilityIds.Power, "W", 0, null, writable: false);
 
+    // --- System virtual sensors (roadmap Epic 2L) — all read-only, platform-reported ---
+
+    public static Capability SunElevation() =>
+        Number(CapabilityIds.SunElevation, "°", -90, 90, writable: false);
+
+    public static Capability SunAzimuth() =>
+        Number(CapabilityIds.SunAzimuth, "°", 0, 360, writable: false);
+
+    public static Capability IsDark() =>
+        Boolean(CapabilityIds.IsDark, writable: false);
+
+    public static Capability IsDay() =>
+        Boolean(CapabilityIds.IsDay, writable: false);
+
+    public static Capability Sunrise() =>
+        Text(CapabilityIds.Sunrise, writable: false);
+
+    public static Capability Sunset() =>
+        Text(CapabilityIds.Sunset, writable: false);
+
+    public static Capability TimeOfDay() =>
+        Number(CapabilityIds.TimeOfDay, "min", 0, 1439, writable: false);
+
+    public static Capability Clock() =>
+        Text(CapabilityIds.Clock, writable: false);
+
+    /// <summary>Local day-of-week as an enum over English day names (Monday..Sunday).</summary>
+    public static readonly IReadOnlyList<string> DayNames =
+        new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" };
+
+    public static Capability DayOfWeek() =>
+        Enum(CapabilityIds.DayOfWeek, DayNames, writable: false);
+
+    public static Capability IsWeekend() =>
+        Boolean(CapabilityIds.IsWeekend, writable: false);
+
+    public static Capability IsHoliday() =>
+        Boolean(CapabilityIds.IsHoliday, writable: false);
+
+    public static Capability CalendarDate() =>
+        Text(CapabilityIds.CalendarDate, writable: false);
+
     public static Capability Color(bool writable = true) =>
         new(CapabilityIds.Color, CapabilityKind.Color,
             new Dictionary<string, object?> { [CapabilityAttributeKeys.Writable] = writable });
@@ -70,6 +112,32 @@ public static class WellKnownCapabilities
         if (step is not null) attrs[CapabilityAttributeKeys.Step] = step;
         return new Capability(id, CapabilityKind.Number, attrs);
     }
+
+    /// <summary>Builds a text capability.</summary>
+    public static Capability Text(string id, bool writable = false) =>
+        new(id, CapabilityKind.Text,
+            new Dictionary<string, object?> { [CapabilityAttributeKeys.Writable] = writable });
+
+    /// <summary>
+    /// A writable geographic location — a text value <c>"lat,lon"</c> (optionally <c>"lat,lon|Label"</c>) the
+    /// dashboard edits with a map picker (<see cref="CapabilityEditors.Geo"/>) rather than a raw text box.
+    /// </summary>
+    public static Capability Location(string id, bool writable = true) =>
+        new(id, CapabilityKind.Text,
+            new Dictionary<string, object?>
+            {
+                [CapabilityAttributeKeys.Writable] = writable,
+                [CapabilityAttributeKeys.Editor] = CapabilityEditors.Geo,
+            });
+
+    /// <summary>A writable wall-clock time (<c>"HH:mm"</c>, empty allowed) edited with a time input.</summary>
+    public static Capability TimeInput(string id, bool writable = true) =>
+        new(id, CapabilityKind.Text,
+            new Dictionary<string, object?>
+            {
+                [CapabilityAttributeKeys.Writable] = writable,
+                [CapabilityAttributeKeys.Editor] = CapabilityEditors.Time,
+            });
 
     /// <summary>Builds an enum capability over a fixed set of string values.</summary>
     public static Capability Enum(string id, IReadOnlyList<string> values, bool writable = true) =>

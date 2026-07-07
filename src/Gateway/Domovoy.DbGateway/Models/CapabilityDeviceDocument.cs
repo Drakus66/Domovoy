@@ -47,4 +47,13 @@ public class CapabilityDocument
     public string? Unit { get; set; }
     public double? Min { get; set; }
     public double? Max { get; set; }
+
+    /// <summary>Numeric step for a Number control (slider precision).</summary>
+    public double? Step { get; set; }
+
+    /// <summary>Allowed values for an Enum capability — drives a dropdown in the UI.</summary>
+    public List<string>? Values { get; set; }
+
+    /// <summary>UI editor hint for a writable value (e.g. "geo", "time") — see CapabilityEditors.</summary>
+    public string? Editor { get; set; }
 }
