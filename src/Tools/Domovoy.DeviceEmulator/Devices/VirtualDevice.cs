@@ -35,8 +35,11 @@ public sealed class VirtualDevice
         Simulate = cfg.Simulate;
         Capabilities = cfg.Capabilities.Select(ToCapability).ToList();
 
-        foreach (var cap in Capabilities)
-            _state[cap.Id] = DefaultValue(cap);
+        foreach (var c in cfg.Capabilities)
+        {
+            var cap = Capabilities.First(x => x.Id == c.Id);
+            _state[cap.Id] = SeedValue(cap, c);
+        }
     }
 
     public IReadOnlyDictionary<string, object?> State => _state;
@@ -59,6 +62,21 @@ public sealed class VirtualDevice
         if (c.Max is not null) attrs[CapabilityAttributeKeys.Max] = c.Max;
 
         return new Capability(c.Id, kind, attrs);
+    }
+
+    /// <summary>Explicit <c>default</c> from config (e.g. a convector booting on at full power) or the built-in default.</summary>
+    private static object? SeedValue(Capability cap, CapabilityConfiguration cfg)
+    {
+        if (cfg.Default is { } d)
+        {
+            return cap.Kind switch
+            {
+                CapabilityKind.Boolean when d.ValueKind is System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False => d.GetBoolean(),
+                CapabilityKind.Number when d.ValueKind is System.Text.Json.JsonValueKind.Number => d.GetDouble(),
+                _ => DefaultValue(cap)
+            };
+        }
+        return DefaultValue(cap);
     }
 
     private static object? DefaultValue(Capability cap) => cap.Kind switch

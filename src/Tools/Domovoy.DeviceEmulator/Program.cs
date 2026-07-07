@@ -108,7 +108,46 @@ internal static class DefaultConfig
         {
           "id": "garage_relay", "name": "Garage Relay", "model": "Virtual Switch",
           "capabilities": [ { "id": "on_off", "kind": "Boolean", "writable": true } ]
-        }
+        },
+
+        { "id": "outdoor", "name": "Outdoor", "model": "Virtual Weather Sensor",
+          "capabilities": [ { "id": "temperature", "kind": "Number", "unit": "°C", "min": -25, "max": 40 } ] },
+
+        { "id": "living_convector", "name": "Living Room Convector", "model": "Virtual Convector",
+          "capabilities": [
+            { "id": "on_off", "kind": "Boolean", "writable": true, "default": true },
+            { "id": "power", "kind": "Number", "unit": "%", "min": 0, "max": 100, "writable": true, "default": 100 }
+          ] },
+        { "id": "living_temp", "name": "Living Room Temperature", "model": "Virtual Temperature Sensor",
+          "capabilities": [ { "id": "temperature", "kind": "Number", "unit": "°C", "min": 0, "max": 40 } ] },
+
+        { "id": "bedroom_convector", "name": "Bedroom Convector", "model": "Virtual Convector",
+          "capabilities": [
+            { "id": "on_off", "kind": "Boolean", "writable": true, "default": true },
+            { "id": "power", "kind": "Number", "unit": "%", "min": 0, "max": 100, "writable": true, "default": 100 }
+          ] },
+        { "id": "bedroom_temp", "name": "Bedroom Temperature", "model": "Virtual Temperature Sensor",
+          "capabilities": [ { "id": "temperature", "kind": "Number", "unit": "°C", "min": 0, "max": 40 } ] },
+
+        { "id": "office_convector", "name": "Office Convector", "model": "Virtual Convector",
+          "capabilities": [
+            { "id": "on_off", "kind": "Boolean", "writable": true, "default": true },
+            { "id": "power", "kind": "Number", "unit": "%", "min": 0, "max": 100, "writable": true, "default": 100 }
+          ] },
+        { "id": "office_temp", "name": "Office Temperature", "model": "Virtual Temperature Sensor",
+          "capabilities": [ { "id": "temperature", "kind": "Number", "unit": "°C", "min": 0, "max": 40 } ] }
+      ],
+      "external_temperature": {
+        "device_id": "outdoor", "capability": "temperature",
+        "initial": 5, "drift_amplitude": 2, "drift_period_minutes": 20
+      },
+      "thermal_zones": [
+        { "name": "Living Room", "heater_device": "living_convector", "sensor_device": "living_temp",
+          "heat_gain_at_full": 3.0, "ambient_coupling": 0.12, "initial_temp": 18 },
+        { "name": "Bedroom", "heater_device": "bedroom_convector", "sensor_device": "bedroom_temp",
+          "heat_gain_at_full": 2.4, "ambient_coupling": 0.10, "initial_temp": 17 },
+        { "name": "Office", "heater_device": "office_convector", "sensor_device": "office_temp",
+          "heat_gain_at_full": 4.0, "ambient_coupling": 0.16, "initial_temp": 19 }
       ]
     }
     """;

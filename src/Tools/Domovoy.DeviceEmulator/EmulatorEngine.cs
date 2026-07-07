@@ -46,6 +46,33 @@ public sealed class EmulatorEngine : IHostedService
     /// </summary>
     private readonly string _hubId;
 
+    /// <summary>How many seconds one simulation tick advances the physics — must match the loop delay below.</summary>
+    private const double TickSeconds = 15;
+
+    private readonly Random _rng = new();
+
+    // ---- Thermal simulation state ----------------------------------------
+    private readonly ExternalTemperatureConfiguration? _externalConfig;
+    private readonly VirtualDevice? _externalDevice;
+    /// <summary>Centre the outdoor drift oscillates around; re-set when the user drags the outdoor slider.</summary>
+    private double _externalCenter;
+    private double _externalTemp;
+    private readonly List<ThermalZone> _thermalZones;
+
+    /// <summary>One resolved heater→sensor coupling with its live room temperature.</summary>
+    private sealed class ThermalZone
+    {
+        public required string Name { get; init; }
+        public required VirtualDevice Heater { get; init; }
+        public required string PowerCapability { get; init; }
+        public required VirtualDevice Sensor { get; init; }
+        public required string TemperatureCapability { get; init; }
+        public required double HeatGainAtFull { get; init; }
+        public required double AmbientCoupling { get; init; }
+        public required double Noise { get; init; }
+        public double Temp { get; set; }
+    }
+
     /// <summary>Raised on any device state change / log line; the web layer forwards it to WebSocket clients.</summary>
     public event Action<EmulatorUpdate>? Updated;
 
@@ -55,6 +82,51 @@ public sealed class EmulatorEngine : IHostedService
         _logger = logger;
         _devices = config.Devices.Select(d => new VirtualDevice(d)).ToList();
         _hubId = MakeHubId(config.HomeName);
+
+        _externalConfig = config.ExternalTemperature;
+        if (_externalConfig is not null)
+        {
+            _externalCenter = _externalConfig.Initial;
+            _externalTemp = _externalConfig.Initial;
+            _externalDevice = _devices.FirstOrDefault(d => d.Id == _externalConfig.DeviceId);
+            if (_externalDevice is null)
+                _logger.LogWarning("external_temperature references unknown device '{Id}'", _externalConfig.DeviceId);
+            else
+                _externalDevice.SetValue(_externalConfig.Capability, Math.Round(_externalTemp, 1));
+        }
+
+        _thermalZones = BuildThermalZones(config);
+    }
+
+    /// <summary>Resolves each configured zone to its heater/sensor devices and seeds the sensor with the start temp.</summary>
+    private List<ThermalZone> BuildThermalZones(HomeConfiguration config)
+    {
+        var zones = new List<ThermalZone>();
+        foreach (var z in config.ThermalZones)
+        {
+            var heater = _devices.FirstOrDefault(d => d.Id == z.HeaterDevice);
+            var sensor = _devices.FirstOrDefault(d => d.Id == z.SensorDevice);
+            if (heater is null || sensor is null)
+            {
+                _logger.LogWarning("thermal_zone '{Name}' references missing device(s) heater='{H}' sensor='{S}' — skipped",
+                    z.Name, z.HeaterDevice, z.SensorDevice);
+                continue;
+            }
+            sensor.SetValue(z.SensorCapability, Math.Round(z.InitialTemp, 1));
+            zones.Add(new ThermalZone
+            {
+                Name = z.Name,
+                Heater = heater,
+                PowerCapability = z.HeaterCapability,
+                Sensor = sensor,
+                TemperatureCapability = z.SensorCapability,
+                HeatGainAtFull = z.HeatGainAtFull,
+                AmbientCoupling = z.AmbientCoupling,
+                Noise = z.Noise,
+                Temp = z.InitialTemp,
+            });
+        }
+        return zones;
     }
 
     /// <summary>Turns the home name into a topic-safe hub id, e.g. "My Home" → "emulator-my-home".</summary>
@@ -182,6 +254,13 @@ public sealed class EmulatorEngine : IHostedService
         if (device is null || !device.HasCapability(capabilityId)) return false;
 
         device.SetValue(capabilityId, Clamp(device, capabilityId, Normalize(rawValue)));
+
+        // Dragging the outdoor sensor re-centres the drift, so the manual value holds instead of being
+        // overwritten by the next physics tick.
+        if (_externalConfig is not null && deviceId == _externalConfig.DeviceId
+            && capabilityId == _externalConfig.Capability && TryToDouble(device.State[capabilityId], out var center))
+            _externalCenter = center;
+
         await PublishStateAsync(device);
         RaiseLog(deviceId, source, $"{capabilityId} = {device.State[capabilityId]}");
         RaiseState(device);
@@ -321,6 +400,8 @@ public sealed class EmulatorEngine : IHostedService
                     foreach (var device in _devices.Where(d => d.Registered))
                         await PublishAvailabilityAsync(device, online: true);
 
+                await StepThermalAsync(tick);
+
                 foreach (var device in _devices.Where(d => d.Simulate))
                 {
                     var changed = false;
@@ -348,6 +429,54 @@ public sealed class EmulatorEngine : IHostedService
         var min = cap.Attributes.TryGetValue(CapabilityAttributeKeys.Min, out var mn) && TryToDouble(mn, out var lo) ? lo : 0;
         var max = cap.Attributes.TryGetValue(CapabilityAttributeKeys.Max, out var mx) && TryToDouble(mx, out var hi) ? hi : min + 100;
         return Math.Round(min + rng.NextDouble() * (max - min), 1);
+    }
+
+    // ---- Thermal physics (heater ⇄ sensor coupling, hidden from the server) ----
+
+    /// <summary>
+    /// Advances the shared outdoor temperature and every zone's room temperature by one tick, then republishes the
+    /// affected sensors. The heater→sensor coupling exists only here: the server sees an actuator (convector power)
+    /// and a temperature sensor as unrelated devices, exactly the dependency a thermostat must be told about or the
+    /// ML must discover.
+    /// </summary>
+    private async Task StepThermalAsync(int tick)
+    {
+        if (_externalConfig is null && _thermalZones.Count == 0) return;
+
+        _externalTemp = ComputeExternalTemp(tick);
+        if (_externalDevice is not null && _externalConfig is not null)
+        {
+            _externalDevice.SetValue(_externalConfig.Capability, Math.Round(_externalTemp, 1));
+            await PublishStateAsync(_externalDevice);
+            RaiseState(_externalDevice);
+        }
+
+        foreach (var zone in _thermalZones)
+        {
+            // Effective power: a convector with on_off=false contributes no heat regardless of the power dial, so a
+            // bang-bang thermostat (drives on_off) and a proportional/ML controller (drives power) both work.
+            var powered = !zone.Heater.HasCapability(CapabilityIds.OnOff)
+                          || zone.Heater.State[CapabilityIds.OnOff] is not false;
+            var power = powered && TryToDouble(zone.Heater.State.GetValueOrDefault(zone.PowerCapability), out var pw)
+                ? Math.Clamp(pw / 100.0, 0, 1)
+                : 0;
+
+            var noise = (_rng.NextDouble() - 0.5) * 2 * zone.Noise;
+            zone.Temp += zone.HeatGainAtFull * power - zone.AmbientCoupling * (zone.Temp - _externalTemp) + noise;
+
+            zone.Sensor.SetValue(zone.TemperatureCapability, Math.Round(zone.Temp, 1));
+            await PublishStateAsync(zone.Sensor);
+            RaiseState(zone.Sensor);
+        }
+    }
+
+    /// <summary>Outdoor temperature = manual centre + a slow sine wobble (compressed day/night).</summary>
+    private double ComputeExternalTemp(int tick)
+    {
+        if (_externalConfig is null || _externalConfig.DriftAmplitude <= 0) return _externalCenter;
+        var periodSeconds = Math.Max(1, _externalConfig.DriftPeriodMinutes) * 60.0;
+        var phase = 2 * Math.PI * (tick * TickSeconds) / periodSeconds;
+        return _externalCenter + _externalConfig.DriftAmplitude * Math.Sin(phase);
     }
 
     // ---- helpers ----------------------------------------------------------
