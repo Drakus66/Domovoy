@@ -17,12 +17,36 @@
   "errors": {
     "load": "Failed to load plugins. Check ApiGateway / PluginSupervisor connection.",
     "start": "Failed to start {{name}}.",
-    "stop": "Failed to stop {{name}}."
+    "stop": "Failed to stop {{name}}.",
+    "install": "Failed to install the plugin package.",
+    "uninstall": "Failed to uninstall {{name}}."
   },
-  "empty": "No plugins discovered. Drop a folder with a plugin.json into the plugins root.",
+  "install": {
+    "button": "Install plugin",
+    "installing": "Installing…",
+    "hint": "Upload a .zip containing plugin.json and the plugin binaries",
+    "success": "Installed {{name}} — it will start automatically.",
+    "failedDetail": "Package rejected: {{detail}}"
+  },
+  "uninstall": {
+    "confirm": "Uninstall {{name}}? This stops it and removes its files.",
+    "success": "Uninstalled {{name}}."
+  },
+  "empty": "No plugins yet. Click “Install plugin” to upload a .zip, or drop a folder with a plugin.json into the plugins root.",
   "actions": {
     "start": "Start",
-    "stop": "Stop"
+    "stop": "Stop",
+    "uninstall": "Remove"
+  },
+  "settings": {
+    "button": "Settings",
+    "title": "{{name}} — settings",
+    "empty": "This plugin exposes no settings.",
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "loadError": "Failed to load settings.",
+    "saveError": "Failed to save settings."
   },
   "status": {
     "Running": "Running",

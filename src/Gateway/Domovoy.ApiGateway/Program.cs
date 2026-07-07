@@ -120,7 +120,8 @@ internal static class Program
             builder.Services.AddHttpClient("plugin-supervisor", client =>
             {
                 client.BaseAddress = new Uri(supervisorUrl);
-                client.Timeout = TimeSpan.FromSeconds(10);
+                // Install extracts + places + restarts a plugin; give it more headroom than a status call.
+                client.Timeout = TimeSpan.FromSeconds(120);
             });
 
             builder.Services.AddSignalR();

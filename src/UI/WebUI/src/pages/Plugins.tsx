@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from 'i18next';
 import {
@@ -9,7 +9,11 @@ import ExtensionRoundedIcon from '@mui/icons-material/ExtensionRounded';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import StopRoundedIcon from '@mui/icons-material/StopRounded';
 import MemoryRoundedIcon from '@mui/icons-material/MemoryRounded';
+import UploadRoundedIcon from '@mui/icons-material/UploadRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import { pluginsApi, Plugin, PluginStatus, HostResources } from '../api/plugins';
+import PluginSettingsDialog from '../components/plugins/PluginSettingsDialog';
 
 const STATUS_COLOR: Record<PluginStatus, 'success' | 'warning' | 'error' | 'info' | 'default'> = {
   Running: 'success', Starting: 'info', Blocked: 'warning', Failed: 'error',
@@ -31,7 +35,11 @@ export default function Plugins() {
   const [host, setHost] = useState<HostResources | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [settingsFor, setSettingsFor] = useState<Plugin | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -65,6 +73,44 @@ export default function Plugins() {
     }
   };
 
+  const onPickFile = () => fileInputRef.current?.click();
+
+  const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file
+    if (!file) return;
+
+    setInstalling(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const res = await pluginsApi.install(file);
+      setInfo(t('install.success', { name: res.plugin?.name ?? file.name }));
+      await load();
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { result?: string } } })?.response?.data?.result;
+      setError(detail ? t('install.failedDetail', { detail }) : t('errors.install'));
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const uninstall = async (p: Plugin) => {
+    if (!window.confirm(t('uninstall.confirm', { name: p.name }))) return;
+    setBusy(p.id);
+    setError(null);
+    try {
+      await pluginsApi.uninstall(p.id);
+      setInfo(t('uninstall.success', { name: p.name }));
+      await load();
+    } catch {
+      setError(t('errors.uninstall', { name: p.name }));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const canStart = (s: PluginStatus) => s === 'Stopped' || s === 'Failed' || s === 'Discovered';
   const canStop = (s: PluginStatus) => s === 'Running' || s === 'Starting';
 
@@ -78,6 +124,20 @@ export default function Plugins() {
               {t('subtitle')}
             </Typography>
           </Box>
+          <Tooltip title={t('install.hint')}>
+            <span>
+              <Button
+                variant="contained" startIcon={<UploadRoundedIcon />}
+                disabled={installing} onClick={onPickFile}
+              >
+                {installing ? t('install.installing') : t('install.button')}
+              </Button>
+            </span>
+          </Tooltip>
+          <input
+            ref={fileInputRef} type="file" accept=".zip,application/zip"
+            hidden onChange={onFileSelected}
+          />
         </Stack>
 
         {host && (
@@ -92,8 +152,9 @@ export default function Plugins() {
           />
         )}
 
-        {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
+        {(loading || installing) && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
         {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+        {info && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setInfo(null)}>{info}</Alert>}
 
         {plugins.length === 0 && !loading ? (
           <Box textAlign="center" py={8}>
@@ -139,12 +200,35 @@ export default function Plugins() {
                       </span>
                     </Tooltip>
                   )}
+                  {p.hasSettings && (
+                    <Tooltip title={t('settings.button')}>
+                      <span>
+                        <Button size="small" startIcon={<SettingsRoundedIcon />}
+                          onClick={() => setSettingsFor(p)}>{t('settings.button')}</Button>
+                      </span>
+                    </Tooltip>
+                  )}
+                  <Tooltip title={t('actions.uninstall')}>
+                    <span>
+                      <Button size="small" color="error" startIcon={<DeleteOutlineRoundedIcon />} disabled={busy === p.id}
+                        onClick={() => uninstall(p)}>{t('actions.uninstall')}</Button>
+                    </span>
+                  </Tooltip>
                 </CardContent>
               </Card>
             ))}
           </Stack>
         )}
       </Box>
+
+      {settingsFor && (
+        <PluginSettingsDialog
+          open={!!settingsFor}
+          pluginId={settingsFor.id}
+          pluginName={settingsFor.name}
+          onClose={() => { setSettingsFor(null); load(); }}
+        />
+      )}
     </Container>
   );
 }

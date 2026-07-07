@@ -12,6 +12,11 @@ public static class MessageTypes
     public const string DeviceOnlineChanged = "domovoy.device.online.v1";
     public const string AutomationTriggered = "domovoy.automation.triggered.v1";
     public const string HomeModeChanged = "domovoy.home.mode.v1";
+
+    // Plugin settings channel (Epic 2M tail): the plugin announces its settings schema, the supervisor
+    // replies/broadcasts the effective values which the plugin applies live.
+    public const string PluginSettingsSchema = "domovoy.plugin.settings.schema.v1";
+    public const string PluginSettingsApplied = "domovoy.plugin.settings.applied.v1";
 }
 
 /// <summary>
@@ -35,4 +40,12 @@ public static class BusTopology
     public const string DeviceOnlineChangedKey = "device.online.changed";
     public const string AutomationTriggeredKey = "automation.triggered";
     public const string HomeModeChangedKey = "home.mode.changed";
+
+    // Plugin settings: schema is announced on one shared key (the supervisor binds it); effective values are
+    // routed per-plugin so a plugin only receives its own settings (key = "plugin.settings.applied.{id}").
+    public const string PluginSettingsSchemaKey = "plugin.settings.schema";
+    public const string PluginSettingsAppliedKeyPrefix = "plugin.settings.applied";
+
+    /// <summary>Per-plugin routing key for the effective-values message, e.g. <c>plugin.settings.applied.commute-planner</c>.</summary>
+    public static string PluginSettingsAppliedKey(string pluginId) => $"{PluginSettingsAppliedKeyPrefix}.{pluginId}";
 }

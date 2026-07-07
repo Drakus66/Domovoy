@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Roadmap Epic 2M — the Commute planner. This is the FIRST real out-of-process plugin: it is not a
+      docker-compose service, it is discovered by the PluginSupervisor (Epic 1C) as a folder under
+      ./plugins and launched as an isolated process. It connects to the bus itself and speaks the
+      capability contract, exactly like an adapter. Build it framework-dependent and publish the output
+      into plugins/commute-planner/ (see that folder's README) so the supervisor can run `dotnet
+      Domovoy.CommutePlugin.dll` inside the aspnet runtime container.
+    -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net9.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Domovoy.CommutePlugin</RootNamespace>
+        <!-- Portable, framework-dependent: the supervisor invokes it as `dotnet <dll>` on the shared runtime. -->
+        <UseAppHost>false</UseAppHost>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting"/>
+        <PackageReference Include="Microsoft.Extensions.Http"/>
+        <PackageReference Include="RabbitMQ.Client"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Domovoy.CommutePlugin.Tests"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The manifest is source-of-truth and travels with the binaries: build/publish copy it next to the
+             DLL, so `dotnet publish -o plugins/commute-planner` produces a ready-to-run plugin folder (the
+             supervisor discovers a plugin by its plugin.json). -->
+        <Content Include="plugin.json" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\Common\Domovoy.Common\Domovoy.Common.csproj"/>
+        <ProjectReference Include="..\..\Common\Domovoy.MessageBus\Domovoy.MessageBus.csproj"/>
+        <ProjectReference Include="..\..\Common\Domovoy.Contracts\Domovoy.Contracts.csproj"/>
+    </ItemGroup>
+
+</Project>

@@ -56,3 +56,17 @@ public sealed class PluginEntry
 
     public bool IsAlive => Process is { HasExited: false };
 }
+
+/// <summary>Outcome of a UI plugin install (roadmap Epic 1C), mapped to an HTTP status by the API.</summary>
+public enum InstallOutcome
+{
+    /// <summary>Package accepted, placed and registered.</summary>
+    Installed,
+    /// <summary>Rejected package (bad zip, missing/invalid manifest, unsafe id) → 400.</summary>
+    BadRequest,
+    /// <summary>Server-side failure while placing/registering → 500.</summary>
+    Error,
+}
+
+/// <summary>Result of <see cref="PluginSupervisor.InstallAsync"/> — the outcome, a message, and the entry.</summary>
+public sealed record InstallResult(InstallOutcome Outcome, string Message, PluginEntry? Entry);

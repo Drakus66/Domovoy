@@ -141,11 +141,25 @@ services:
     networks:
       - domovoy-network
     volumes:
-      - ./plugins:/app/plugins:ro
+      # Read-write: the supervisor extracts UI-uploaded plugin packages here (Epic 1C install), so drops
+      # persist on the host and survive a restart. Was :ro before UI install existed.
+      - ./plugins:/app/plugins
     environment:
       - SUPERVISOR__GPUAVAILABLE=false
       - SUPERVISOR__INTERNETAVAILABLE=true
       - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
+      # The supervisor connects to the bus itself (plugin-settings channel) and plugin processes inherit its
+      # environment, so the bus + gateway coordinates the commute-planner plugin (Epic 2M) needs are declared
+      # here. The traffic source (offline simulator vs. live TomTom) and its key are now plugin *settings*
+      # edited from the plugins panel — no longer COMMUTE__PROVIDER/COMMUTE__TOMTOMAPIKEY env.
+      - RABBITMQ__HOSTNAME=rabbitmq
+      - RABBITMQ__PORT=5672
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      - COMMUTE__SETTINGSBASEURL=http://api-gateway:8080
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
 
   webui:

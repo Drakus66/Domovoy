@@ -1,0 +1,27 @@
+{
+  "id": "commute-planner",
+  "name": "Commute planner",
+  "version": "0.1.0",
+  "description": "Roadmap Epic 2M. The first real out-of-process plugin and the reference example for building others: tell the home you are heading somewhere (or must be there by a time) and it computes the traffic-aware ETA and the latest time to leave, publishing them as a virtual 'Commute' device. Origin is the runtime site location (Epic 2K); the traffic backend is a replaceable connector (offline simulator by default, TomTom when a key is set). Declares internet:true, so it also demonstrates resource-aware gating actually launching a plugin.",
+  "kind": "process",
+  "command": "dotnet",
+  "args": ["Domovoy.CommutePlugin.dll"],
+  "providedCapabilities": [
+    "commute:eta_minutes",
+    "commute:leave_by",
+    "commute:arrival_eta",
+    "commute:minutes_to_arrival",
+    "commute:traffic_level"
+  ],
+  "subscriptions": ["domovoy.device.command.v1"],
+  "commands": ["domovoy.device.command.v1"],
+  "permissions": ["publish:events", "publish:state", "subscribe:commands", "net:outbound"],
+  "resources": {
+    "cpuCores": 1,
+    "memoryMb": 128,
+    "gpu": false,
+    "internet": true
+  },
+  "autoStart": true,
+  "enabled": true
+}

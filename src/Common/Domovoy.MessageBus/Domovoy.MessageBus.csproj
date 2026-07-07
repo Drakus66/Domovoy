@@ -13,6 +13,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Domovoy.Common\Domovoy.Common.csproj" />
+      <ProjectReference Include="..\Domovoy.Contracts\Domovoy.Contracts.csproj" />
     </ItemGroup>
 
 </Project>

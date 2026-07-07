@@ -19,6 +19,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\Common\Domovoy.Common\Domovoy.Common.csproj"/>
         <ProjectReference Include="..\..\Common\Domovoy.Contracts\Domovoy.Contracts.csproj"/>
+        <ProjectReference Include="..\..\Common\Domovoy.MessageBus\Domovoy.MessageBus.csproj"/>
     </ItemGroup>
 
 </Project>

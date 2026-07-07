@@ -20,7 +20,9 @@ public sealed class PluginSupervisor : BackgroundService
     private readonly SupervisorOptions _options;
     private readonly ILogger<PluginSupervisor> _logger;
     private readonly ConcurrentDictionary<string, PluginEntry> _plugins = new();
+    private readonly object _installLock = new();
     private HostResources _host = new(0, 0, false, false);
+    private FileSystemWatcher? _watcher;
 
     public PluginSupervisor(IOptions<SupervisorOptions> options, ILogger<PluginSupervisor> logger)
     {
@@ -46,14 +48,17 @@ public sealed class PluginSupervisor : BackgroundService
                 Launch(entry);
         }
 
+        StartWatching();
+
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { Monitor(); }
+            try { Monitor(); ReconcileNewFolders(); }
             catch (Exception ex) { _logger.LogError(ex, "Plugin monitor tick failed"); }
             if (!await timer.WaitForNextTickAsync(stoppingToken)) break;
         }
 
+        _watcher?.Dispose();
         foreach (var e in _plugins.Values) KillProcess(e);
     }
 
@@ -106,6 +111,185 @@ public sealed class PluginSupervisor : BackgroundService
         KillProcess(entry);
         entry.Status = PluginStatus.Stopped;
         return "stopped";
+    }
+
+    /// <summary>
+    /// Installs a plugin from an uploaded <c>.zip</c> package (roadmap Epic 1C — UI install): stage + validate
+    /// the archive, move it into the plugins root under its manifest id (replacing any previous version), then
+    /// register it and auto-start it — no container access, no restart. This is the explicit "new plugin
+    /// loaded" event; the file-watcher and periodic reconcile below cover packages dropped in out-of-band.
+    /// </summary>
+    public async Task<InstallResult> InstallAsync(Stream zip, CancellationToken ct)
+    {
+        var stagingRoot = Path.Combine(_options.PluginsRoot, ManifestLoader.StagingFolderName);
+        Directory.CreateDirectory(stagingRoot);
+        var stageId = Guid.NewGuid().ToString("N");
+        var stageDir = Path.Combine(stagingRoot, stageId);
+
+        // Copy the upload to disk first so the (synchronous) zip extraction doesn't block on the network stream.
+        var tempZip = Path.Combine(stagingRoot, stageId + ".zip");
+        try
+        {
+            await using (var fs = File.Create(tempZip)) await zip.CopyToAsync(fs, ct);
+
+            PluginPackage.Staged staged;
+            try
+            {
+                await using var read = File.OpenRead(tempZip);
+                staged = PluginPackage.Stage(read, stagingRoot, stageId);
+            }
+            catch (InvalidPluginPackageException ex)
+            {
+                return new InstallResult(InstallOutcome.BadRequest, ex.Message, null);
+            }
+
+            lock (_installLock)
+            {
+                var id = staged.Manifest.Id;
+                var target = Path.Combine(_options.PluginsRoot, id);
+
+                if (_plugins.TryGetValue(id, out var existing))
+                {
+                    existing.StoppedByOperator = false;
+                    KillProcess(existing); // release file handles before overwriting the folder
+                }
+
+                try
+                {
+                    if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+                    Directory.Move(staged.Folder, target);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to place plugin {Id}", id);
+                    return new InstallResult(InstallOutcome.Error, $"could not place plugin: {ex.Message}", null);
+                }
+
+                var entry = RegisterFolder(target, force: true);
+                _logger.LogInformation("Installed plugin {Id} from upload → {Status}", id, entry?.Status);
+                return entry is null
+                    ? new InstallResult(InstallOutcome.Error, "installed but manifest could not be re-read", null)
+                    : new InstallResult(InstallOutcome.Installed, "installed", entry);
+            }
+        }
+        finally
+        {
+            PluginPackage.TryDelete(stageDir);
+            try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { /* best effort */ }
+        }
+    }
+
+    /// <summary>Stop a plugin and delete its folder from the plugins root (UI uninstall).</summary>
+    public string Uninstall(string id)
+    {
+        lock (_installLock)
+        {
+            var entry = Get(id);
+            if (entry is null) return "not found";
+
+            entry.StoppedByOperator = true;
+            KillProcess(entry);
+            _plugins.TryRemove(id, out _);
+
+            try
+            {
+                if (Directory.Exists(entry.Folder)) Directory.Delete(entry.Folder, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Removed plugin {Id} from the registry but could not delete its folder", id);
+                return "unregistered; folder could not be deleted";
+            }
+
+            _logger.LogInformation("Uninstalled plugin {Id}", id);
+            return "uninstalled";
+        }
+    }
+
+    /// <summary>
+    /// (Re)register the plugin in <paramref name="folder"/> from its manifest and start it if satisfiable.
+    /// With <paramref name="force"/> a running plugin is replaced (used by install); without it, an already
+    /// running plugin is left untouched (used by the watcher/reconcile so they never thrash a live plugin).
+    /// </summary>
+    private PluginEntry? RegisterFolder(string folder, bool force)
+    {
+        if (!ManifestLoader.TryLoad(folder, _logger, out var entry)) return null;
+        var id = entry.Manifest.Id;
+
+        if (_plugins.TryGetValue(id, out var existing))
+        {
+            if (existing.IsAlive && !force) return existing;
+            KillProcess(existing);
+        }
+
+        Classify(entry);
+        _plugins[id] = entry;
+        if (entry.Status == PluginStatus.Discovered && entry.Manifest.AutoStart)
+            Launch(entry);
+        return entry;
+    }
+
+    private void StartWatching()
+    {
+        try
+        {
+            Directory.CreateDirectory(_options.PluginsRoot);
+            _watcher = new FileSystemWatcher(_options.PluginsRoot, "plugin.json")
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
+            };
+            _watcher.Created += OnManifestChanged;
+            _watcher.Changed += OnManifestChanged;
+            _watcher.EnableRaisingEvents = true;
+            _logger.LogInformation("Watching {Root} for new/updated plugins", _options.PluginsRoot);
+        }
+        catch (Exception ex)
+        {
+            // Some mounted filesystems don't support inotify — the 5s reconcile still picks new plugins up.
+            _logger.LogWarning(ex, "Plugin file-watcher unavailable; falling back to periodic reconcile only");
+        }
+    }
+
+    private void OnManifestChanged(object sender, FileSystemEventArgs e)
+    {
+        var folder = Path.GetDirectoryName(e.FullPath);
+        if (folder is null || folder.Contains(ManifestLoader.StagingFolderName, StringComparison.Ordinal)) return;
+
+        try
+        {
+            lock (_installLock)
+            {
+                var entry = RegisterFolder(folder, force: false);
+                if (entry is not null)
+                    _logger.LogInformation("Picked up plugin {Id} via watcher → {Status}", entry.Manifest.Id, entry.Status);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to handle plugin change at {Folder}", folder);
+        }
+    }
+
+    /// <summary>Safety net for filesystems where inotify is unreliable: register any new plugin folder.</summary>
+    private void ReconcileNewFolders()
+    {
+        if (!Directory.Exists(_options.PluginsRoot)) return;
+
+        foreach (var folder in Directory.EnumerateDirectories(_options.PluginsRoot))
+        {
+            if (string.Equals(Path.GetFileName(folder), ManifestLoader.StagingFolderName, StringComparison.Ordinal))
+                continue;
+            if (!File.Exists(Path.Combine(folder, "plugin.json"))) continue;
+            if (_plugins.Values.Any(p => string.Equals(p.Folder, folder, StringComparison.Ordinal))) continue;
+
+            lock (_installLock)
+            {
+                var entry = RegisterFolder(folder, force: false);
+                if (entry is not null)
+                    _logger.LogInformation("Reconciled new plugin {Id} → {Status}", entry.Manifest.Id, entry.Status);
+            }
+        }
     }
 
     private void Launch(PluginEntry entry)

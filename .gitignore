@@ -5,6 +5,13 @@
 **/bin/
 **/obj/
 *.log
+
+# Runtime plugin drops (rw mount): track only the hand-authored manifest, never the built
+# binaries or the persisted per-plugin settings (which may hold secrets like API keys).
+/plugins/.settings/
+/plugins/*/*
+!/plugins/*/plugin.json
+
 data/zigbee2mqtt/state.json
 data/zigbee2mqtt/coordinator_backup.json
 data/zigbee2mqtt/database.db
