@@ -55,6 +55,7 @@ public static class BlockEndpoints
             block.Id = id;
             block.DeviceId = existing.DeviceId; // stable virtual device id
             block.CreatedAt = existing.CreatedAt;
+            block.Layout ??= existing.Layout;   // editor-only; a non-layout update keeps the saved arrangement (Epic 1E)
             block.UpdatedAt = DateTime.UtcNow;
             await Blocks(db).ReplaceOneAsync(x => x.Id == id, block);
             return Results.NoContent();

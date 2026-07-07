@@ -22,6 +22,7 @@ import { capabilityDevicesApi, CapabilityDevice } from '../api/capabilityDevices
 import { proposalsApi } from '../api/proposals';
 import { fmtDateTime } from '../i18n/format';
 import BlockGraph from '../components/blocks/BlockGraph';
+import { toNewBlock } from '../components/blocks/blockGraphModel';
 
 const stageName = (s: number) =>
   i18n.t(s >= 2 ? 'blocks:stageName.full' : s === 1 ? 'blocks:stageName.bounded' : 'blocks:stageName.shadow');
@@ -171,6 +172,17 @@ export default function Blocks() {
     }
   };
 
+  // Persist wiring/layout edited on the graph canvas (Epic 1E), then reload once so dirty state clears.
+  const saveGraph = useCallback(async (changed: ControlBlock[]) => {
+    setError(null);
+    try {
+      for (const b of changed) await blocksApi.updateBlock(b.id, toNewBlock(b));
+      await load();
+    } catch {
+      setError(t('errors.update'));
+    }
+  }, [load, t]);
+
   const remove = async (b: ControlBlock) => {
     if (!window.confirm(t('confirmDelete', { name: b.name }))) return;
     try { await blocksApi.deleteBlock(b.id); await load(); }
@@ -231,7 +243,7 @@ export default function Blocks() {
         {info && <Alert severity="info" sx={{ mb: 2 }} onClose={() => setInfo(null)}>{info}</Alert>}
 
         {view === 'graph' ? (
-          <BlockGraph blocks={blocks} devices={devices} />
+          <BlockGraph blocks={blocks} devices={devices} catalog={catalog} onSave={saveGraph} />
         ) : blocks.length === 0 && !loading ? (
           <Box textAlign="center" py={8}>
             <AccountTreeRoundedIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />

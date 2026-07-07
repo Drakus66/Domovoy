@@ -10,6 +10,12 @@ export interface PortBinding {
   capabilityId: string;
 }
 
+/** Canvas position of a block node in the flow editor (matches Contracts BlockLayout, Epic 1E). */
+export interface BlockLayout {
+  x: number;
+  y: number;
+}
+
 /** A control-block instance (matches Domovoy.Contracts ControlBlock, Epic 1H). */
 export interface ControlBlock {
   id: string;
@@ -21,12 +27,17 @@ export interface ControlBlock {
   params: Record<string, number>;
   inputs: Record<string, PortBinding>;
   outputs: Record<string, PortBinding>;
+  layout?: BlockLayout | null; // hand-arranged canvas position; null = auto-layout (Epic 1E)
   createdAt: string;
   updatedAt: string;
 }
 
-export type NewBlock = Pick<ControlBlock, 'name' | 'typeId' | 'enabled' | 'params' | 'inputs' | 'outputs'> & {
+export type NewBlock = Pick<
+  ControlBlock,
+  'name' | 'typeId' | 'enabled' | 'params' | 'inputs' | 'outputs'
+> & {
   zoneId?: string | null;
+  layout?: BlockLayout | null;
 };
 
 /** Runtime health of one block (matches AutomationService BlockStatus, Epic 1H). */

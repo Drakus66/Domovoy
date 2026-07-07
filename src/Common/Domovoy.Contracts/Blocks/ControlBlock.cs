@@ -52,6 +52,13 @@ public class ControlBlock
     /// </summary>
     public Dictionary<string, PortBinding> Outputs { get; set; } = new();
 
+    /// <summary>
+    /// Optional canvas position of this block's node in the flow editor (roadmap Epic 1E). Persisted so a
+    /// hand-arranged graph survives reloads; <c>null</c> means "auto-layout". Editor-only metadata — the
+    /// runtime ignores it, and a non-layout update (e.g. the typed form) preserves the saved arrangement.
+    /// </summary>
+    public BlockLayout? Layout { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
@@ -61,4 +68,11 @@ public class PortBinding
 {
     public string DeviceId { get; set; } = string.Empty;
     public string CapabilityId { get; set; } = string.Empty;
+}
+
+/// <summary>Canvas coordinates of a block node in the flow editor (roadmap Epic 1E). Editor-only metadata.</summary>
+public class BlockLayout
+{
+    public double X { get; set; }
+    public double Y { get; set; }
 }
