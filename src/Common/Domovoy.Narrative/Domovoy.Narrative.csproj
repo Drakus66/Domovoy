@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Domovoy.Narrative — the language-neutral House-Diary NLG engine (roadmap Epic 2N).
+      Turns the language-neutral story IR (Domovoy.Contracts.Narrative: Beat/Scene/DayStory)
+      into a dated prose paragraph via a data-driven language pack + INarrativeRenderer seam.
+      Deterministic and offline: the deterministic RuLanguagePackRenderer is the mandatory
+      default; an optional LLM/plugin renderer (Epic 2H / Phase 4) may register on top.
+      Depends only on Domovoy.Contracts (zero-dep) so a future out-of-process/LLM renderer
+      can reference the same IR. System.Text.Json comes from the shared framework.
+    -->
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Domovoy.Contracts\Domovoy.Contracts.csproj" />
+    </ItemGroup>
+
+    <!-- The default Russian language pack ships as an embedded JSON resource. -->
+    <ItemGroup>
+        <EmbeddedResource Include="Packs\ru.json" />
+    </ItemGroup>
+
+</Project>

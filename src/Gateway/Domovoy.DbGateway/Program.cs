@@ -69,6 +69,13 @@ internal static class Program
             // Seed the built-in roles (admin/resident/guest) so the roles model is usable out of the box (Epic 2E).
             builder.Services.AddHostedService<Services.SecuritySeeder>();
 
+            // House Diary (Epic 2N): the deterministic NLG renderer + locale selector + language-pack provider.
+            // The deterministic Russian renderer is the mandatory default; an optional assisted (LLM/plugin)
+            // renderer (Phase 4) can be registered as another INarrativeRenderer and the selector prefers it.
+            builder.Services.AddSingleton<Domovoy.Narrative.INarrativeRenderer, Domovoy.Narrative.RuLanguagePackRenderer>();
+            builder.Services.AddSingleton<Domovoy.Narrative.INarrativeRendererSelector, Domovoy.Narrative.NarrativeRendererSelector>();
+            builder.Services.AddSingleton<Services.LanguagePackProvider>();
+
             // Optional geocoder for the site-location editor (Epic 2K). Network-only and best-effort — a failure
             // degrades to manual lat/lon entry, so the location feature stays fully usable offline.
             builder.Services.AddHttpClient<Services.IGeocoder, Services.NominatimGeocoder>(client =>
@@ -109,6 +116,7 @@ internal static class Program
             app.MapModeEndpoints();
             app.MapBlockEndpoints();
             app.MapActivityEndpoints();
+            app.MapHomeStoryEndpoints();
             app.MapMlEndpoints();
             app.MapProposalsEndpoints();
             app.MapRoleEndpoints();

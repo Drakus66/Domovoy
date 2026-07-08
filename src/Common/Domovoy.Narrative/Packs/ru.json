@@ -1,0 +1,168 @@
+{
+  "locale": "ru",
+  "packVersion": 1,
+
+  "personas": {
+    "Spirit": {
+      "cooldown": 2,
+      "pool": [
+        { "text": "домовой",   "gender": "m", "number": "sg", "animacy": "anim", "subjectCase": "домовой",   "pronoun": "он" },
+        { "text": "дух дома",   "gender": "m", "number": "sg", "animacy": "anim", "subjectCase": "дух дома",   "pronoun": "он" },
+        { "text": "старый дом", "gender": "m", "number": "sg", "animacy": "inan", "subjectCase": "старый дом", "pronoun": "он" }
+      ]
+    },
+    "Residents": {
+      "cooldown": 1,
+      "pool": [
+        { "text": "домочадцы", "gender": "m", "number": "pl", "animacy": "anim", "subjectCase": "домочадцы", "pronoun": "они" },
+        { "text": "семья",     "gender": "f", "number": "sg", "animacy": "anim", "subjectCase": "семья",     "pronoun": "она" }
+      ]
+    },
+    "SpiritJudging": {
+      "cooldown": 1,
+      "pool": [
+        { "text": "домовой", "gender": "m", "number": "sg", "animacy": "anim", "subjectCase": "домовой", "pronoun": "он" }
+      ]
+    }
+  },
+
+  "verbs": {
+    "light.on_off.On": {
+      "m_sg": "зажёг", "f_sg": "зажгла", "pl": "зажгли", "object": "device", "place": "zone",
+      "synonyms": [
+        { "m_sg": "засветил", "f_sg": "засветила", "pl": "засветили" },
+        { "m_sg": "включил",  "f_sg": "включила",  "pl": "включили"  }
+      ]
+    },
+    "light.on_off.Off": {
+      "m_sg": "погасил", "f_sg": "погасила", "pl": "погасили", "object": "device", "place": "zone",
+      "synonyms": [ { "m_sg": "выключил", "f_sg": "выключила", "pl": "выключили" } ]
+    },
+    "switch.on_off.On": {
+      "m_sg": "включил", "f_sg": "включила", "pl": "включили", "object": "device", "place": "zone"
+    },
+    "switch.on_off.Off": {
+      "m_sg": "выключил", "f_sg": "выключила", "pl": "выключили", "object": "device", "place": "zone"
+    },
+    "thermostat.on_off.On": {
+      "m_sg": "поддал жару", "f_sg": "поддала жару", "pl": "поддали жару", "object": "none", "place": "device",
+      "synonyms": [ { "m_sg": "прибавил тепла", "f_sg": "прибавила тепла", "pl": "прибавили тепла" } ]
+    },
+    "thermostat.on_off.Off": {
+      "m_sg": "притушил", "f_sg": "притушила", "pl": "притушили", "object": "device", "place": "none"
+    },
+    "thermostat.temperature.Increase": {
+      "m_sg": "прибавил тепла", "f_sg": "прибавила тепла", "pl": "прибавили тепла", "object": "none", "place": "device"
+    },
+    "thermostat.temperature.Decrease": {
+      "m_sg": "убавил тепла", "f_sg": "убавила тепла", "pl": "убавили тепла", "object": "none", "place": "device"
+    },
+    "valve.on_off.On": {
+      "m_sg": "пустил воду", "f_sg": "пустила воду", "pl": "пустили воду", "object": "none", "place": "zone",
+      "synonyms": [ { "m_sg": "включил", "f_sg": "включила", "pl": "включили", "object": "device" } ]
+    },
+    "valve.on_off.Off": {
+      "m_sg": "перекрыл воду", "f_sg": "перекрыла воду", "pl": "перекрыли воду", "object": "none", "place": "zone"
+    },
+    "lock.lock.Lock": {
+      "m_sg": "запер", "f_sg": "заперла", "pl": "заперли", "object": "device", "place": "none"
+    },
+    "lock.lock.Unlock": {
+      "m_sg": "отпер", "f_sg": "отперла", "pl": "отперли", "object": "device", "place": "none"
+    },
+    "contact.contact.Open": {
+      "m_sg": "открыл", "f_sg": "открыла", "pl": "открыли", "object": "device", "place": "none"
+    },
+    "contact.contact.Close": {
+      "m_sg": "закрыл", "f_sg": "закрыла", "pl": "закрыли", "object": "device", "place": "none"
+    },
+
+    "default.On":       { "m_sg": "включил",  "f_sg": "включила",  "pl": "включили",  "object": "device", "place": "zone" },
+    "default.Off":      { "m_sg": "выключил", "f_sg": "выключила", "pl": "выключили", "object": "device", "place": "zone" },
+    "default.Set":      { "m_sg": "изменил",  "f_sg": "изменила",  "pl": "изменили",  "object": "device", "place": "zone" },
+    "default.Increase": { "m_sg": "прибавил", "f_sg": "прибавила", "pl": "прибавили", "object": "device", "place": "zone" },
+    "default.Decrease": { "m_sg": "убавил",   "f_sg": "убавила",   "pl": "убавили",   "object": "device", "place": "zone" },
+    "default.Open":     { "m_sg": "открыл",   "f_sg": "открыла",   "pl": "открыли",   "object": "device", "place": "none" },
+    "default.Close":    { "m_sg": "закрыл",   "f_sg": "закрыла",   "pl": "закрыли",   "object": "device", "place": "none" },
+    "default.Lock":     { "m_sg": "запер",    "f_sg": "заперла",   "pl": "заперли",   "object": "device", "place": "none" },
+    "default.Unlock":   { "m_sg": "отпер",    "f_sg": "отперла",   "pl": "отперли",   "object": "device", "place": "none" },
+    "default.Enter":    { "m_sg": "вошёл",    "f_sg": "вошла",     "pl": "вошли",     "object": "none",   "place": "none" }
+  },
+
+  "places": {
+    "byZoneId": {},
+    "byZoneName": {
+      "гостиная":   { "prep": "в",  "locForm": "гостиной" },
+      "зал":        { "prep": "в",  "locForm": "зале" },
+      "спальня":    { "prep": "в",  "locForm": "спальне" },
+      "детская":    { "prep": "в",  "locForm": "детской" },
+      "кухня":      { "prep": "на", "locForm": "кухне" },
+      "столовая":   { "prep": "в",  "locForm": "столовой" },
+      "ванная":     { "prep": "в",  "locForm": "ванной" },
+      "прихожая":   { "prep": "в",  "locForm": "прихожей" },
+      "коридор":    { "prep": "в",  "locForm": "коридоре" },
+      "кабинет":    { "prep": "в",  "locForm": "кабинете" },
+      "веранда":    { "prep": "на", "locForm": "веранде", "accForm": "веранду" },
+      "терраса":    { "prep": "на", "locForm": "террасе" },
+      "балкон":     { "prep": "на", "locForm": "балконе" },
+      "мансарда":   { "prep": "на", "locForm": "мансарде" },
+      "гараж":      { "prep": "в",  "locForm": "гараже" },
+      "подвал":     { "prep": "в",  "locForm": "подвале" },
+      "чердак":     { "prep": "на", "locForm": "чердаке" },
+      "котельная":  { "prep": "в",  "locForm": "котельной" },
+      "баня":       { "prep": "в",  "locForm": "бане" },
+      "двор":       { "prep": "во", "locForm": "дворе" },
+      "сад":        { "prep": "в",  "locForm": "саду" },
+      "огород":     { "prep": "в",  "locForm": "огороде" },
+      "теплица":    { "prep": "в",  "locForm": "теплице" }
+    },
+    "byZoneKind": {
+      "gate":    { "text": "ворота", "prep": "у", "locForm": "ворот" },
+      "lawn":    { "text": "газон",  "prep": "на", "locForm": "газоне" },
+      "bed":     { "text": "грядка", "prep": "на", "locForm": "грядке" },
+      "room":    { "prep": "в" },
+      "outdoor": { "prep": "на" }
+    }
+  },
+
+  "devices": {
+    "byArchetype": {
+      "light":          { "text": "свет",           "gender": "m" },
+      "switch":         { "text": "прибор",         "gender": "m" },
+      "thermostat":     { "text": "котёл",          "gender": "m", "prep": "в", "locForm": "котле" },
+      "valve":          { "text": "полив",          "gender": "m" },
+      "lock":           { "text": "дверь",          "gender": "f" },
+      "contact":        { "text": "дверь",          "gender": "f" },
+      "climate_sensor": { "text": "датчик",         "gender": "m" },
+      "sensor":         { "text": "датчик",         "gender": "m" },
+      "motion":         { "text": "датчик движения","gender": "m" },
+      "energy_meter":   { "text": "счётчик",        "gender": "m" }
+    },
+    "byDeviceId": {}
+  },
+
+  "impersonal": {
+    "sun.is_dark.On":  [ "стало темнеть", "начали сгущаться сумерки" ],
+    "sun.is_dark.Off": [ "рассвело", "забрезжил рассвет" ],
+    "sun.is_day.On":   [ "рассвело", "настал день" ],
+    "climate.temperature.Decrease": [ "похолодало", "потянуло холодом" ],
+    "climate.temperature.Increase": [ "потеплело", "стало теплее" ]
+  },
+
+  "templates": {
+    "actorAction":  "{Actor} {Verb} {Object}{Place}",
+    "causalEffect": "{Cause} — и {Actor} {Verb} {Object}{Place}",
+    "causalComma":  "{Cause}, и {Actor} {Verb} {Object}{Place}"
+  },
+
+  "anaphora": {
+    "firstMention": "full",
+    "laterMention": "pronoun",
+    "scopePerEntry": true
+  },
+
+  "monthsGen": [
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря"
+  ]
+}
