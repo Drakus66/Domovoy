@@ -52,9 +52,14 @@ public sealed class RuLanguagePackRenderer : INarrativeRenderer
         var obj = ResolveObject(beat, verb, pack);
         var place = ResolvePlace(beat, verb, pack);
 
-        if (!string.IsNullOrWhiteSpace(scene.Cause))
+        // Cause: a pre-resolved phrase wins; otherwise localize the language-neutral cause beat here.
+        var cause = scene.Cause;
+        if (string.IsNullOrWhiteSpace(cause) && scene.CauseBeat is not null)
+            cause = PickImpersonal(scene.CauseBeat, pack, state);
+
+        if (!string.IsNullOrWhiteSpace(cause))
             return Fill(pack.Templates.CausalEffect,
-                ("Cause", Capitalize(scene.Cause!)), ("Actor", actor.Text),
+                ("Cause", Capitalize(cause!)), ("Actor", actor.Text),
                 ("Verb", verb.Text), ("Object", obj), ("Place", place));
 
         return Fill(pack.Templates.ActorAction,

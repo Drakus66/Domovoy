@@ -97,8 +97,18 @@ public class Scene
     /// <summary>Causal root key: <c>rule:{id}</c> | <c>mode:{old→new}</c> | <c>manual:{deviceId}</c>.</summary>
     public string CausalRootKey { get; set; } = string.Empty;
 
-    /// <summary>Lifted causal phrase, if any (from a rule's trigger summary or a System-sensor transition).</summary>
+    /// <summary>
+    /// A pre-resolved causal phrase, if any (already localized). Usually left null in favour of the
+    /// language-neutral <see cref="CauseBeat"/>, which the renderer localizes via the impersonal pool.
+    /// </summary>
     public string? Cause { get; set; }
+
+    /// <summary>
+    /// Language-neutral cause — a System-sensor transition (e.g. <c>is_dark</c>→On) that occurred just
+    /// before this rule-caused scene, coalesced in as its cause («стало темнеть → …»). The renderer turns
+    /// it into the localized subclause, so causality survives re-rendering in another language.
+    /// </summary>
+    public Beat? CauseBeat { get; set; }
 
     public string? Mode { get; set; }
 
