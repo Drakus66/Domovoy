@@ -76,6 +76,12 @@ internal static class Program
             builder.Services.AddSingleton<Domovoy.Narrative.INarrativeRendererSelector, Domovoy.Narrative.NarrativeRendererSelector>();
             builder.Services.AddSingleton<Services.LanguagePackProvider>();
 
+            // The diary builder (Epic 2N Phase 2): mines events → scenes → significance → prose, materialized
+            // into home_story. Registered as a singleton + hosted so the manual rebuild endpoint can invoke it.
+            builder.Services.AddSingleton<Services.DiaryMiner>();
+            builder.Services.AddSingleton<Services.HouseDiaryBuilder>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Services.HouseDiaryBuilder>());
+
             // Optional geocoder for the site-location editor (Epic 2K). Network-only and best-effort — a failure
             // degrades to manual lat/lon entry, so the location feature stays fully usable offline.
             builder.Services.AddHttpClient<Services.IGeocoder, Services.NominatimGeocoder>(client =>

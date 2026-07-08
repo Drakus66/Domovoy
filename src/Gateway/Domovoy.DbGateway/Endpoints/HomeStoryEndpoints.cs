@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using System.Globalization;
 using System.Text.Json;
 
 using Domovoy.Contracts.Devices;
@@ -108,6 +109,19 @@ public static class HomeStoryEndpoints
             var rendered = renderer.Render(day, pack, new NarrativeState()); // preview is stateless
 
             return Results.Ok(new { paragraph = rendered.Paragraph, locale = renderer.Locale, renderer = rendered.RendererTier });
+        });
+
+        // POST /api/home-story/rebuild?date=yyyy-MM-dd — force-rebuild one day (Epic 2N Phase 2).
+        group.MapPost("/rebuild", async (string? date, HouseDiaryBuilder builder, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(date) ||
+                !DateOnly.TryParse(date, CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
+                return Results.BadRequest(new { error = "date must be yyyy-MM-dd" });
+
+            var entry = await builder.RebuildDayAsync(day, ct);
+            return entry is null
+                ? Results.Ok(new { date, narrated = false })
+                : Results.Ok(entry);
         });
     }
 
