@@ -236,9 +236,43 @@ public async Task<Device> RegisterDeviceAsync(DeviceRegistration registration)
 - Use HTTPS for all communications
 - Sanitize data before logging or displaying
 
+## Dependencies and Licensing
+
+Domovoy ships under **AGPL-3.0-or-later** with a **commercial dual-license** option. Every
+third-party dependency must be compatible with **both** paths, so before adding any new NuGet or npm
+package (or bumping one to a major that changes its license), **check the license first and pick only
+a compatible one.**
+
+### Allowed (permissive — no approval needed)
+
+- **MIT, BSD-2-Clause, BSD-3-Clause, ISC, Apache-2.0, Zlib.**
+- **MPL-2.0** and other file-level weak copyleft are acceptable, but when a package is dual-licensed
+  (e.g. `RabbitMQ.Client` is Apache-2.0 / MPL-2.0), **elect the most permissive option** and note it.
+
+### Disallowed without explicit owner approval
+
+- **Strong copyleft: GPL-2.0/3.0, LGPL, AGPL.** A copyleft dependency would force the whole product
+  open and **block the commercial license** — this is a hard stop, not a preference.
+- **Source-available / non-OSI: SSPL, BSL, Elastic License, Commons Clause.**
+- **"Ethical" / use-restricted licenses: the Hippocratic License and similar.** These add
+  field-of-use restrictions that clash with the AGPL and with a clean commercial offer. (This is why
+  `react-leaflet` was dropped in favour of `pigeon-maps`.)
+- **No-license / "all rights reserved"** packages.
+
+### Hygiene
+
+- Avoid packages that squat an official namespace (e.g. a non-Microsoft package published under a
+  `Microsoft.*` id) and avoid preview/unmaintained packages in production paths.
+- Preserve upstream attribution: MIT/BSD/Apache require keeping copyright notices, so permissive
+  dependencies must be reflected in a `THIRD-PARTY-NOTICES` file.
+- When in doubt about a license, resolve it from the package's own repository (the `LICENSE` file),
+  not from an auto-detector, and record the decision.
+
 ## Code Review Guidelines
 
 ### What to Look For
+
+- License compatibility of any newly added dependency (see Dependencies and Licensing)
 
 - Correctness: Does the code do what it's supposed to do?
 - Adherence to coding standards and patterns

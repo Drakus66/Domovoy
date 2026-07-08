@@ -4,8 +4,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import ReactFlow, { Background, Controls, MarkerType, type Edge, type Node, type NodeProps } from 'reactflow';
-import 'reactflow/dist/style.css';
+import { ReactFlow, Background, Controls, MarkerType, Panel, type Edge, type Node, type NodeProps } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import {
   Container, Box, Typography, Stack, Button, TextField, MenuItem, IconButton, Alert,
   LinearProgress, Paper, Divider, Tooltip,
@@ -13,6 +13,7 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
+import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import {
   automationsApi, AutomationRule, RuleTrigger, RuleCondition, RuleAction, NewRule, RuleStatus,
 } from '../api/automations';
@@ -35,12 +36,12 @@ type Selection =
   | { kind: 'action'; index: number }
   | null;
 
-interface CardData {
+type CardData = {
   title: string;
   lines: string[];
   tone: 'trigger' | 'condition' | 'action';
   selected: boolean;
-}
+};
 
 const TONE: Record<CardData['tone'], string> = {
   trigger: 'var(--mui-palette-primary-main)',
@@ -49,7 +50,7 @@ const TONE: Record<CardData['tone'], string> = {
 };
 
 // A single Homey-style flow card. Editing happens in the side panel; the node is a summary.
-function CardNode({ data }: NodeProps<CardData>) {
+function CardNode({ data }: NodeProps<Node<CardData>>) {
   return (
     <Box
       sx={{
@@ -57,6 +58,8 @@ function CardNode({ data }: NodeProps<CardData>) {
         bgcolor: 'background.paper', color: 'text.primary',
         border: '2px solid', borderColor: data.selected ? TONE[data.tone] : 'divider',
         boxShadow: data.selected ? 4 : 1, cursor: 'pointer',
+        transition: 'box-shadow 120ms ease, border-color 120ms ease, transform 120ms ease',
+        '&:hover': { boxShadow: 4, borderColor: TONE[data.tone], transform: 'translateY(-1px)' },
       }}
     >
       <Typography variant="overline" sx={{ color: TONE[data.tone], lineHeight: 1.4 }}>{data.title}</Typography>
@@ -251,6 +254,15 @@ export default function Flow() {
               fitView proOptions={{ hideAttribution: true }}>
               <Background />
               <Controls showInteractive={false} />
+              <Panel position="top-left">
+                <Box sx={{
+                  px: 1.25, py: 0.5, borderRadius: 1.5, bgcolor: 'background.paper',
+                  border: '1px solid', borderColor: 'divider', boxShadow: 1,
+                  fontSize: 12, color: 'text.secondary', maxWidth: 240, pointerEvents: 'none',
+                }}>
+                  {tr('canvasHint')}
+                </Box>
+              </Panel>
             </ReactFlow>
           </Paper>
 
@@ -288,6 +300,14 @@ function SidePanel(props: {
   } = props;
   const caps = (id?: string | null) => devices.find((d) => d.id === id)?.capabilities ?? [];
 
+  // Label of the card currently selected on the canvas — ties the panel visibly to the graph (issue: the
+  // canvas looked "inactive" because it wasn't obvious the panel edits whatever card you click).
+  const selectionLabel =
+    selection?.kind === 'trigger' ? tr('card.when')
+      : selection?.kind === 'condition' ? tr('panel.conditionN', { index: selection.index + 1 })
+        : selection?.kind === 'action' ? tr('panel.actionN', { index: selection.index + 1 })
+          : null;
+
   const addCondition = () => { setConditions([...conditions, { type: 'Mode', mode: 'Home' }]); setSelection({ kind: 'condition', index: conditions.length }); };
   const addAction = () => { setActions([...actions, { type: 'Command', set: {} }]); setSelection({ kind: 'action', index: actions.length }); };
   const delCondition = (i: number) => { setConditions(conditions.filter((_, x) => x !== i)); setSelection({ kind: 'trigger' }); };
@@ -304,6 +324,13 @@ function SidePanel(props: {
         <Button size="small" startIcon={<AddRoundedIcon />} onClick={addAction}>{tr('panel.action')}</Button>
       </Stack>
       <Divider />
+
+      {selectionLabel && (
+        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ color: 'text.secondary', mt: -0.5 }}>
+          <TuneRoundedIcon fontSize="small" />
+          <Typography variant="caption">{tr('panel.editing', { card: selectionLabel })}</Typography>
+        </Stack>
+      )}
 
       {selection?.kind === 'trigger' && (
         <TriggerEditor devices={devices} caps={caps} value={trigger} onChange={setTrigger} />

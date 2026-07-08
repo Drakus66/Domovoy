@@ -121,5 +121,13 @@
   "view": {
     "list": "List",
     "graph": "Graph"
+  },
+  "graph": {
+    "hint": "Drag to arrange · draw a wire between ports to bind · double-click a wire to unbind",
+    "undo": "Undo (Ctrl+Z)",
+    "redo": "Redo (Ctrl+Shift+Z)",
+    "autoArrange": "Auto-arrange",
+    "addDevice": "Add device",
+    "save": "Save layout & wiring"
   }
 }

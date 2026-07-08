@@ -1,176 +1,152 @@
-# Domovoy
+<div align="center">
 
-**Smart Home Automation Platform with IoT Device Management**
+# 🏠 Domovoy
 
-Domovoy is a comprehensive .NET-based home automation platform featuring microservices architecture, MQTT device integration, and real-time monitoring. Built for scalability and flexibility, it supports various IoT devices through Arduino gateways and provides a robust foundation for smart home automation.
+**A local, automation-first smart-home server for a private house and its grounds.**
 
-## 🚀 Features
+**English** · [Русский](README.ru.md)
 
-### Core Capabilities
-- **Device Management**: Complete lifecycle management for IoT devices
-- **Light Control**: Advanced lighting control (on/off, brightness, color, temperature)
-- **Sensor Integration**: Multi-sensor support (temperature, humidity, motion, light quality)
-- **MQTT Discovery**: Automatic device discovery using Home Assistant format
-- **Real-time Communication**: SignalR for instant updates
-- **Monitoring**: Comprehensive observability with Prometheus, Grafana, and Loki
-
-### Architecture Highlights
-- **Microservices**: 6 independent services with clear boundaries
-- **Event-Driven**: Asynchronous communication via RabbitMQ
-- **API Gateway**: Unified entry point with Ocelot
-- **Database Gateway**: Centralized MongoDB data access
-- **Containerized**: Full Docker Compose deployment
-
-## 📋 System Status
-
-**Current Version**: Development (December 2025)
-- ✅ Core Services: 80% Complete
-- 🚧 MQTT Integration: 70% Complete
-- 📋 Security Layer: 20% Complete
-- 🔧 Arduino Gateway: 5% Complete
-
-## 🏗️ Architecture
-
-```
-Client Layer (Web/Mobile/MQTT)
-         ↓
-    API Gateway (Ocelot)
-         ↓
-Service Layer (Device/Light/Sensor/Discovery)
-         ↓
-    Message Bus (RabbitMQ AMQP+MQTT)
-         ↓
-    DB Gateway (MongoDB)
-```
-
-## 🛠️ Technology Stack
-
-- **.NET 6+** - Core framework
-- **ASP.NET Core** - Web APIs
-- **RabbitMQ** - Message broker (AMQP + MQTT)
-- **MongoDB** - Document database
-- **Docker** - Containerization
-- **Ocelot** - API Gateway
-- **SignalR** - Real-time communication
-- **Prometheus/Grafana/Loki** - Monitoring stack
-- **Arduino** - Hardware gateways (ESP8266/ESP32)
-
-## 🚦 Getting Started
-
-### Prerequisites
-- Docker & Docker Compose
-- .NET 6+ SDK (for development)
-- MongoDB
-- RabbitMQ with MQTT plugin
-
-### Quick Start
-```bash
-# Clone the repository
-git clone <repository-url>
-cd Domovoy
-
-# Start all services
-docker-compose up -d
-
-# Check service health
-docker-compose ps
-```
-
-### Service Endpoints
-- **Web UI**: <http://localhost>
-- **API Gateway**: <http://localhost:5000>
-- **Grafana**: <http://localhost:3000>
-- **Prometheus**: <http://localhost:9090>
-- **RabbitMQ Management**: <http://localhost:15672>
-
-## 📁 Project Structure
-
-```
-Domovoy/
-├── src/
-│   ├── Common/              # Shared libraries
-│   │   ├── Domovoy.Common/
-│   │   └── Domovoy.MessageBus/
-│   ├── Gateway/             # Gateway services
-│   │   ├── Domovoy.ApiGateway/
-│   │   └── Domovoy.DbGateway/
-│   └── Services/            # Business services
-│       ├── Domovoy.DeviceService/
-│       ├── Domovoy.LightService/
-│       ├── Domovoy.SensorService/
-│       └── Domovoy.DiscoveryService/
-├── Arduino/                 # Arduino gateway firmware
-├── docs/                    # Documentation
-├── memory-bank/            # Project context & state
-├── docker-compose.yml      # Service orchestration
-└── README.md
-```
-
-## 📚 Documentation
-
-### Technical Documentation
-- **Architecture**: [docs/architecture/](docs/architecture/)
-  - [Architecture Diagrams](docs/architecture/architecture_diagrams.md)
-  - [Layered Architecture](docs/architecture/layered_architecture.md)
-  - [Database Schema](docs/architecture/database_schema.md)
-  - [Coding Standards](docs/architecture/coding_standards.md)
-- **Memory Bank**: [memory-bank/](memory-bank/)
-  - [System Overview](memory-bank/systemOverview.md)
-  - [Current State](memory-bank/currentState.md)
-  - [Product Context](memory-bank/productContext.md)
-  - [Progress Tracking](memory-bank/progress.md)
-
-### Task Planning
-- **Development Tasks**: [tasks_plan.txt](tasks_plan.txt)
-- **Arduino Development**: [arduino_tasks_plan.txt](arduino_tasks_plan.txt)
-
-## 🔧 Development
-
-### Building Services
-```bash
-# Build all services
-dotnet build Domovoy.sln
-
-# Run specific service
-cd src/Services/Domovoy.DeviceService
-dotnet run
-```
-
-### Running Tests
-```bash
-# Run all tests
-dotnet test
-
-# Run with coverage
-dotnet test /p:CollectCoverage=true
-```
-
-## 🎯 Roadmap
-
-### Phase 1: MQTT Core (Current - Q1 2026)
-- Device heartbeat mechanism
-- MQTT command adapter
-- Telemetry handlers
-- Basic authentication
-
-### Phase 2: Security (Q1 2026)
-- TLS/SSL configuration
-- Device authentication
-- Message encryption
-- Authorization rules
-
-### Phase 3: Arduino Gateway (Q2 2026)
-- Base MQTT client
-- WiFi management
-- Sensor/control templates
-- Remote configuration
-
-### Phase 4: Production Ready (Q2 2026)
-- Comprehensive testing
-- Performance optimization
-- Deployment automation
-- Complete documentation
+</div>
 
 ---
 
-**Status**: Active Development | **Last Updated**: March 3, 2026
+> **Domovoy** (Russian: *Домовой*) is the house spirit of Slavic folklore — an unseen guardian
+> that lives in a home, watches over it, and keeps it in order. This project is that spirit made
+> technological: not a remote control for your devices, but a caretaker that *runs the house*.
+> You set the way the household should live — modes, setpoints, the limits of what's allowed —
+> and Domovoy keeps things in order without demanding your attention.
+
+## The idea
+
+Most smart-home platforms are, at their core, **device controllers**: a nice UI with buttons and
+sliders on top of a pile of integrations. You are the automation.
+
+Domovoy inverts that. The goal is **automatic control by scenario with minimal user input**. You
+tell the house *what "night" or "away" means*, what temperature and air quality you want, where the
+boundaries are — and the system handles the rest: lighting by sensors and time of day, climate via
+ventilation and heating, supplementary underfloor heat, outdoor lighting and irrigation, access
+control. The closest modern analogy is a butler-AI like Jarvis: an unobtrusive keeper, not a
+dashboard full of switches.
+
+The product bet is a specific intersection that no existing system occupies:
+
+> **The determinism of installer-grade systems + failure isolation + learning automation that you
+> can replay against history, explain, and roll back — guaranteed to work locally, purpose-built
+> for a private home with grounds.**
+
+## Motivation
+
+Existing platforms each give up something we refuse to give up:
+
+- **Monolithic hubs** (Home Assistant, openHAB, Homey) are a single point of failure — one broken
+  integration or a bad update can take the whole instance down, and there is no "critical layer"
+  that keeps safety-essential behavior running regardless.
+- **Cloud-first ecosystems** (SmartThings, Apple/Google/Alexa Home) break when the cloud changes and
+  put your home on the critical path of someone else's servers.
+- **Installer systems** (Loxone, KNX, Control4) are genuinely reliable and deterministic, but closed,
+  expensive, and locked to a professional — no openness, no DIY, no learning.
+- **"AI smart home"** as a marketing label usually means an LLM you can talk to — not a system that
+  actually *learns your home from its own history* and can justify what it did.
+
+Domovoy is built to keep the reliability of the professional systems, the openness and DIY spirit of
+Home Assistant, and add proactive, **explainable** machine learning with a human in the loop.
+
+## Core concepts
+
+### 🧱 Capability-first, contract-first core
+Devices are not modeled as a closed set of types (light / sensor / switch). They are described by an
+open set of **capabilities** — `on_off`, `temperature_setpoint`, `lock`, `valve`, `presence`, and so
+on. A single versioned event/command contract (CloudEvents-style envelopes) sits at the center, so
+new device kinds, plugins, and ML features extend the system **without recompiling the core**. Zones
+and grounds are first-class, not bolted on.
+
+### 🔌 Failure isolation and an un-disableable safety floor
+An event bus (RabbitMQ) plus **out-of-process plugins** mean a crashing or updating integration can
+never take the core down. On top sits a layer of **deterministic safety rules** — anti-freeze,
+CO₂ → ventilation, smoke → unlock — that keeps working even when the UI, ML, or cloud are
+unavailable, and that cannot be switched off from the UI. Monolithic systems fundamentally can't do
+this.
+
+### 🧠 Layered, learning automation you can trust
+Control is layered, not flat:
+
+1. a **deterministic safety floor** (always-local rules, scheduler, sun events) that is never overridden;
+2. **user setpoints and modes** on top of it;
+3. **ML optimization** on top of that.
+
+Machine learning (built on **ML.NET**, running locally) learns from telemetry and your own actions,
+then **proposes deterministic rules and setpoints into an approval queue**. You approve the model
+version and how much authority it has — never individual outputs one by one. New models roll out in
+**shadow mode** first.
+
+### 🔍 Replay and explainability
+Every proposal can be **replayed against real history** ("how would this have behaved last week?")
+before it goes live, and every action the system takes can be **explained** ("why did the light turn
+on?" → the rule plus the triggering event). This is the trust layer that makes learning automation
+safe to live with.
+
+### 📴 Offline-first as a verifiable invariant
+The whole system must run stably with **no external network**. Cloud integrations (robot vacuum,
+mower, traffic-aware commute, and the like) are strictly **optional plugins** — never in the critical
+path. Telemetry and the domain event log are stored locally and become the fuel for ML from day one.
+
+### 🧩 Modular services and a plugin architecture
+Services are independent: you can update or stop one and the rest keeps running. Integrations are
+**plugins over the bus** with a manifest and a supervisor, and they are **resource-aware** — a heavy
+plugin (GPU vision, for example) enables only if the host actually has the CPU/RAM/GPU for it,
+otherwise the base functionality carries on. The target deployment is a homelab (a mini-PC growing
+into a full machine or rack), not an industrial installation.
+
+## What Domovoy deliberately is *not*
+
+- **Not "a better Home Assistant" measured by integration count.** We lean on standards (Zigbee2MQTT,
+  MQTT, Matter/Thread as it converges), a native DIY protocol, and a plugin SDK — not a race to
+  clone thousands of integrations.
+- **Not a rich-dashboard platform.** The thesis is "set your modes, the house runs itself" — that
+  means *less* UI, not more.
+- **Not a catch-up voice assistant.** Local voice, when it comes, is integrating a ready-made local
+  stack as a plugin, not building one from scratch.
+- **Not "AI" as a label.** Having a model isn't the point. The moat is explainability, replay, and
+  safe execution — the model just proposes.
+
+## Technology at a glance
+
+- **Backend:** .NET 9 · C# · ASP.NET Core (Minimal API + background services)
+- **Messaging:** RabbitMQ (AMQP + MQTT) as the event bus
+- **Storage:** MongoDB — current state, time-series telemetry, and an append-only event log in one database
+- **Machine learning:** ML.NET (local, no Python in the control path)
+- **Realtime & UI:** SignalR · React + Vite + TypeScript + MUI
+- **Hardware:** a native Domovoy protocol for DIY devices (Arduino / ESP8266 / ESP32), alongside Zigbee and ESPHome
+- **Infrastructure:** Docker Compose · Prometheus for observability
+
+## License
+
+Domovoy is free software: you can redistribute it and/or modify it under the
+terms of the **GNU Affero General Public License, version 3 or later
+(AGPL-3.0-or-later)**, as published by the Free Software Foundation. The full
+text is in [LICENSE](LICENSE).
+
+```
+Copyright (C) 2025-2026 Ilya Dryagin
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+details.
+```
+
+**Network use is distribution.** Because Domovoy is a networked server, the
+AGPL's Section 13 applies: if you run a modified version and let others
+interact with it over a network, you must offer those users the corresponding
+source code of your modified version.
+
+**Commercial licensing.** The AGPL is ideal for the open community, but its
+copyleft obligations can be impractical for embedding Domovoy in a proprietary
+product or offering it as a closed hosted service. For those cases a separate
+commercial license can be arranged — contact the author.
+
+---
+
+<div align="center">
+<sub>Domovoy — the house spirit, in software.</sub>
+</div>
