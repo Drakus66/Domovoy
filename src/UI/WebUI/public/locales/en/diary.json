@@ -1,0 +1,13 @@
+{
+  "intro": "A chronicle of the home's life: what happened during the day, told in words rather than a technical log.",
+  "empty": "The house has been dozing — nothing notable happened.",
+  "error": "Could not load the diary. Check the connection to the ApiGateway / DbGateway.",
+  "personalize": {
+    "title": "Names",
+    "hint": "What to call the house spirit and the residents in the diary.",
+    "spirit": "House spirit",
+    "residents": "Residents",
+    "cancel": "Cancel",
+    "save": "Save"
+  }
+}

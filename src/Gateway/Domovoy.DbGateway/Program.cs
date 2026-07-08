@@ -123,6 +123,7 @@ internal static class Program
             app.MapBlockEndpoints();
             app.MapActivityEndpoints();
             app.MapHomeStoryEndpoints();
+            app.MapNarrativeEntityEndpoints();
             app.MapMlEndpoints();
             app.MapProposalsEndpoints();
             app.MapRoleEndpoints();

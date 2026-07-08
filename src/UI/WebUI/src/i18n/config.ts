@@ -29,6 +29,7 @@ export const namespaces = [
   'users',
   'plugins',
   'logs',
+  'diary',
   'status',
   'zigbee',
 ] as const;

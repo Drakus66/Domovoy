@@ -2,6 +2,10 @@
   "title": "Activity",
   "subtitle": "What happened and why — device events, automation runs and system logs in one searchable feed.",
   "refresh": "Refresh",
+  "view": {
+    "activity": "Activity",
+    "diary": "Diary"
+  },
   "searchPlaceholder": "Search…",
   "sources": {
     "all": "All",

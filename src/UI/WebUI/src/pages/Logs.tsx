@@ -8,6 +8,7 @@ import { fmtDateTime } from '../i18n/format';
 import {
   Container, Box, Typography, Stack, Chip, TextField, MenuItem, InputAdornment,
   LinearProgress, Alert, Card, IconButton, Tooltip, Divider, Button,
+  ToggleButtonGroup, ToggleButton,
 } from '@mui/material';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
@@ -19,6 +20,7 @@ import SendRoundedIcon from '@mui/icons-material/SendRounded';
 import { activityApi, ActivityEntry, ActivitySource, ActivitySeverity } from '../api/activity';
 import { capabilityDevicesApi } from '../api/capabilityDevices';
 import { notificationsApi, NotificationChannels } from '../api/notifications';
+import DiaryView from '../components/logs/DiaryView';
 
 const SOURCE_META: Record<ActivitySource, { icon: JSX.Element; color: 'primary' | 'secondary' | 'default' }> = {
   device: { icon: <DevicesRoundedIcon fontSize="small" />, color: 'primary' },
@@ -52,6 +54,7 @@ export default function Logs() {
   const [search, setSearch] = useState('');
   const [channels, setChannels] = useState<NotificationChannels | null>(null);
   const [testMsg, setTestMsg] = useState<string | null>(null);
+  const [view, setView] = useState<'activity' | 'diary'>('activity');
 
   const since = useMemo(() => new Date(Date.now() - hours * 3600 * 1000).toISOString(), [hours]);
 
@@ -110,9 +113,18 @@ export default function Logs() {
               {t('subtitle')}
             </Typography>
           </Box>
-          <Tooltip title={t('refresh')}><IconButton onClick={load} disabled={loading}><RefreshRoundedIcon /></IconButton></Tooltip>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v) => v && setView(v)}>
+              <ToggleButton value="activity">{t('view.activity')}</ToggleButton>
+              <ToggleButton value="diary">{t('view.diary')}</ToggleButton>
+            </ToggleButtonGroup>
+            {view === 'activity' && (
+              <Tooltip title={t('refresh')}><IconButton onClick={load} disabled={loading}><RefreshRoundedIcon /></IconButton></Tooltip>
+            )}
+          </Stack>
         </Stack>
 
+        {view === 'diary' ? <DiaryView /> : (<>
         <Card variant="outlined" sx={{ px: 2, py: 1.25, mb: 2 }}>
           <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
             <NotificationsRoundedIcon fontSize="small" color="action" />
@@ -200,6 +212,7 @@ export default function Logs() {
             </Stack>
           </Card>
         )}
+        </>)}
       </Box>
     </Container>
   );
