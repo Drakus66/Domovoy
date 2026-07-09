@@ -125,6 +125,7 @@ internal static class Program
             app.MapHomeStoryEndpoints();
             app.MapNarrativeEntityEndpoints();
             app.MapMlEndpoints();
+            app.MapMlTaskEndpoints();
             app.MapProposalsEndpoints();
             app.MapRoleEndpoints();
             app.MapUserEndpoints();
