@@ -137,9 +137,9 @@ public static class MlEndpoints
     /// <summary>
     /// Delete everything older than the <paramref name="keepLast"/> most recent versions of each
     /// (kind, target, scope) line matching <paramref name="filter"/>. Metadata-only scan (artifact projected
-    /// out), then a single DeleteMany by id.
+    /// out), then a single DeleteMany by id. Public so retention tests exercise it against a real Mongo.
     /// </summary>
-    private static async Task<long> PruneAsync(IMongoDatabase db, FilterDefinition<MlModelDocument> filter, int keepLast)
+    public static async Task<long> PruneAsync(IMongoDatabase db, FilterDefinition<MlModelDocument> filter, int keepLast)
     {
         var metas = await Models(db).Find(filter)
             .Project(x => new { x.Id, x.Kind, x.TargetCapability, x.Scope, x.Version })

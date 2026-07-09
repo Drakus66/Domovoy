@@ -159,16 +159,17 @@ export default function MlTaskCard({
             </Tooltip>
             <Tooltip title={t('actions.trainNowHint')}>
               <span>
-                <IconButton disabled={training || !task.enabled} onClick={() => onTrain(task)}>
+                <IconButton aria-label={t('actions.trainNowHint')} disabled={training || !task.enabled}
+                  onClick={() => onTrain(task)}>
                   <ModelTrainingRoundedIcon />
                 </IconButton>
               </span>
             </Tooltip>
             <Tooltip title={t('actions.editTask')}>
-              <IconButton onClick={() => onEdit(task)}><EditOutlinedIcon /></IconButton>
+              <IconButton aria-label={t('actions.editTask')} onClick={() => onEdit(task)}><EditOutlinedIcon /></IconButton>
             </Tooltip>
             <Tooltip title={t('actions.deleteTask')}>
-              <IconButton onClick={() => onDelete(task)}><DeleteOutlineRoundedIcon /></IconButton>
+              <IconButton aria-label={t('actions.deleteTask')} onClick={() => onDelete(task)}><DeleteOutlineRoundedIcon /></IconButton>
             </Tooltip>
             <Tooltip title={t(task.enabled ? 'actions.disable' : 'actions.enable')}>
               <Switch size="small" checked={task.enabled}
