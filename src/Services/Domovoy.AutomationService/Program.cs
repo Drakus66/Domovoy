@@ -117,13 +117,16 @@ internal static class Program
                 Results.Ok(await replay.RunAsync(request, ct)));
 
             // Train now (roadmap Epic 2A/2P): with taskId — that task; without — every enabled task.
+            // Training runs on CancellationToken.None deliberately: it is a batch operation, and a client
+            // abort (proxy timeout, closed tab) mid-run must not cancel model registration / the status write
+            // half-way — the run completes and the outcome lands on the task either way.
             app.MapPost("/api/ml/train", async (MlTrainingService ml, string? taskId, CancellationToken ct) =>
             {
-                if (string.IsNullOrEmpty(taskId)) return Results.Ok(await ml.TrainAllAsync(ct));
+                if (string.IsNullOrEmpty(taskId)) return Results.Ok(await ml.TrainAllAsync(CancellationToken.None));
 
                 var task = await ml.FindTaskAsync(taskId, ct);
                 if (task is null) return Results.NotFound(new { error = $"no ML task {taskId}" });
-                var result = await ml.TrainTaskAsync(task, ct);
+                var result = await ml.TrainTaskAsync(task, CancellationToken.None);
                 return Results.Ok(new[] { new MlTrainingService.TaskTrainResult(task.Id, task.TargetCapability, result) });
             });
 
