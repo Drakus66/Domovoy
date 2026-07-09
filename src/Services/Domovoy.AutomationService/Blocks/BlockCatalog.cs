@@ -117,14 +117,18 @@ public sealed class BlockCatalog
         }
     }
 
-    /// <summary>The configured ML governor instances (Epic 2I). They share one predictor over the loaded model.</summary>
+    /// <summary>
+    /// The configured ML governor instances (Epic 2I). Each type's predictor closes over its own ML target
+    /// (Epic 2P) — the measured input — so multi-target serving needs no signature change in the governors:
+    /// the thermostat asks for temperature models, the switch for on_off models, and so on.
+    /// </summary>
     private static IEnumerable<IBlockType> MlGovernors(MlModelService models, AutomationOptions o)
     {
         // Predictors thread the instance's pinned model version (Epic 2C); 0 = latest.
-        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> predict =
-            (now, chain, version) => models.TryPredict(now, chain, version, out var v) ? v : null;
-        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, string?> predictClass =
-            (now, chain, version) => models.TryPredictClass(now, chain, version);
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> PredictFor(string target) =>
+            (now, chain, version) => models.TryPredict(target, now, chain, version, out var v) ? v : null;
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, string?> PredictClassFor(string target) =>
+            (now, chain, version) => models.TryPredictClass(target, now, chain, version);
 
         yield return new MlSetpointGovernorType(
             typeId: "ml_thermostat",
@@ -134,7 +138,7 @@ public sealed class BlockCatalog
             output: WellKnownCapabilities.TemperatureSetpoint(min: o.SetpointMin, max: o.SetpointMax, step: 0.5),
             floorMin: o.SetpointMin,
             floorMax: o.SetpointMax,
-            predict: predict);
+            predict: PredictFor(CapabilityIds.Temperature));
 
         yield return new MlToggleGovernorType(
             typeId: "ml_switch",
@@ -142,7 +146,7 @@ public sealed class BlockCatalog
             description: "Proposes a learned on/off schedule to a deterministic switch, staged Shadow → Bounded → Full with a probability threshold + anti-chatter dwell (Epic 2I). Use when the trained target is a boolean capability.",
             measuredInput: CapabilityIds.OnOff,
             output: WellKnownCapabilities.OnOff(writable: true),
-            predict: predict);
+            predict: PredictFor(CapabilityIds.OnOff));
 
         const string hvacMode = "hvac_mode";
         yield return new MlSelectorGovernorType(
@@ -151,7 +155,7 @@ public sealed class BlockCatalog
             description: "Proposes a learned enum schedule (e.g. an HVAC mode) to a deterministic loop, staged Shadow → Bounded → Full, Bounded limited to adjacent values (Epic 2I). Use when the trained target is an enum capability.",
             measuredInput: hvacMode,
             output: WellKnownCapabilities.Enum(hvacMode, new[] { "off", "eco", "comfort", "boost" }, writable: true),
-            predict: predictClass);
+            predict: PredictClassFor(hvacMode));
     }
 
     public IReadOnlyCollection<IBlockType> Types => _types.Values;

@@ -114,13 +114,28 @@ internal static class Program
             app.MapPost("/api/replay", async (ReplayRequest request, ReplayService replay, CancellationToken ct) =>
                 Results.Ok(await replay.RunAsync(request, ct)));
 
-            // Train an ML model now (roadmap Epic 2A): trains on recent telemetry, registers it, reloads it.
-            app.MapPost("/api/ml/train", async (MlTrainingService ml, CancellationToken ct) =>
-                Results.Ok(await ml.TrainOnceAsync(ct)));
+            // Train now (roadmap Epic 2A/2P): with taskId — that task; without — every enabled task.
+            app.MapPost("/api/ml/train", async (MlTrainingService ml, string? taskId, CancellationToken ct) =>
+            {
+                if (string.IsNullOrEmpty(taskId)) return Results.Ok(await ml.TrainAllAsync(ct));
 
-            // Backtest scorecard (roadmap Epic 2B): the loaded model's prediction vs actual telemetry.
-            app.MapGet("/api/ml/backtest", async (MlTrainingService ml, int? days, CancellationToken ct) =>
-                Results.Ok(await ml.BacktestAsync(days ?? 7, ct)));
+                var task = await ml.FindTaskAsync(taskId, ct);
+                if (task is null) return Results.NotFound(new { error = $"no ML task {taskId}" });
+                var result = await ml.TrainTaskAsync(task, ct);
+                return Results.Ok(new[] { new MlTrainingService.TaskTrainResult(task.Id, task.TargetCapability, result) });
+            });
+
+            // Backtest scorecard (roadmap Epic 2B/2P): the serving model of (target, scope) vs actual history.
+            // All parameters optional — the bare form scores the default target's global model (back-compat).
+            app.MapGet("/api/ml/backtest",
+                async (MlTrainingService ml, string? target, string? level, string? key, int? days, CancellationToken ct) =>
+                    Results.Ok(await ml.BacktestAsync(target, level, key, days ?? 7, ct)));
+
+            // Data-sufficiency check (roadmap Epic 2P): raw sample counts per scope for a (prospective) task —
+            // powers the wizard's instant "will this train?" feedback and the task card's diagnostics.
+            app.MapGet("/api/ml/data-check",
+                async (MlTrainingService ml, string target, int? windowDays, int? minSamples, bool? zones, CancellationToken ct) =>
+                    Results.Ok(await ml.CheckDataAsync(target, windowDays ?? 30, minSamples ?? 20, zones ?? true, ct)));
 
             // Run the heuristic rule proposer now (roadmap Epic 2C): mine the event-log, queue candidates.
             app.MapPost("/api/proposals/suggest", async (RuleSuggester suggester, CancellationToken ct) =>
@@ -174,6 +189,10 @@ internal static class Program
                     typeId = t.TypeId,
                     title = t.Title,
                     description = t.Description,
+                    // Epic 2P: which ML target an ML-governor type consumes — lets the UI join "task → its
+                    // consumer blocks" and "device → applicable models" without heuristics. Null for
+                    // deterministic types.
+                    mlTargetCapability = (t as Ml.Governors.IMlGovernorBlockType)?.MlTargetCapability,
                     inputs = t.Inputs.Select(p => new { name = p.Name, kind = p.Kind.ToString(), description = p.Description }),
                     outputs = t.Outputs.Select(c => new
                     {
