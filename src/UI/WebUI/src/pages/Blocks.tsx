@@ -427,11 +427,12 @@ function CreateDialog({
                   {type.params.map((p) => (
                     p.name === 'stage' ? (
                       // ML authority stage (Epic 2B): a friendly selector over the numeric 0/1/2 param.
-                      // Locked while editing — the stage moves through the approval queue (Promote), not here.
+                      // Directly editable (Epic 2P decision №1): saving IS the human's explicit approval;
+                      // the Promote button (approval queue, 2C) remains the system-initiated path.
                       <TextField
-                        key={p.name} select label={t('dialog.authorityStage')} disabled={isEdit}
+                        key={p.name} select label={t('dialog.authorityStage')}
                         value={draft.params[p.name] ?? p.default}
-                        helperText={isEdit ? t('dialog.stageLocked') : paramDesc(draft.typeId, p)}
+                        helperText={isEdit ? t('dialog.stageDirect') : paramDesc(draft.typeId, p)}
                         onChange={(e) => onChange({
                           ...draft, params: { ...draft.params, [p.name]: Number(e.target.value) },
                         })}

@@ -1,4 +1,4 @@
-{
+﻿{
   "title": "Control blocks",
   "subtitle": "Stateful loops between rules and devices — filters, thermostats, sequencers. Each block is a virtual device you can chart, wire and command.",
   "errors": {
@@ -114,7 +114,7 @@
     "none": "None",
     "outputHelper": "Leave empty to only report (no actuation)",
     "authorityStage": "authority stage",
-    "stageLocked": "Change the stage via Promote (approval queue), not here",
+    "stageDirect": "Saving is your explicit approval of the stage; on drift the block auto-demotes back to Shadow",
     "outputsSummary": "Outputs: {{list}}",
     "writable": "writable"
   },

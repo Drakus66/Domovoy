@@ -15,6 +15,11 @@ interface Props {
   /** Look-back window in days (default 7). */
   days?: number;
   height?: number;
+  /** Target capability to score (Epic 2P); default = the server's default target. */
+  target?: string;
+  /** Model scope to score (Epic 2P): level ("zone" | "zone_kind") + key; default = global. */
+  level?: string;
+  scopeKey?: string;
 }
 
 /**
@@ -22,7 +27,7 @@ interface Props {
  * ("prediction vs fact") plus the held-out MAE / training RMSE. The honest signal a reviewer reads before
  * promoting an ML block from Shadow to an active stage (the approval queue itself is Epic 2C).
  */
-export default function ScorecardChart({ days = 7, height = 240 }: Props) {
+export default function ScorecardChart({ days = 7, height = 240, target, level, scopeKey }: Props) {
   const { t } = useTranslation('models');
   const theme = useTheme();
   const [data, setData] = useState<Backtest | null>(null);
@@ -33,16 +38,27 @@ export default function ScorecardChart({ days = 7, height = 240 }: Props) {
     setData(null);
     setError(false);
     mlApi
-      .backtest(days)
+      .backtest(days, target, level, scopeKey)
       .then((b) => { if (!cancelled) setData(b); })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
-  }, [days]);
+  }, [days, target, level, scopeKey]);
 
   if (error) return <Typography variant="caption" color="text.secondary">{t('chart.loadError')}</Typography>;
   if (data === null) return <Skeleton variant="rounded" height={height} />;
   if (!data.model) {
     return <Typography variant="caption" color="text.secondary">{t('chart.noModel')}</Typography>;
+  }
+  // Enum targets have no numeric series — the class hit-rate is the whole scorecard (Epic 2P).
+  if (data.points.length === 0 && data.hitRate != null) {
+    return (
+      <Stack direction="row" spacing={1}>
+        <Chip size="small" variant="outlined" color="primary"
+          label={t('chart.chip.hitRate', { value: (data.hitRate * 100).toFixed(0) })} />
+        <Chip size="small" variant="outlined"
+          label={t('chart.chip.metricScore', { metric: data.model.metric, value: data.model.holdoutScore.toFixed(3) })} />
+      </Stack>
+    );
   }
   if (data.points.length === 0) {
     return <Typography variant="caption" color="text.secondary">{t('chart.noTelemetry', { days })}</Typography>;

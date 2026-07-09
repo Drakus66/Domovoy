@@ -12,13 +12,17 @@ import {
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import CircleIcon from '@mui/icons-material/Circle';
 import ArrowRightAltRoundedIcon from '@mui/icons-material/ArrowRightAltRounded';
+import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import {
   CapabilityDevice, capabilityDevicesApi, isUnassignedZone, DEVICE_ARCHETYPES, effectiveArchetype,
 } from '../../api/capabilityDevices';
 import type { Zone } from '../../api/zones';
 import { historyApi, EventLogEntry } from '../../api/history';
 import { automationsApi } from '../../api/automations';
-import { blocksApi, PortBinding } from '../../api/blocks';
+import { blocksApi, BlockCatalogEntry, ControlBlock, PortBinding } from '../../api/blocks';
+import { mlApi, MlTask } from '../../api/ml';
+import { applicableTypesFor } from '../ml/mlHub';
+import MlApplyWizard from '../ml/MlApplyWizard';
 import CapabilityControl, { type CommandFn } from './CapabilityControls';
 import { describeDevice } from './deviceVisuals';
 import { fmtDateTime } from '../../i18n/format';
@@ -106,6 +110,35 @@ function DrawerBody({
     const id = e.ruleId || e.correlationId || '';
     return ruleNames[id] ?? (id ? t('aRule') : null);
   };
+
+  // ML applicability (Epic 2P): if a governor block type can command one of this device's writable
+  // capabilities, offer "connect a model" right here — the device-side entry into the apply wizard.
+  const [mlCtx, setMlCtx] = useState<{
+    catalog: BlockCatalogEntry[]; tasks: MlTask[]; blocks: ControlBlock[];
+    devices: CapabilityDevice[]; types: BlockCatalogEntry[];
+  } | null>(null);
+  const [applyOpen, setApplyOpen] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setMlCtx(null);
+    blocksApi.getCatalog()
+      .then(async (catalog) => {
+        const types = applicableTypesFor(catalog, device);
+        if (cancelled || types.length === 0) return;
+        const [tasks, blocks, devs] = await Promise.all([
+          mlApi.getTasks(), blocksApi.getBlocks(), capabilityDevicesApi.getDevices(),
+        ]);
+        if (!cancelled) setMlCtx({ catalog, tasks, blocks, devices: devs, types });
+      })
+      .catch(() => { if (!cancelled) setMlCtx(null); });
+    return () => { cancelled = true; };
+  }, [device.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Governor blocks already commanding this device (their bound output targets it).
+  const governorTypeIds = new Set((mlCtx?.types ?? []).map((x) => x.typeId.toLowerCase()));
+  const governedBy = (mlCtx?.blocks ?? []).filter((b) =>
+    governorTypeIds.has(b.typeId.toLowerCase())
+    && Object.values(b.outputs).some((o) => o.deviceId === device.id));
 
   // A control block appears here as a virtual device (Model "block/<type>"). Beyond its capabilities/state
   // (e.g. the setpoint), surface what it reads and what it drives so its role is visible (issue #5).
@@ -227,6 +260,29 @@ function DrawerBody({
           </Section>
         )}
 
+        {/* ML governance (Epic 2P): connect an applicable model to this device via the apply wizard. */}
+        {mlCtx && mlCtx.types.length > 0 && (
+          <Section title={t('ml.title')} action={
+            <Button size="small" startIcon={<AutoAwesomeRoundedIcon />} onClick={() => setApplyOpen(true)}>
+              {t('ml.connect')}
+            </Button>
+          }>
+            {governedBy.length > 0 ? (
+              <Stack spacing={0.5}>
+                {governedBy.map((b) => (
+                  <Stack key={b.id} direction="row" spacing={1} alignItems="center">
+                    <Typography variant="body2">{b.name}</Typography>
+                    <Chip size="small" variant="outlined" color="info"
+                      label={t(`ml.stage.${Math.round(b.params.stage ?? 0) >= 2 ? 'full' : Math.round(b.params.stage ?? 0) === 1 ? 'bounded' : 'shadow'}`)} />
+                  </Stack>
+                ))}
+              </Stack>
+            ) : (
+              <Typography variant="body2" color="text.secondary">{t('ml.hint')}</Typography>
+            )}
+          </Section>
+        )}
+
         {controls.length > 0 && (
           <Section title={t('sections.controls')} action={
             controls.some((c) => c.id === 'on_off')
@@ -308,6 +364,19 @@ function DrawerBody({
           )}
         </Section>
       </Box>
+
+      {mlCtx && (
+        <MlApplyWizard
+          open={applyOpen}
+          device={device}
+          tasks={mlCtx.tasks}
+          catalog={mlCtx.catalog}
+          devices={mlCtx.devices}
+          zones={zones}
+          onClose={() => setApplyOpen(false)}
+          onCreated={() => setApplyOpen(false)}
+        />
+      )}
 
       <Divider sx={{ mt: 2 }} />
       <Stack spacing={0.25} pt={1.5}>

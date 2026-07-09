@@ -1,50 +1,177 @@
 {
-  "title": "ML models",
-  "caption": "Learned models on the telemetry feature store (ML.NET). An ML control block serves the latest model (e.g. a learned setpoint schedule). Training needs accumulated history.",
+  "title": "ML",
+  "caption": "Training tasks: what the house learns, from which data, and where it is applied. The model proposes — the deterministic loop executes — the safety floor clamps.",
+  "empty": "No training tasks yet.",
+  "emptyHint": "Create a task: pick which quantity to predict (e.g. temperature) and the house starts learning from its history.",
   "actions": {
-    "trainNow": "Train now"
+    "trainAll": "Train all",
+    "newTask": "New task",
+    "apply": "Apply",
+    "applyHint": "Connect the model to a suitable device — create a governing ML block",
+    "trainNowHint": "Train this task now",
+    "editTask": "Task settings",
+    "deleteTask": "Delete the task (models remain and keep serving blocks)",
+    "disable": "Pause training (models keep serving)",
+    "enable": "Resume training",
+    "expand": "Details"
   },
-  "scope": {
-    "global": "global",
-    "kind": "kind: {{key}}",
-    "zone": "zone: {{key}}"
+  "trainDone": "Training finished: {{count}} task(s) succeeded.",
+  "trainPartial": "Succeeded: {{ok}}. Did not train: {{failed}}",
+  "confirmDeleteTask": "Delete task \"{{name}}\"? Training stops; already-trained models remain and keep serving blocks until you delete their versions.",
+  "errors": {
+    "load": "Failed to load ML tasks. Check ApiGateway / DbGateway connection.",
+    "train": "Training request failed — is the AutomationService reachable?",
+    "update": "Failed to save the task.",
+    "delete": "Failed to delete the task."
   },
   "card": {
-    "target": "target {{capability}} · {{count}} samples",
-    "backtest": " · backtest {{metric}} {{score}}",
-    "rmse": " · RMSE {{value}}",
-    "trained": " · trained {{when}}"
+    "quality": "{{metric}} {{score}}",
+    "qualityHint": "Honest held-out error ({{metric}}) — prediction vs fact on history the model never saw",
+    "models": "{{count}} model(s) · {{scopes}} scope(s)",
+    "trainedAt": "trained {{when}} · {{count}} samples",
+    "trainFailed": "did not train {{when}}: {{message}}",
+    "neverTrained": "not trained yet — training runs on schedule or via the button"
   },
-  "scorecard": {
-    "title": "Backtest scorecard",
-    "caption": "The loaded model's prediction vs actual telemetry — the signal to read before promoting an ML block from Shadow to an active stage (Epic 2B)."
+  "consumers": {
+    "none": "The model is not connected anywhere — press \"Apply\" to let it govern a device.",
+    "noTypes": "No governing ML block exists for this quantity — the model trains ahead of use (a governor will appear in the block catalog in future versions).",
+    "stageHint": "Authority stage — click to change (with confirmation)",
+    "pinnedHint": "The block is pinned to a specific model version and does not switch to newer ones",
+    "pinned": "v{{version}} 📌",
+    "disabled": "disabled",
+    "errors": {
+      "stage": "Failed to change the block's stage."
+    }
   },
-  "empty": "No models yet. Once enough telemetry has accrued, \"Train now\" registers the first model.",
-  "trained": "Trained \"{{name}}\" v{{version}} on {{count}} samples (RMSE {{rmse}}).",
-  "notTrained": "Not trained: {{message}}.",
-  "errors": {
-    "load": "Failed to load models. Check ApiGateway / DbGateway connection.",
-    "train": "Training request failed — is the AutomationService reachable?"
+  "stage": {
+    "shadow": "Shadow",
+    "bounded": "Bounded",
+    "full": "Full"
+  },
+  "stageDialog": {
+    "title": "Authority of \"{{name}}\"",
+    "stage": "Stage",
+    "hint": {
+      "shadow": "Shadow: the model only proposes values and accrues statistics — it commands nothing.",
+      "bounded": "Bounded: the model governs, but within a narrow band around the trusted baseline.",
+      "full": "Full: the model governs within the safety floor (the hard limits)."
+    },
+    "approval": "By confirming you explicitly grant the model this stage. On persistent disagreement with reality the block auto-demotes itself back to Shadow.",
+    "cancel": "Cancel",
+    "confirm": "Confirm"
+  },
+  "wizard": {
+    "title": "New training task",
+    "editTitle": "Task settings",
+    "caption": "What to predict, which history to learn from, and within which limits to propose values.",
+    "target": "What to predict",
+    "targetHelp": "A quantity from the live list of device capabilities",
+    "duplicate": "A task for this quantity already exists",
+    "noTemplate": "no template",
+    "check": {
+      "noTemplate": "No trainable template exists for {{kind}} quantities yet.",
+      "enough": "Enough data: {{samples}} records over {{days}}d — ready to train.",
+      "notEnough": "Not enough data yet: {{samples}} of {{required}} required. You can still create the task — training starts once history accrues.",
+      "zones": "Zone models: {{ready}} of {{total}} zones/kinds ready."
+    },
+    "name": "Name",
+    "nameHelp": "Empty — the quantity name is used",
+    "windowDays": "History window, days",
+    "minSamples": "Min samples",
+    "intervalHours": "Training interval, h",
+    "clampMin": "Never propose below",
+    "clampMax": "Never propose above",
+    "clampHelp": "Soft prediction limits. The block's hard safety floor always applies.",
+    "zoneModels": "Zone models",
+    "keepVersions": "Keep versions",
+    "cancel": "Cancel",
+    "save": "Save",
+    "create": "Create",
+    "errors": {
+      "create": "Failed to create the task.",
+      "update": "Failed to save the task."
+    }
+  },
+  "apply": {
+    "titleFromTask": "Apply \"{{name}}\" to a device",
+    "titleFromDevice": "Connect a model to \"{{name}}\"",
+    "steps": {
+      "where": "Where",
+      "signal": "Signal",
+      "confirm": "Confirm"
+    },
+    "noTypes": "No governing ML block types suit this device.",
+    "governorType": "Governor block type",
+    "feedingTask": "Models come from task \"{{name}}\"",
+    "taskTrained": "trained",
+    "taskNotTrained": "not trained yet",
+    "createTask": "Create task",
+    "noTask": "No training task exists for {{target}} yet — nothing trains the model.",
+    "noDevices": "No device in the house exposes a writable {{capability}} capability.",
+    "noDevicesHint": "The model proposes a value to a deterministic loop, which executes it. Create the loop first (e.g. a thermostat block or the climate_loop composite) — its virtual device becomes the target.",
+    "openBlocks": "Open blocks",
+    "device": "Device",
+    "deviceHelp": "Only devices with a writable {{capability}} capability are shown",
+    "noZone": "no zone",
+    "signalCaption": "The drift monitor compares the model's proposal with the real signal. Pick where to read it from.",
+    "noSignal": "No device provides a {{capability}} signal — the drift monitor will not work.",
+    "signal": "Source of the {{capability}} signal",
+    "sameDevice": "same device",
+    "name": "Block name",
+    "defaultName": "{{type}}: {{device}}",
+    "stage": "Initial stage",
+    "stageHelp": "Shadow is recommended: the model proposes first, you read prediction-vs-fact and raise the stage.",
+    "summary": "The block will command {{capability}} of \"{{device}}\", checking against the \"{{signal}}\" signal.",
+    "clamps": "Task limits: from {{min}} to {{max}}.",
+    "cancel": "Cancel",
+    "back": "Back",
+    "next": "Next",
+    "create": "Create block",
+    "created": "The ML block was created — it appears among consumers and on the Blocks page.",
+    "errors": {
+      "create": "Failed to create the block."
+    }
+  },
+  "detail": {
+    "dataTitle": "Data over the task window",
+    "dataHint": "{{samples}} records ({{required}} required)",
+    "modelsTitle": "Model versions",
+    "noModels": "No models yet — train the task.",
+    "modelLine": "{{metric}} {{score}} · {{count}} samples · {{when}}",
+    "pinnedChip": "pinned",
+    "pinAction": "Pin this version to a block",
+    "deleteAction": "Delete version",
+    "confirmDelete": "Delete \"{{name}}\" v{{version}}?",
+    "deletePinnedWarn": "Warning: this version is pinned by a block — after deletion it falls back to the latest version.",
+    "scorecardTitle": "Prediction vs fact",
+    "pinTo": "Pin v{{version}} to \"{{name}}\"",
+    "currentPin": "currently pinned to v{{version}}",
+    "followsLatest": "currently follows the latest version",
+    "unpin": "Unpin (follow the latest version)",
+    "errors": {
+      "delete": "Failed to delete the model version.",
+      "pin": "Failed to pin the version."
+    }
+  },
+  "scope": {
+    "global": "whole house",
+    "kind": "zone kind: {{key}}",
+    "zone": "zone: {{key}}"
   },
   "chart": {
     "loadError": "Could not load the backtest.",
     "noModel": "No model loaded yet — train one first.",
-    "noTelemetry": "No telemetry in the last {{days}}d to score against.",
+    "noTelemetry": "No history in the last {{days}}d to score against.",
     "chip": {
       "mae": "Backtest MAE {{value}}",
       "rmse": "Train RMSE {{value}}",
-      "points": "{{count}} points · {{days}}d"
+      "points": "{{count}} points · {{days}}d",
+      "hitRate": "class hit-rate: {{value}}%",
+      "metricScore": "{{metric}} {{value}}"
     },
     "legend": {
       "actual": "actual",
       "predicted": "predicted"
     }
-  },
-  "classify": {
-    "action": "Classify devices",
-    "done": "Trained on {{trainedOn}} device(s); {{count}} disagreement(s).",
-    "notTrained": "Not classified: {{note}}.",
-    "error": "Failed to classify devices.",
-    "reviewTitle": "Archetype review candidates (model disagrees)"
   }
 }

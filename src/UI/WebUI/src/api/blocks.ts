@@ -56,6 +56,11 @@ export interface BlockCatalogEntry {
   typeId: string;
   title: string;
   description: string;
+  /**
+   * For ML governor types (Epic 2P): the ML target capability the type consumes. Joins an ML task to its
+   * consumer block types/instances and a device to the models applicable to it. Null for deterministic types.
+   */
+  mlTargetCapability?: string | null;
   inputs: { name: string; kind: string; description: string }[];
   outputs: { id: string; kind: string; unit?: string | null; writable: boolean }[];
   params: { name: string; default: number; unit?: string | null; min?: number | null; max?: number | null; description: string }[];

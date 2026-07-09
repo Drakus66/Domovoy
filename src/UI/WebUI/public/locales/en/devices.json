@@ -1,4 +1,4 @@
-{
+﻿{
   "title": "Devices",
   "stats": {
     "online": "online",
@@ -110,6 +110,20 @@
   "value": {
     "yes": "Yes",
     "no": "No"
+  },
+  "ml": {
+    "title": "ML governance",
+    "connect": "Connect a model",
+    "hint": "A trained model can govern this device — connect it and the block starts in Shadow.",
+    "stage": { "shadow": "Shadow", "bounded": "Bounded", "full": "Full" }
+  },
+  "classify": {
+    "action": "Check types",
+    "actionHint": "The ML classifier reviews device types and lists disagreements with the current ones",
+    "done": "Trained on {{trainedOn}} device(s); {{count}} disagreement(s).",
+    "notTrained": "Not classified: {{note}}.",
+    "error": "Failed to classify devices.",
+    "reviewTitle": "Type review candidates (model disagrees)"
   },
   "chart": {
     "loadError": "Could not load history.",
