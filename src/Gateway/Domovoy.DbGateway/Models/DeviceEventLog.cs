@@ -74,6 +74,8 @@ public static class TriggerSources
     public const string Rule = "rule";
     public const string Device = "device";
     public const string Ml = "ml";
+    /// <summary>A control block (Epic 1H) — e.g. a thermostat/sequencer loop driving a device.</summary>
+    public const string Block = "block";
 }
 
 /// <summary>Well-known event-log kinds.</summary>

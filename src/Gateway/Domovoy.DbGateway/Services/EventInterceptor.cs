@@ -488,6 +488,9 @@ public class EventInterceptor : BackgroundService
     {
         if (string.IsNullOrEmpty(source)) return TriggerSources.User;
         var s = source.ToLowerInvariant();
+        // Control-block actuation is published as source "block:{id}" (Epic 1H BlockRuntime). Attribute it
+        // to the block, not the user, so a thermostat/sequencer loop is distinguishable from manual actions.
+        if (s.StartsWith("block")) return TriggerSources.Block;
         if (s.Contains("automation") || s.Contains("rule")) return TriggerSources.Rule;
         if (s.Contains("ml")) return TriggerSources.Ml;
         // Commands today originate from user actions through the gateway.

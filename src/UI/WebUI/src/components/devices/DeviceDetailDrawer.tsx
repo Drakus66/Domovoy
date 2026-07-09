@@ -25,7 +25,7 @@ import { fmtDateTime } from '../../i18n/format';
 import TelemetryChart from '../charts/TelemetryChart';
 
 const TRIGGER_COLOR: Record<string, 'primary' | 'secondary' | 'default' | 'info'> = {
-  user: 'primary', rule: 'secondary', ml: 'info', device: 'default',
+  user: 'primary', rule: 'secondary', ml: 'info', device: 'default', block: 'info',
 };
 
 const fmtValue = (v: unknown): string => {
