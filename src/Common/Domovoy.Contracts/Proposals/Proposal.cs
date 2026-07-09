@@ -57,6 +57,11 @@ public class Proposal
     /// <summary>ModelSelection: model version to pin to the block on approve (patches <c>Params["model_version"]</c>; 0 = latest).</summary>
     public int? ModelVersion { get; set; }
 
+    // --- kind: MlTask (create an ML training task, Epic 2P) ---
+
+    /// <summary>MlTask: target capability the proposed training task would learn. Approve → creates the task in <c>ml_tasks</c>.</summary>
+    public string? MlTaskTarget { get; set; }
+
     // --- provenance / scorecard (model-backed proposals) ---
 
     /// <summary>Model id backing this proposal (BlockPromotion/ModelSelection) — links to the scorecard.</summary>
@@ -92,6 +97,9 @@ public enum ProposalKind
 
     /// <summary>Pin a specific model version to a block instance (justified by 2B scorecard).</summary>
     ModelSelection,
+
+    /// <summary>Create an ML training task for a capability with enough history (Epic 2P auto-suggestions).</summary>
+    MlTask,
 }
 
 /// <summary>Proposal lifecycle. Only <see cref="Proposed"/> is actionable; approve/reject are terminal.</summary>

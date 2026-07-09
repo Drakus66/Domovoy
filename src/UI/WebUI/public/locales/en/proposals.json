@@ -1,4 +1,4 @@
-{
+﻿{
   "title": "Proposals",
   "caption": "Everything I would like to change, gathered in one queue — ML block promotions, model pins and proposed rules. Nothing activates without your approval (Epic 2C). Rules are justified by replay, model-backed proposals by the backtest scorecard.",
   "filter": {
@@ -17,7 +17,8 @@
   "kind": {
     "Rule": "Rule",
     "BlockPromotion": "Block promotion",
-    "ModelSelection": "Model selection"
+    "ModelSelection": "Model selection",
+    "MlTask": "ML task"
   },
   "stageName": {
     "shadow": "Shadow",
@@ -26,7 +27,8 @@
   },
   "provenance": {
     "stage": "stage {{from}} → {{to}}",
-    "pinModel": "pin model v{{version}}"
+    "pinModel": "pin model v{{version}}",
+    "mlTask": "start learning '{{target}}'"
   },
   "meta": {
     "proposed": "proposed {{when}}",

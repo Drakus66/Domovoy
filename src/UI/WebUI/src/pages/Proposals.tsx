@@ -126,6 +126,7 @@ export default function Proposals() {
   const provenance = (p: Proposal): string | null => {
     if (p.kind === 'BlockPromotion') return t('provenance.stage', { from: stageName(p.fromStage), to: stageName(p.toStage) });
     if (p.kind === 'ModelSelection') return t('provenance.pinModel', { version: p.modelVersion ?? 0 });
+    if (p.kind === 'MlTask') return t('provenance.mlTask', { target: p.mlTaskTarget ?? '' });
     return null;
   };
 

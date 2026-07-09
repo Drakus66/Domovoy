@@ -4,7 +4,7 @@
 
 import apiClient from './client';
 
-export type ProposalKind = 'Rule' | 'BlockPromotion' | 'ModelSelection';
+export type ProposalKind = 'Rule' | 'BlockPromotion' | 'ModelSelection' | 'MlTask';
 export type ProposalStatus = 'Proposed' | 'Approved' | 'Rejected';
 
 /** A candidate change awaiting approval (matches Domovoy.Contracts Proposal, Epic 2C). */
@@ -20,6 +20,8 @@ export interface Proposal {
   fromStage?: number | null;
   toStage?: number | null;
   modelVersion?: number | null;
+  /** MlTask: target capability the proposed training task would learn (Epic 2P). */
+  mlTaskTarget?: string | null;
   modelId?: string | null;
   metric?: string | null;
   score?: number | null;

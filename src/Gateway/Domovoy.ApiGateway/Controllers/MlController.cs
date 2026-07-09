@@ -97,6 +97,11 @@ public class MlController : ControllerBase
         return Forward("automation-service", HttpMethod.Get, $"api/ml/data-check?{query}", ct);
     }
 
+    /// <summary>Scan for ML-task candidates now (Epic 2P): consumable targets with enough history → 2C queue.</summary>
+    [HttpPost("suggest-tasks")]
+    public Task<IActionResult> SuggestTasks(CancellationToken ct)
+        => Forward("automation-service", HttpMethod.Post, "api/ml/suggest-tasks", ct);
+
     /// <summary>ML archetype classifier (Epic 2D): train on the device population, list disagreements.</summary>
     [HttpPost("classify-archetypes")]
     public Task<IActionResult> ClassifyArchetypes(CancellationToken ct)

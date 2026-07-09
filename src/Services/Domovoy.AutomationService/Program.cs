@@ -95,6 +95,8 @@ internal static class Program
             builder.Services.AddHostedService(sp => sp.GetRequiredService<MlTrainingService>());
             builder.Services.AddSingleton<RuleSuggester>();         // 2C: heuristic rule proposer (stub-precursor to 2F)
             builder.Services.AddHostedService(sp => sp.GetRequiredService<RuleSuggester>());
+            builder.Services.AddSingleton<Ml.MlTaskSuggester>();    // 2P: propose training tasks for consumable targets
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Ml.MlTaskSuggester>());
             builder.Services.AddSingleton<Ml.ArchetypeAdvisor>();  // 2D: ML.NET archetype classifier (advisory)
             builder.Services.AddSingleton<Services.Discovery.DiscoveryEngine>(); // 2F: full MI/FDR pattern-discovery funnel
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Services.Discovery.DiscoveryEngine>());
@@ -140,6 +142,10 @@ internal static class Program
             // Run the heuristic rule proposer now (roadmap Epic 2C): mine the event-log, queue candidates.
             app.MapPost("/api/proposals/suggest", async (RuleSuggester suggester, CancellationToken ct) =>
                 Results.Ok(await suggester.SuggestOnceAsync(ct)));
+
+            // Scan for ML-task candidates now (roadmap Epic 2P): consumable targets with enough history → queue.
+            app.MapPost("/api/ml/suggest-tasks", async (Ml.MlTaskSuggester suggester, CancellationToken ct) =>
+                Results.Ok(await suggester.ScanOnceAsync(ct)));
 
             // Run the pattern-discovery engine now (roadmap Epic 2F): MI/FDR funnel over history → queued proposals.
             app.MapPost("/api/discovery/scan", async (Services.Discovery.DiscoveryEngine engine, CancellationToken ct) =>
