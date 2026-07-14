@@ -27,6 +27,7 @@ public sealed class MlSetpointType : IBlockType
     }
 
     public string TypeId => "ml_setpoint";
+    public string Category => Blocks.BlockCategories.Ml;
     public string Title => "ML setpoint (learned schedule)";
     public string Description => "Emits a temperature setpoint predicted by the learned schedule model (Epic 2A).";
 

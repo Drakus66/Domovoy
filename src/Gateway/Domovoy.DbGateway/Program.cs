@@ -121,6 +121,7 @@ internal static class Program
             app.MapAutomationEndpoints();
             app.MapModeEndpoints();
             app.MapBlockEndpoints();
+            app.MapBlockStateEndpoints();
             app.MapActivityEndpoints();
             app.MapHomeStoryEndpoints();
             app.MapNarrativeEntityEndpoints();

@@ -34,6 +34,43 @@ public sealed class BlockCatalog
             new IrrigationSequencerType(),
             new SunGateType(sun),                                     // Epic 1D: outdoor lighting by sun
             new MlSetpointType(models, o.SetpointMin, o.SetpointMax), // Epic 2A: ML-driven setpoint
+            new MlPredictorType(models),                              // Epic 2Q: ML prediction as a source signal
+
+            // Epic 2Q: generalized primitives — small reusable building blocks that compose into any control
+            // loop (a thermostat = setpoint → hysteresis, etc.), replacing bespoke domain blocks over time.
+            new ComparatorType(),
+            new HysteresisType(),
+            new WindowType(),
+            new LogicType(),
+            new SelectType(),
+            new LinearMapType(),
+            new ClampType(),
+            new DeadbandType(),
+            new RateLimiterType(),
+            new AggregateType(),
+            new MinDwellType(),
+            new PidType(),
+
+            // Epic 2Q Phase 2: time/state primitives (delays, pulses, edges, latches, counters, windowed filters).
+            new OnDelayType(),
+            new OffDelayType(),
+            new PulseType(),
+            new IntervalType(),
+            new EdgeType(),
+            new LatchType(),
+            new CounterType(),
+            new SampleHoldType(),
+            new DebounceType(),
+            new MovingAverageType(),
+            new MedianFilterType(),
+
+            // Epic 2Q Phase 3: control ramp + the custom expression (script) block.
+            new RampType(),
+            new ExpressionType(),
+
+            // Presence → home mode as a user-owned block (replaces the hardcoded 1G PresenceMonitor):
+            // household policy lives in the block layer, not in platform code.
+            new PresenceModeType(),
         };
 
         // Epic 2I: ML governors are catalog-driven instances of generic types — a new ML-governed output is a
@@ -78,6 +115,35 @@ public sealed class BlockCatalog
                     out zone1 = z1.on_off
                     out zone2 = z2.on_off
                     out zone3 = z3.on_off
+                    """,
+            },
+
+            // Epic 2Q templates: recipes built from the generalized primitives, showing that the domain blocks
+            // are decomposable (a thermostat = smoothing → hysteresis) and that string options flow through the DSL.
+            new()
+            {
+                TypeId = "smoothed_sensor",
+                Title = "Smoothed sensor",
+                Description = "Rejects spikes with a median filter, then smooths with an EWMA — a clean signal from a noisy sensor.",
+                Dsl = "input(value) |> median_filter(window=5) |> ewma_filter(tau=120)",
+            },
+            new()
+            {
+                TypeId = "cooling_relay",
+                Title = "Cooling relay (hysteresis)",
+                Description = "Generic cooling demand: turns on above the high threshold and off below the low, using the inverted hysteresis primitive.",
+                Dsl = "input(temperature) |> hysteresis(high=25, low=24, invert=true)",
+            },
+            new()
+            {
+                TypeId = "smart_thermostat",
+                Title = "Thermostat (from primitives)",
+                Description = "The classic thermostat rebuilt from primitives: EWMA smoothing → hysteresis relay. Bind heat to a boiler/valve.",
+                Dsl = """
+                    in temperature
+                    f = ewma_filter(tau=300) <- temperature
+                    h = hysteresis(high=21.5, low=20.5) <- f.value
+                    out heat = h.state
                     """,
             },
         };

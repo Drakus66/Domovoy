@@ -48,6 +48,7 @@ public sealed class MlSelectorGovernorType : IBlockType, IMlGovernorBlockType
     }
 
     public string TypeId { get; }
+    public string Category => BlockCategories.Ml;
     public string Title { get; }
     public string Description { get; }
 

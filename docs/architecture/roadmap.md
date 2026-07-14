@@ -1407,6 +1407,33 @@ S3 помечен future. Проверяет систему плагинов (1C
 
 ---
 
+### Эпик 2Q. Обобщённые блоки: примитивы + PID + скрипт-блок + шаблоны ✅ (Фазы 0–4 реализованы, ветка `epic-2p-ml-tasks`; НЕ прогонялось вживую)
+
+> **✅ Реализовано (Фазы 0–4, не прогнано вживую vs RabbitMQ/Mongo).** Платформа: типизированные `Options`/опц. порты (default-члены интерфейсов), катал. DTO + TS-контракт. **25 обобщённых блоков** в `Blocks/GenericBlocks.cs` + `TimeStateBlocks.cs` + `PidBlock.cs` + `ExpressionBlock.cs`: comparator, ⭐hysteresis, window, logic, select, linear_map, clamp, deadband, rate_limiter, aggregate, min_dwell, on_delay/off_delay, pulse, interval, edge, latch, counter, sample_hold, debounce, moving_average, median_filter, ramp, pid (feedforward+пресеты+анти-windup), expression (свой вычислитель `Expressions/ExpressionEngine.cs`, ~350 строк, 0 зависимостей). Источник `ml_predictor`; дедуп governor'а в `MlGovernorCore`+`DriftWindow`. **Персистентность состояния** (`block_state` коллекция + `BlockStateStore` + `StateCoerce` + snapshot/restore в `BlockRuntime`). DSL string-опции + `CompositeNode.Options`; шаблоны-композиты (smoothed_sensor, cooling_relay, smart_thermostat). WebUI: секция Options (enum/bool/script) в форме блока. **110 .NET блок-тестов + 96 WebUI-тестов зелёные.** Остаток (хвост): проброс параметров композита наружу (шаблоны пока с baked-дефолтами, как climate_loop), PID-автотюнинг, галерея шаблонов в UI, live-прогон.
+>
+> **Проблема.** Текущий набор блоков переспециализирован (`thermostat`, `co2_ventilation`, `sun_gate`, `irrigation_sequencer`). Одни и те же идеи (гистерезис, порог, таймер, min-dwell) переписаны вручную в каждом. Обобщённый ровно один — `ewma_filter`. Нужен слой **примитивов** (по образцу EMA: любой вход → обработка → выход, привязываемый к устройству/другому блоку), из которых пользователь собирает любые контуры; поверх — понятные **шаблоны** (готовые рецепты), чтобы не собирать с нуля.
+>
+> **Два включающих изменения платформы (Фаза 0).** (1) **Типизированные `Options`** — `ControlBlock.Options: Dictionary<string,string>` + `BlockOptionSpec(Name, Kind: enum/bool/text, Values, Default)` в SDK + `IBlockContext.Option(key)`; сейчас параметры только `double`, из-за чего оператор компаратора/логики/агрегатора негде хранить. Аддитивно, через default-члены интерфейсов (не ломает существующие блоки/фейки). (2) **Опциональные порты** — флаг `BlockPortSpec.Optional` (для второго входа PID `ff`, `inhibit` и т.п.). (3, отложено в Фазу 4) проброс `Options` в узлы композита + расширение DSL, иначе шаблоны из option-блоков не собрать.
+>
+> **Каталог примитивов (по слоям обработки).**
+> - **Источники:** `constant`, `setpoint` (writable — уставка, которую двигают UI/сценарий/ML), `ml_predictor` (предиктор-делегат как блок-источник).
+> - **Кондиционирование (Number→Number):** `ewma_filter` ✅, `moving_average`, `median_filter`, `rate_limiter` (slew), `deadband`, `debounce`, `sample_hold`.
+> - **Математика:** `linear_map` (gain/offset), `clamp`, `aggregate` (min/max/sum/avg), `expression` (скрипт, см. ниже).
+> - **Сравнение/логика:** ⭐`hysteresis` (обобщённый релейный из примера — заменяет гистерезис в термостате/CO₂/toggle), `comparator`, `window`, `logic` (and/or/xor/nand/nor), `select` (mux), `priority`.
+> - **Время/состояние:** `on_delay`/`off_delay` (TON/TOFF), `pulse`, `interval`, `edge`, `latch` (SR), `min_dwell` (анти-дребезг), `counter`, `time_gate`.
+> - **Регулирование:** `hysteresis`, ⭐`pid`, `ramp`.
+> - **ML-надстройка:** обобщённый `ml_governor` (стадии Shadow→Bounded→Full + drift + clamp вокруг любого предложенного значения; убирает дубль `MlSelectorGovernor`).
+>
+> **PID (в v1, а не поздняя фаза).** Выход = мощность/позиция 0..100 % (диммер/клапан/ПЧ/ТЭН-ШИМ) — основа энергосбережения и «умнее ML» (модель предлагает **уставку**, PID отрабатывает по мощности). Обвязка обязательна: анти-windup (back-calculation), клампы `outMin/outMax`, derivative-on-measurement (без kick), безопасный дефолт при пропаже `pv`, `dt`-корректность. **Опциональный второй вход `ff` (feedforward)** — учёт улицы/возмущения (`out = clamp(PID(sp−pv) + ffGain·ff)`); погодозависимость/каскад/много входов — композицией (`linear_map`/`expression → pid`), а не портами. **Пресеты-профили** вместо сырых kp/ki/kd для обычного пользователя: 🕊️ Мягкий / ⚖️ Сбалансированный (деф.) / ⚡ Быстрый / 🌱 Экономный / 🔧 Вручную — карточки с человекочитаемым описанием; конкретные числа — из таблиц под применение (живут в шаблоне). **Автотюнинг** (релейный тест) — отдельной поздней фазой; `preset` спроектирован так, чтобы автотюн стал ещё одним источником чисел.
+>
+> **Скрипт-блок `expression` (кастомные блоки псевдоязыком).** Собственный **крохотный вычислитель** (рекурсивный спуск, ~300–500 строк, 0 зависимостей — не задевает лицензионное правило; НЕ Roslyn/JS-движок). По построению не может стать «супер-языком»: нет циклов/определений функций/присваиваний в состояние. Multi-line: строки `OUTn = <expr>` и `let tmp = <expr>`; входы `IN1..INk`; выходы `OUT1..OUTm` (Number/Bool). Операторы `+ - * / %`, сравнения, `&& || !`, тернарник; функции-белый-список (`min max abs clamp round floor ceil sqrt pow avg`); спец-встроенные `prev(OUTn)` и `dt` (фильтр/гистерезис в одну строку). Жёсткие лимиты (строк/узлов AST), парсинг один раз → кеш AST, `NaN/Inf`→удержать/дефолт. Сохраняется и как **именованный кастомный тип** (в Mongo рядом с композитами). Компромисс: блок непрозрачен для графа/объяснимости (1F) → позиционируется как escape-hatch.
+>
+> **Шаблоны (Фаза 4).** Доменные блоки становятся рецептами-композитами из примитивов с вынесенными параметрами: Термостат (реле), Термостат ПИД (мощность), Погодозависимый термостат (`pid`+ff+кривая), Вентиляция по CO₂/влажности, Освещение (солнце/время/присутствие), Полив с блокировкой по дождю, Сглаженный датчик, Энергоменеджер (лимит мощности), ML-регулятор. Старые `TypeId` — алиасы шаблонов (существующие инстансы не ломаются). В UI — галерея шаблонов + «разобрать на примитивы».
+>
+> **Фазы и DoD.** **Ф0** — платформа (Options/Optional/`Option()`, катал. DTO, TS-контракт). **Ф1** — stateless-примитивы (comparator, hysteresis, linear_map, clamp, logic, select, window, aggregate, deadband, rate_limiter, min_dwell) + `pid`, юнит-тесты. **Ф2** — время/состояние (delay/pulse/interval/edge/latch/counter/moving_average/median/sample_hold) + персистентность `State` между рестартами. **Ф3** — `expression`-движок + `ramp` + обобщённый `ml_governor` + `ml_predictor`-источник. **Ф4** — шаблоны + WebUI (форма Options, редактор скрипта, галерея шаблонов). DoD каждой фазы: `dotnet test` зелёный + WebUI build/тесты, где затронут UI.
+
+---
+
 ## Сводная карта фаз
 
 | Фаза | Горизонт | Ключевой результат | Главные компоненты |

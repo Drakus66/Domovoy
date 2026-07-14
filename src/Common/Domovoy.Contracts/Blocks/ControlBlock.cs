@@ -41,6 +41,13 @@ public class ControlBlock
     /// <summary>Numeric parameters keyed by the block type's parameter name (e.g. <c>tau</c>, <c>setpoint</c>).</summary>
     public Dictionary<string, double> Params { get; set; } = new();
 
+    /// <summary>
+    /// Non-numeric options keyed by the block type's option name (roadmap Epic 2Q) — enum/bool/text values that
+    /// don't fit <see cref="Params"/> (numeric-only), e.g. a comparator's <c>op</c>, a PID's <c>preset</c>, an
+    /// expression block's <c>script</c>. Empty for the numeric-only built-ins.
+    /// </summary>
+    public Dictionary<string, string> Options { get; set; } = new();
+
     /// <summary>Input port name → the device+capability it reads from (composition / wiring).</summary>
     public Dictionary<string, PortBinding> Inputs { get; set; } = new();
 

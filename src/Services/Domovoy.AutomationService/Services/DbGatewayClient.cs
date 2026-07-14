@@ -58,6 +58,47 @@ public sealed class DbGatewayClient
         }
     }
 
+    /// <summary>Persisted block runtime state (Epic 2Q, Phase 2), or null if the gateway is unreachable.</summary>
+    public async Task<List<BlockStateRecord>?> GetBlockStatesAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<List<BlockStateRecord>>("api/block-state", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load block state from DbGateway");
+            return null;
+        }
+    }
+
+    /// <summary>Snapshot one block's state (Epic 2Q, Phase 2). Best-effort — a failure just delays persistence.</summary>
+    public async Task SaveBlockStateAsync(string blockId, string stateJson, CancellationToken ct)
+    {
+        try
+        {
+            await _http.PutAsJsonAsync($"api/block-state/{Uri.EscapeDataString(blockId)}",
+                new BlockStateRecord { Id = blockId, StateJson = stateJson }, Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not persist state for block {BlockId}", blockId);
+        }
+    }
+
+    /// <summary>Drop a removed block's persisted state (Epic 2Q, Phase 2).</summary>
+    public async Task DeleteBlockStateAsync(string blockId, CancellationToken ct)
+    {
+        try
+        {
+            await _http.DeleteAsync($"api/block-state/{Uri.EscapeDataString(blockId)}", ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not delete state for block {BlockId}", blockId);
+        }
+    }
+
     /// <summary>Current home mode (1G), or null if the gateway is unreachable.</summary>
     public async Task<string?> GetModeAsync(CancellationToken ct)
     {

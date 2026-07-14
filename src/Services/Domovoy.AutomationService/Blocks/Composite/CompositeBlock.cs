@@ -26,6 +26,8 @@ public sealed class CompositeBlockType : IBlockType
     }
 
     public string TypeId => _def.TypeId;
+    // Composites are ready-made recipes — surfaced under "templates" in the authoring picker (Epic 2Q).
+    public string Category => BlockCategories.Template;
     public string Title => _def.Title;
     public string Description => _def.Description;
     public IReadOnlyList<BlockPortSpec> Inputs { get; }
@@ -111,6 +113,9 @@ public sealed class CompositeBlock : IBlock
         };
 
         public double Param(string key, double fallback) => _node.Params.TryGetValue(key, out var v) ? v : fallback;
+
+        // Epic 2Q: node string options (enum/bool/text), so option-driven primitives work inside composites.
+        public string? Option(string key) => _node.Options is not null && _node.Options.TryGetValue(key, out var v) ? v : null;
 
         // Commands to the composite's virtual device reach a node output of the same id (e.g. a setpoint).
         public object? Commanded(string capabilityId) => _parent.Commanded(capabilityId);
