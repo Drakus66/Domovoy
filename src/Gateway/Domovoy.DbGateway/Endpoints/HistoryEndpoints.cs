@@ -28,7 +28,7 @@ public static class HistoryEndpoints
     /// <summary>Flattened event-log record for the client (Meta unpacked, no ObjectId).</summary>
     public record EventLogDto(
         DateTime Timestamp, string DeviceId, string ZoneId, string Kind, string CapabilityId,
-        object? OldValue, object? NewValue, string TriggerSource,
+        object? OldValue, object? NewValue, string TriggerSource, string? TriggerId,
         string? RuleId, string? DecisionId, string? Mode, string? CorrelationId);
 
     /// <summary>Flattened telemetry sample for the client.</summary>
@@ -72,7 +72,7 @@ public static class HistoryEndpoints
 
             return Results.Ok(docs.Select(d => new EventLogDto(
                 d.Timestamp, d.Meta.DeviceId, d.Meta.ZoneId, d.Meta.Kind, d.CapabilityId,
-                d.OldValue, d.NewValue, d.TriggerSource, d.RuleId, d.DecisionId, d.Mode, d.CorrelationId)));
+                d.OldValue, d.NewValue, d.TriggerSource, d.TriggerId, d.RuleId, d.DecisionId, d.Mode, d.CorrelationId)));
         });
 
         // GET /api/telemetry?deviceId=&capabilityId=&zoneId=&from=&to=&limit=&format=json|csv

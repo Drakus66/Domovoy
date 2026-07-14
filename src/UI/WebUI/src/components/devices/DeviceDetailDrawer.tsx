@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import i18n from 'i18next';
 import {
   Box, Drawer, Stack, Typography, IconButton, Chip, Divider, Button,
-  TextField, MenuItem, Tooltip,
+  TextField, MenuItem,
 } from '@mui/material';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import CircleIcon from '@mui/icons-material/Circle';
@@ -27,10 +27,7 @@ import CapabilityControl, { type CommandFn } from './CapabilityControls';
 import { describeDevice } from './deviceVisuals';
 import { fmtDateTime } from '../../i18n/format';
 import TelemetryChart from '../charts/TelemetryChart';
-
-const TRIGGER_COLOR: Record<string, 'primary' | 'secondary' | 'default' | 'info'> = {
-  user: 'primary', rule: 'secondary', ml: 'info', device: 'default', block: 'info',
-};
+import TriggerChip from '../common/TriggerChip';
 
 const fmtValue = (v: unknown): string => {
   if (v === null || v === undefined || v === '') return '—';
@@ -105,10 +102,18 @@ function DrawerBody({
       .catch(() => { if (!cancelled) setRuleNames({}); });
     return () => { cancelled = true; };
   }, []);
-  const explainRule = (e: EventLogEntry): string | null => {
-    if (e.triggerSource !== 'rule') return null;
-    const id = e.ruleId || e.correlationId || '';
-    return ruleNames[id] ?? (id ? t('aRule') : null);
+  // Concrete initiator behind a history row (attribution, Epic 2G tail): id from the structured
+  // TriggerId (rule rows fall back to the legacy correlationId), name resolved best-effort from what
+  // the drawer already has loaded (rules, ML-context blocks, this device itself).
+  const triggerInfo = (e: EventLogEntry): { id: string | null; name: string | null } => {
+    const id = e.triggerId || (e.triggerSource === 'rule' ? (e.ruleId || e.correlationId || null) : null);
+    let name: string | null = null;
+    if (id) {
+      if (e.triggerSource === 'rule') name = ruleNames[id] ?? null;
+      else if (e.triggerSource === 'block') name = mlCtx?.blocks.find((b) => b.id === id)?.name ?? null;
+      else if (id === device.id) name = device.name;
+    }
+    return { id, name };
   };
 
   // ML applicability (Epic 2P): if a governor block type can command one of this device's writable
@@ -347,14 +352,10 @@ function DrawerBody({
                     </Stack>
                   )}
                   <Box flex={1} />
-                  {explainRule(e) ? (
-                    <Tooltip title={t('historyCausedBy', { rule: explainRule(e) })}>
-                      <Chip size="small" variant="outlined" color="secondary" label={t('historyVia', { rule: explainRule(e) })} />
-                    </Tooltip>
-                  ) : (
-                    <Chip size="small" variant="outlined" label={e.triggerSource}
-                      color={TRIGGER_COLOR[e.triggerSource] ?? 'default'} />
-                  )}
+                  {(() => {
+                    const { id, name } = triggerInfo(e);
+                    return <TriggerChip kind={e.triggerSource} id={id} name={name} />;
+                  })()}
                   <Typography variant="caption" color="text.secondary">
                     {fmtDateTime(e.timestamp)}
                   </Typography>

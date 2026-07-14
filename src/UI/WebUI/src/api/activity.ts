@@ -4,8 +4,11 @@
 
 import apiClient from './client';
 
-export type ActivitySource = 'device' | 'automation' | 'system';
+export type ActivitySource = 'device' | 'automation' | 'block' | 'system';
 export type ActivitySeverity = 'info' | 'warn' | 'error';
+
+/** Coarse initiator bucket behind an activity row ("who kind of did it"). */
+export type TriggerKind = 'user' | 'rule' | 'device' | 'ml' | 'block' | 'presence';
 
 /** One unified activity row (matches DbGateway ActivityEntry, roadmap Epic 2G). */
 export interface ActivityEntry {
@@ -17,6 +20,10 @@ export interface ActivityEntry {
   deviceId?: string | null;
   kind?: string | null;
   service?: string | null;
+  /** Concrete initiator: bucket + id + server-resolved display name (clickable "by …" chip). */
+  triggerKind?: TriggerKind | string | null;
+  triggerId?: string | null;
+  triggerName?: string | null;
 }
 
 export interface ActivityQuery {

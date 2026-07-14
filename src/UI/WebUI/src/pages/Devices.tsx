@@ -5,7 +5,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from 'i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Container, Box, Typography, IconButton, LinearProgress, Alert, Tooltip, Stack,
 } from '@mui/material';
@@ -36,6 +36,7 @@ export default function Devices() {
   const { t } = useTranslation('devices');
   const navigate = useNavigate();
   const { tabId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [devices, setDevices] = useState<CapabilityDevice[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +49,14 @@ export default function Devices() {
   const [classifyInfo, setClassifyInfo] = useState<string | null>(null);
   const [disagreements, setDisagreements] = useState<ArchetypeDisagreement[] | null>(null);
   const hubRef = useRef<HubConnection | null>(null);
+
+  // Deep-link from attribution chips (Epic 2G tail): /?device={id} opens the device drawer directly.
+  useEffect(() => {
+    const focus = searchParams.get('device');
+    if (!focus) return;
+    setSelectedId(focus);
+    setSearchParams((p) => { p.delete('device'); return p; }, { replace: true });
+  }, [searchParams, setSearchParams]);
   // Device ids seen by the last successful fetch; null until the baseline load,
   // so restarts don't announce the whole house as "new residents".
   const knownIdsRef = useRef<Set<string> | null>(null);

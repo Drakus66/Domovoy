@@ -55,6 +55,25 @@ public sealed record AutomationTriggeredV1(
     string? Detail = null);
 
 /// <summary>
+/// A control block ran and its decision changed (roadmap Epic 1H). Published by the BlockRuntime on a
+/// <b>meaningful</b> tick — when the block's emitted outputs change or its tick errors — so the block-layer,
+/// which is an active entity like a rule, gets a first-class run record in the Activity Center. Unlike a
+/// rule (Epic 1A) a block does not "fire and skip"; it ticks continuously, so the runtime deduplicates on
+/// the emitted signature and publishes only on change, including in Shadow stage where a governor emits its
+/// proposal but drives nothing. The DbGateway persists it to <c>block_history</c> for the <c>block</c>
+/// Activity source; it is intentionally separate from device deltas and rule runs.
+/// </summary>
+/// <remarks>Envelope type: <see cref="MessageTypes.BlockTriggered"/>.</remarks>
+public sealed record BlockTriggeredV1(
+    string BlockId,
+    string BlockName,
+    string TypeId,
+    DateTimeOffset TickedAt,
+    bool Ok,
+    string Summary,
+    string? Detail = null);
+
+/// <summary>
 /// The home mode changed (roadmap Epic 1G). Published by the DbGateway (the persistence authority for
 /// the mode) after a manual or presence-driven switch. The AutomationService consumes it to feed
 /// <c>Mode</c> conditions, and the DbGateway's own EventInterceptor consumes it to stamp the current

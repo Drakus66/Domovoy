@@ -39,8 +39,17 @@ public class DeviceEventLog
     /// <summary>New value the capability changed to (or the commanded value).</summary>
     public object? NewValue { get; set; }
 
-    /// <summary>What caused the change: <c>user</c> | <c>rule</c> | <c>device</c> | <c>ml</c>.</summary>
+    /// <summary>What caused the change: <c>user</c> | <c>rule</c> | <c>device</c> | <c>ml</c> | <c>block</c> | <c>presence</c>.</summary>
     public string TriggerSource { get; set; } = TriggerSources.Device;
+
+    /// <summary>
+    /// Id of the concrete initiator behind <see cref="TriggerSource"/>: the rule id, block id, user id
+    /// (self-declared until Phase 3 auth) or — for a presence-driven mode change — the presence sensor's
+    /// device id. Parsed from the actor-string convention in <c>Envelope.Source</c>
+    /// (<c>automation:{id}</c> / <c>block:{id}</c> / <c>user:{id}</c> / <c>presence:{deviceId}</c>).
+    /// Null when the initiator has no identity (e.g. anonymous UI command).
+    /// </summary>
+    public string? TriggerId { get; set; }
 
     /// <summary>Rule that produced the action (links to AutoHistory), if any.</summary>
     public string? RuleId { get; set; }
@@ -76,6 +85,8 @@ public static class TriggerSources
     public const string Ml = "ml";
     /// <summary>A control block (Epic 1H) — e.g. a thermostat/sequencer loop driving a device.</summary>
     public const string Block = "block";
+    /// <summary>Presence auto-switch (Epic 1G) — a mode change driven by presence sensors, not a command.</summary>
+    public const string Presence = "presence";
 }
 
 /// <summary>Well-known event-log kinds.</summary>

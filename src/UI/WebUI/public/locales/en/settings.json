@@ -40,5 +40,11 @@
   "appearance": {
     "title": "Appearance",
     "caption": "Language, theme and light/dark mode."
+  },
+  "whoami": {
+    "title": "Who is at this device",
+    "caption": "For the activity log: commands from this browser will be attributed to the selected resident. This is not a login — real authentication comes in Phase 3.",
+    "label": "User",
+    "anonymous": "Not set (anonymous)"
   }
 }
