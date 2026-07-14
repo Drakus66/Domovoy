@@ -25,6 +25,8 @@ export interface ControlBlock {
   zoneId?: string | null;
   enabled: boolean;
   params: Record<string, number>;
+  /** Non-numeric options (enum/bool/text) keyed by option name — e.g. a comparator's `op`, a PID's `preset` (Epic 2Q). */
+  options?: Record<string, string>;
   inputs: Record<string, PortBinding>;
   outputs: Record<string, PortBinding>;
   layout?: BlockLayout | null; // hand-arranged canvas position; null = auto-layout (Epic 1E)
@@ -37,6 +39,7 @@ export type NewBlock = Pick<
   'name' | 'typeId' | 'enabled' | 'params' | 'inputs' | 'outputs'
 > & {
   zoneId?: string | null;
+  options?: Record<string, string>;
   layout?: BlockLayout | null;
 };
 
@@ -56,14 +59,18 @@ export interface BlockCatalogEntry {
   typeId: string;
   title: string;
   description: string;
+  /** Picker category key (template/control/filter/logic/time/math/ml/other) — groups the catalog (Epic 2Q). */
+  category?: string;
   /**
    * For ML governor types (Epic 2P): the ML target capability the type consumes. Joins an ML task to its
    * consumer block types/instances and a device to the models applicable to it. Null for deterministic types.
    */
   mlTargetCapability?: string | null;
-  inputs: { name: string; kind: string; description: string }[];
+  inputs: { name: string; kind: string; description: string; optional?: boolean }[];
   outputs: { id: string; kind: string; unit?: string | null; writable: boolean }[];
   params: { name: string; default: number; unit?: string | null; min?: number | null; max?: number | null; description: string }[];
+  /** Non-numeric options (enum/bool/text) — the form renders a dropdown/switch/field per option (Epic 2Q). */
+  options?: { name: string; kind: string; default: string; description: string; values?: string[] | null }[];
 }
 
 export const blocksApi = {

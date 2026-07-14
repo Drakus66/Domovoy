@@ -63,7 +63,7 @@ const base: Omit<CssVarsThemeOptions, 'colorSchemes'> = {
       defaultProps: { disableElevation: true },
       styleOverrides: {
         root: {
-          borderRadius: 10,
+          borderRadius: 8,
           padding: '8px 16px',
           // Touch-friendly minimum size
           minHeight: 44,
@@ -78,7 +78,7 @@ const base: Omit<CssVarsThemeOptions, 'colorSchemes'> = {
           // Touch-friendly minimum size
           minHeight: 44,
           minWidth: 44,
-          borderRadius: 10,
+          borderRadius: 8,
         },
       },
     },
@@ -142,7 +142,13 @@ const base: Omit<CssVarsThemeOptions, 'colorSchemes'> = {
     },
     MuiChip: {
       styleOverrides: {
-        root: { fontWeight: 600 },
+        // Softly-squared instead of MUI's default full pill
+        root: { fontWeight: 600, borderRadius: 8 },
+      },
+    },
+    MuiToggleButton: {
+      styleOverrides: {
+        root: { borderRadius: 8 },
       },
     },
     MuiTooltip: {
