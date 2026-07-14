@@ -2,6 +2,8 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using System.Text;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace Domovoy.ApiGateway.Controllers;
@@ -35,13 +37,35 @@ public class HistoryController : ControllerBase
     [HttpGet("api/telemetry/aggregate")]
     public Task<IActionResult> TelemetryAggregate(CancellationToken ct) => Forward("api/telemetry/aggregate", ct);
 
+    /// <summary>Many (device, capability) telemetry series in one round-trip (dashboard sparklines / composed charts).</summary>
+    [HttpPost("api/telemetry/aggregate/batch")]
+    public Task<IActionResult> TelemetryAggregateBatch(CancellationToken ct) => ForwardPost("api/telemetry/aggregate/batch", ct);
+
+    /// <summary>Latest event-log row per device in one round-trip (per-tile "last changed by …" provenance).</summary>
+    [HttpPost("api/events/latest-by-device")]
+    public Task<IActionResult> EventsLatestByDevice(CancellationToken ct) => ForwardPost("api/events/latest-by-device", ct);
+
     private async Task<IActionResult> Forward(string path, CancellationToken ct)
     {
         var relativePath = Request.QueryString.HasValue ? $"{path}{Request.QueryString.Value}" : path;
         var client = _httpClientFactory.CreateClient("db-gateway");
         using var upstream = await client.GetAsync(relativePath, HttpCompletionOption.ResponseHeadersRead, ct);
-        var body = await upstream.Content.ReadAsStringAsync(ct);
+        return await Relay(upstream, ct);
+    }
 
+    private async Task<IActionResult> ForwardPost(string path, CancellationToken ct)
+    {
+        using var reader = new StreamReader(Request.Body);
+        var payload = await reader.ReadToEndAsync(ct);
+        var content = new StringContent(payload, Encoding.UTF8, "application/json");
+        var client = _httpClientFactory.CreateClient("db-gateway");
+        using var upstream = await client.PostAsync(path, content, ct);
+        return await Relay(upstream, ct);
+    }
+
+    private static async Task<IActionResult> Relay(HttpResponseMessage upstream, CancellationToken ct)
+    {
+        var body = await upstream.Content.ReadAsStringAsync(ct);
         return new ContentResult
         {
             StatusCode = (int)upstream.StatusCode,

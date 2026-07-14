@@ -129,5 +129,15 @@
     "loadError": "Не удалось загрузить историю.",
     "noSamples": "Нет проб за последние {{hours}} ч.",
     "avg": "среднее"
+  },
+  "provenance": {
+    "user": "Вы",
+    "ml": "ML",
+    "device": "Датчик",
+    "presence": "Присутствие",
+    "rule": "Правило",
+    "ruleNamed": "Правило · {{name}}",
+    "block": "Блок",
+    "blockNamed": "Блок · {{name}}"
   }
 }

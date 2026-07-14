@@ -20,7 +20,8 @@ import { buildDeviceHubConnection, startDeviceHub } from '../api/deviceHub';
 import DeviceDetailDrawer from '../components/devices/DeviceDetailDrawer';
 import type { CommandFn } from '../components/devices/CapabilityControls';
 import { asBool, asNum } from '../components/devices/deviceVisuals';
-import DomovoyDigest from '../components/common/DomovoyDigest';
+import HomeStateBand from '../components/dashboard/HomeStateBand';
+import DomovoyRail from '../components/dashboard/DomovoyRail';
 import AllDevicesTab from '../components/dashboard/AllDevicesTab';
 import SphereTab from '../components/dashboard/SphereTab';
 import CustomDashboardTab from '../components/dashboard/CustomDashboardTab';
@@ -218,7 +219,6 @@ export default function Devices() {
         <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={3} flexWrap="wrap" gap={2}>
           <Box>
             <Typography variant="h4" component="h1" fontWeight={700}>{t('title')}</Typography>
-            <DomovoyDigest />
             <Stack direction="row" spacing={1} mt={0.5} flexWrap="wrap" useFlexGap>
               <Stat label={t('stats.online')} value={`${onlineCount}/${devices.length}`} />
               {lightsOn > 0 && <Stat label={t('stats.lightsOn')} value={String(lightsOn)} />}
@@ -277,31 +277,38 @@ export default function Devices() {
         {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
         {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
-        {activeDashboard ? (
-          <CustomDashboardTab
-            dashboard={activeDashboard}
-            devices={devices}
-            onOpen={(d) => setSelectedId(d.id)}
-            onCommand={handleCommand}
-            onEdit={() => openEditor(activeDashboard)}
-          />
-        ) : activeSphere ? (
-          <SphereTab
-            category={activeSphere}
-            devices={devices}
-            zoneName={zoneName}
-            onOpen={(d) => setSelectedId(d.id)}
-            onCommand={handleCommand}
-          />
-        ) : (
-          <AllDevicesTab
-            devices={devices}
-            zoneName={zoneName}
-            loading={loading}
-            onOpen={(d) => setSelectedId(d.id)}
-            onCommand={handleCommand}
-          />
-        )}
+        <HomeStateBand devices={devices} />
+
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3, alignItems: 'flex-start' }}>
+          <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
+            {activeDashboard ? (
+              <CustomDashboardTab
+                dashboard={activeDashboard}
+                devices={devices}
+                onOpen={(d) => setSelectedId(d.id)}
+                onCommand={handleCommand}
+                onEdit={() => openEditor(activeDashboard)}
+              />
+            ) : activeSphere ? (
+              <SphereTab
+                category={activeSphere}
+                devices={devices}
+                zoneName={zoneName}
+                onOpen={(d) => setSelectedId(d.id)}
+                onCommand={handleCommand}
+              />
+            ) : (
+              <AllDevicesTab
+                devices={devices}
+                zoneName={zoneName}
+                loading={loading}
+                onOpen={(d) => setSelectedId(d.id)}
+                onCommand={handleCommand}
+              />
+            )}
+          </Box>
+          <DomovoyRail devices={devices} />
+        </Box>
       </Box>
 
       <DashboardEditorDialog

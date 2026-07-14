@@ -83,6 +83,13 @@
     "unknownName": "Name unknown",
     "presenceHint": "The sensor that last saw presence before the mode switch"
   },
+  "relative": {
+    "now": "just now",
+    "sec": "{{n}}s",
+    "min": "{{n}}m",
+    "hour": "{{n}}h",
+    "day": "{{n}}d"
+  },
   "newResident": "A new resident has moved in: {{name}}",
   "error": {
     "title": "Something went wrong",

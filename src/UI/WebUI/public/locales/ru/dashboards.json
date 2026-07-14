@@ -82,5 +82,29 @@
   },
   "widgets": {
     "modes": "Режим дома"
+  },
+  "band": {
+    "mode": "Режим",
+    "since": "с {{time}}",
+    "climate": "Климат",
+    "humidity": "влажность {{value}}%",
+    "co2": "CO₂ {{value}}",
+    "security": "Безопасность",
+    "secure": "Заперто",
+    "open": "{{count}} открыто",
+    "allSecure": "под охраной",
+    "noLocks": "нет замков",
+    "energy": "Энергия",
+    "watts": "{{value}} Вт",
+    "kwh": "всего {{value}} кВт·ч",
+    "empty": "—"
+  },
+  "rail": {
+    "today": "Домовой сегодня",
+    "history": "Вся история →",
+    "pending": "Ждёт решения",
+    "approve": "Принять",
+    "defer": "Позже",
+    "empty": "Пока тихо — за сегодня я ничего не менял."
   }
 }

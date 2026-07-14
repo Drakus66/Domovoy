@@ -62,6 +62,39 @@ export interface AggregateQuery {
   agg?: 'avg' | 'min' | 'max';
 }
 
+/** One (device, capability) series requested in a batch aggregation. */
+export interface SeriesSpec {
+  deviceId: string;
+  capabilityId: string;
+}
+
+/** Aggregated buckets for one requested series (matches DbGateway SeriesResult). */
+export interface SeriesResult extends SeriesSpec {
+  buckets: AggregateBucket[];
+}
+
+export interface AggregateBatchQuery {
+  series: SeriesSpec[];
+  from?: string;
+  to?: string;
+  bucket?: 'minute' | 'hour' | 'day';
+  agg?: 'avg' | 'min' | 'max';
+  /** Max points kept per series (most-recent); server default is 48. */
+  maxPoints?: number;
+}
+
+/** Latest event-log row for one device (matches DbGateway LatestEventDto) — batch provenance. */
+export interface LatestEvent {
+  deviceId: string;
+  timestamp: string;
+  capabilityId: string;
+  triggerSource: string;
+  triggerId?: string | null;
+  ruleId?: string | null;
+  correlationId?: string | null;
+  newValue?: unknown;
+}
+
 const params = (q: HistoryQuery) =>
   Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined && v !== ''));
 
@@ -77,6 +110,14 @@ export const historyApi = {
   /** Aggregated telemetry rollups (minute/hour/day) for trend charts (Epic 1B). */
   getAggregate: (q: AggregateQuery = {}): Promise<AggregateBucket[]> =>
     apiClient.get<AggregateBucket[]>('/api/telemetry/aggregate', { params: params(q) }).then((r) => r.data),
+
+  /** Aggregate many (device, capability) series in one round-trip (dashboard sparklines / composed charts). */
+  getAggregateBatch: (q: AggregateBatchQuery): Promise<SeriesResult[]> =>
+    apiClient.post<SeriesResult[]>('/api/telemetry/aggregate/batch', q).then((r) => r.data),
+
+  /** Latest event-log row per device in one round-trip — per-tile "last changed by …" provenance. */
+  getLatestByDevice: (deviceIds: string[], window?: { from?: string; to?: string }): Promise<LatestEvent[]> =>
+    apiClient.post<LatestEvent[]>('/api/events/latest-by-device', { deviceIds, ...window }).then((r) => r.data),
 
   /** URL for the CSV period export (Epic 1B) — open/download directly. */
   csvExportUrl: (q: HistoryQuery = {}): string => {

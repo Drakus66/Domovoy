@@ -129,5 +129,15 @@
     "loadError": "Could not load history.",
     "noSamples": "No samples in the last {{hours}}h.",
     "avg": "avg"
+  },
+  "provenance": {
+    "user": "You",
+    "ml": "ML",
+    "device": "Sensor",
+    "presence": "Presence",
+    "rule": "Rule",
+    "ruleNamed": "Rule · {{name}}",
+    "block": "Block",
+    "blockNamed": "Block · {{name}}"
   }
 }
