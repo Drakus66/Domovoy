@@ -32,19 +32,10 @@ public class AutomationOptions
     /// </summary>
     public int BoundedActiveCooldownSeconds { get; set; } = 300;
 
-    // --- Presence-driven home mode (roadmap Epic 1G) ---
-
-    /// <summary>
-    /// When true, presence sensors auto-switch the home mode between Home and Away (never Night/Vacation,
-    /// which are manual). Disable to keep the mode purely manual.
-    /// </summary>
-    public bool PresenceAutoMode { get; set; } = true;
-
-    /// <summary>Capability ids treated as presence/occupancy signals.</summary>
-    public string[] PresenceCapabilities { get; set; } = { "presence", "occupancy" };
-
-    /// <summary>How long all presence signals must stay clear before switching Home → Away.</summary>
-    public int AwayDelaySeconds { get; set; } = 600;
+    // NOTE (Epic 1G → block layer): presence-driven Home/Away switching is no longer platform config.
+    // The former PresenceAutoMode/PresenceCapabilities/AwayDelaySeconds options died with the hardcoded
+    // PresenceMonitor — that policy now lives in a user-created `presence_mode` control block driving the
+    // Home virtual device (homes without presence sensors simply have no such block).
 
     // --- ML substrate (roadmap Epic 2A) ---
     //

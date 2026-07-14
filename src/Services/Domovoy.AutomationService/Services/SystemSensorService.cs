@@ -4,6 +4,7 @@
 
 using Domovoy.Contracts.Capabilities;
 using Domovoy.Contracts.Devices;
+using Domovoy.Contracts.Home;
 using Domovoy.Contracts.Messaging;
 using Domovoy.MessageBus;
 
@@ -11,12 +12,19 @@ namespace Domovoy.AutomationService.Services;
 
 /// <summary>
 /// Publishes the platform's own <b>virtual sensors</b> (roadmap Epic 2L) as first-class capability devices —
-/// things the system knows without any hardware: right now the <b>Sun</b> (elevation, azimuth, is-dark/is-day,
-/// today's sunrise/sunset). It announces each once via <see cref="DeviceDiscoveredV1"/> and republishes state
-/// every minute via <see cref="DeviceStateReportV1"/>, exactly like an adapter — so the existing pipeline turns
-/// them into rows in <c>capability_devices</c> (dashboard), live values in the rule engine (<c>DeviceState</c>
-/// triggers/conditions), and history. <c>AdapterSource="System"</c> marks them virtual. Time and calendar
-/// sensors follow the same pattern in later increments.
+/// things the system knows without any hardware: the <b>Sun</b> (elevation, azimuth, is-dark/is-day,
+/// today's sunrise/sunset), <b>Time</b>, <b>Calendar</b>, and the <b>Home</b> device (Epic 1G as a device:
+/// the home mode as a writable enum). It announces each once via <see cref="DeviceDiscoveredV1"/> and
+/// republishes state every minute via <see cref="DeviceStateReportV1"/>, exactly like an adapter — so the
+/// existing pipeline turns them into rows in <c>capability_devices</c> (dashboard), live values in the rule
+/// engine (<c>DeviceState</c> triggers/conditions), and history. <c>AdapterSource="System"</c> marks them
+/// virtual.
+///
+/// <para>The Home device is also <b>commandable</b>: a <see cref="DeviceCommandV1"/> setting
+/// <c>home_mode</c> is forwarded to the DbGateway mode endpoint with the command's actor-string source
+/// preserved — which is what lets a control block (e.g. <c>presence_mode</c>) or a rule drive the mode
+/// like any other actuator, with correct journal attribution, instead of the mode switch living in
+/// platform code.</para>
 /// </summary>
 public sealed class SystemSensorService : BackgroundService
 {
@@ -26,6 +34,8 @@ public sealed class SystemSensorService : BackgroundService
     private static readonly Guid SunDeviceId = DeviceIdFactory.Derive(Source, "sun");
     private static readonly Guid TimeDeviceId = DeviceIdFactory.Derive(Source, "time");
     private static readonly Guid CalendarDeviceId = DeviceIdFactory.Derive(Source, "calendar");
+    /// <summary>The Home virtual device (home mode as a capability) — public so blocks/UI can target it.</summary>
+    public static readonly Guid HomeDeviceId = DeviceIdFactory.Derive(Source, "home");
     private static readonly TimeSpan TickInterval = TimeSpan.FromMinutes(1);
 
     private static readonly Capability[] SunCapabilities =
@@ -52,20 +62,29 @@ public sealed class SystemSensorService : BackgroundService
         WellKnownCapabilities.CalendarDate(),
     };
 
+    private static readonly Capability[] HomeCapabilities =
+    {
+        WellKnownCapabilities.HomeMode(),
+    };
+
     private readonly IMessageBus _bus;
     private readonly SunCalculator _sun;
     private readonly SiteContext _site;
     private readonly CalendarContext _calendar;
+    private readonly HomeModeState _mode;
+    private readonly DbGatewayClient _db;
     private readonly ILogger<SystemSensorService> _logger;
 
     public SystemSensorService(
         IMessageBus bus, SunCalculator sun, SiteContext site, CalendarContext calendar,
-        ILogger<SystemSensorService> logger)
+        HomeModeState mode, DbGatewayClient db, ILogger<SystemSensorService> logger)
     {
         _bus = bus;
         _sun = sun;
         _site = site;
         _calendar = calendar;
+        _mode = mode;
+        _db = db;
         _logger = logger;
     }
 
@@ -74,6 +93,25 @@ public sealed class SystemSensorService : BackgroundService
         await AnnounceSunAsync(stoppingToken);
         await AnnounceAsync(TimeDeviceId, "Time", "system/clock", TimeCapabilities, stoppingToken);
         await AnnounceAsync(CalendarDeviceId, "Calendar", "system/calendar", CalendarCapabilities, stoppingToken);
+        await AnnounceAsync(HomeDeviceId, "Home", "system/home", HomeCapabilities, stoppingToken);
+
+        // Commands aimed at the Home device retarget the home mode (the device→mode bridge).
+        await _bus.SubscribeAsync<Envelope<DeviceCommandV1>>(
+            "automation-home-mode-commands",
+            BusTopology.CommandsExchange,
+            BusTopology.DeviceCommandKey,
+            env => HandleHomeCommand(env, stoppingToken),
+            stoppingToken);
+
+        // The mode changes rarely; push the Home device's state immediately on a change so blocks
+        // reading it (e.g. a presence governor's manual-mode guard) don't wait out the 1-min tick.
+        await _bus.SubscribeAsync<Envelope<HomeModeChangedV1>>(
+            "automation-home-mode-echo",
+            BusTopology.EventsExchange,
+            BusTopology.HomeModeChangedKey,
+            _ => PublishHomeAsync(stoppingToken),
+            stoppingToken);
+
         _logger.LogInformation("SystemSensorService started (tick {Seconds}s)", TickInterval.TotalSeconds);
 
         using var timer = new PeriodicTimer(TickInterval);
@@ -85,6 +123,7 @@ public sealed class SystemSensorService : BackgroundService
                 await PublishSunAsync(now, stoppingToken);
                 await PublishStateAsync(TimeDeviceId, "time", ComputeTime(now).ToState(), stoppingToken);
                 await PublishStateAsync(CalendarDeviceId, "calendar", ComputeCalendar(now).ToState(), stoppingToken);
+                await PublishHomeAsync(stoppingToken);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
@@ -95,6 +134,30 @@ public sealed class SystemSensorService : BackgroundService
             if (!await timer.WaitForNextTickAsync(stoppingToken)) break;
         }
     }
+
+    /// <summary>
+    /// Device→mode bridge: a command setting <c>home_mode</c> on the Home device becomes a mode switch
+    /// via the DbGateway (the persistence authority). The command's <b>actor-string source</b>
+    /// (<c>block:{id}</c> / <c>automation:{id}</c> / <c>user:{id}</c>) is passed through so the journal
+    /// attributes the switch to the real initiator.
+    /// </summary>
+    private async Task HandleHomeCommand(Envelope<DeviceCommandV1> envelope, CancellationToken ct)
+    {
+        var cmd = envelope.Data;
+        if (cmd is null || cmd.DeviceId != HomeDeviceId) return;
+        if (!cmd.Set.TryGetValue(CapabilityIds.HomeMode, out var raw)) return;
+
+        var mode = raw?.ToString()?.Trim();
+        if (string.IsNullOrEmpty(mode)) return;
+
+        var source = string.IsNullOrEmpty(envelope.Source) ? ModeChangeSources.User : envelope.Source;
+        _logger.LogInformation("Home-device command → mode {Mode} (by {Source})", mode, source);
+        await _db.SetModeAsync(mode, source, ct);
+    }
+
+    private Task PublishHomeAsync(CancellationToken ct) =>
+        PublishStateAsync(HomeDeviceId, "home",
+            new Dictionary<string, object?> { [CapabilityIds.HomeMode] = _mode.Current }, ct);
 
     /// <summary>Local wall-clock now at the site (2L) — the basis for the Time and Calendar sensors.</summary>
     private DateTimeOffset LocalNow(DateTimeOffset nowUtc) => TimeZoneInfo.ConvertTime(nowUtc, _site.TimeZone);

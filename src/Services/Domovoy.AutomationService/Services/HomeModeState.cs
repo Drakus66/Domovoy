@@ -10,8 +10,8 @@ namespace Domovoy.AutomationService.Services;
 /// Thread-safe holder of the current home mode (roadmap Epic 1G). Seeded from the DbGateway at startup
 /// (<see cref="RefreshLoop"/>) and kept live by <see cref="HomeModeMonitor"/> from
 /// <see cref="Domovoy.Contracts.Messaging.HomeModeChangedV1"/>. The <see cref="RuleRunner"/> reads it so
-/// <c>Mode</c> conditions evaluate against reality; the <see cref="PresenceMonitor"/> reads it to decide
-/// whether presence may auto-switch (it never overrides a manual Night/Vacation).
+/// <c>Mode</c> conditions evaluate against reality; the <see cref="SystemSensorService"/> reads it to
+/// publish the Home virtual device's <c>home_mode</c> state (which presence blocks read as their guard).
 /// </summary>
 public sealed class HomeModeState
 {

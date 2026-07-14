@@ -81,16 +81,18 @@ internal static class Program
             builder.Services.AddSingleton<MlModelService>();   // 2A/2I: load/serve per-scope models for inference
             builder.Services.AddSingleton<BlockCatalog>();    // 1H: built-in control-block types (incl. ml_setpoint)
             builder.Services.AddSingleton<BlockStore>();
+            builder.Services.AddSingleton<BlockStateStore>(); // 2Q: persist block state across restarts
 
             // Order matters only loosely: RefreshLoop seeds rules/devices/mode, the engine + scheduler fire them.
             builder.Services.AddHostedService<RefreshLoop>();
             builder.Services.AddHostedService<AutomationEngine>();
             builder.Services.AddHostedService<AutomationScheduler>();
             builder.Services.AddHostedService<HomeModeMonitor>();   // 1G: track current home mode from the bus
-            builder.Services.AddHostedService<PresenceMonitor>();   // 1G: presence-driven Home/Away switching
+            // 1G presence auto-switch: no longer a hosted service — household policy moved to the
+            // user-created `presence_mode` block driving the Home virtual device (see SystemSensorService).
             builder.Services.AddSingleton<BlockRuntime>();          // 1H: tick control blocks as virtual devices
             builder.Services.AddHostedService(sp => sp.GetRequiredService<BlockRuntime>()); // + expose runtime health
-            builder.Services.AddHostedService<SystemSensorService>(); // 2L: publish platform virtual sensors (Sun)
+            builder.Services.AddHostedService<SystemSensorService>(); // 2L: virtual sensors (Sun/Time/Calendar/Home)
             builder.Services.AddSingleton<MlTrainingService>();     // 2A: train + keep the model loaded
             builder.Services.AddHostedService(sp => sp.GetRequiredService<MlTrainingService>());
             builder.Services.AddSingleton<RuleSuggester>();         // 2C: heuristic rule proposer (stub-precursor to 2F)
@@ -198,11 +200,14 @@ internal static class Program
                     typeId = t.TypeId,
                     title = t.Title,
                     description = t.Description,
+                    // Epic 2Q: picker category (template/control/filter/logic/time/math/ml) — the UI groups
+                    // the ~30 types by this instead of rendering a flat chip wall.
+                    category = t.Category,
                     // Epic 2P: which ML target an ML-governor type consumes — lets the UI join "task → its
                     // consumer blocks" and "device → applicable models" without heuristics. Null for
                     // deterministic types.
                     mlTargetCapability = (t as Ml.Governors.IMlGovernorBlockType)?.MlTargetCapability,
-                    inputs = t.Inputs.Select(p => new { name = p.Name, kind = p.Kind.ToString(), description = p.Description }),
+                    inputs = t.Inputs.Select(p => new { name = p.Name, kind = p.Kind.ToString(), description = p.Description, optional = p.Optional }),
                     outputs = t.Outputs.Select(c => new
                     {
                         id = c.Id,
@@ -213,6 +218,12 @@ internal static class Program
                     @params = t.Params.Select(p => new
                     {
                         name = p.Name, @default = p.Default, unit = p.Unit, min = p.Min, max = p.Max, description = p.Description,
+                    }),
+                    // Epic 2Q: non-numeric options (enum/bool/text) — the authoring form renders these
+                    // separately from numeric params (a dropdown for enum, a switch for bool, a field for text).
+                    options = t.Options.Select(op => new
+                    {
+                        name = op.Name, kind = op.Kind.ToString(), @default = op.Default, description = op.Description, values = op.Values,
                     }),
                 })));
 
