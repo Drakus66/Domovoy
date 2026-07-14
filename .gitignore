@@ -8,8 +8,11 @@
 **/node_modules/
 *.tsbuildinfo
 
-# Local MCP tooling scratch (Playwright browser session artifacts), not project content.
+# Playwright artifacts (MCP browser-session scratch + standard test-runner output).
 /.playwright-mcp/
+/test-results/
+/playwright-report/
+/playwright/.cache/
 
 # Runtime plugin drops (rw mount): track only the hand-authored manifest, never the built
 # binaries or the persisted per-plugin settings (which may hold secrets like API keys).
