@@ -98,6 +98,12 @@ public sealed class MlTaskSuggester : BackgroundService
                     + "Approving creates the training task; tune its window/limits on the ML page.",
                 Source = "ml_task_scanner",
                 MlTaskTarget = target,
+                Evidence = new Dictionary<string, double>
+                {
+                    ["samples"] = global.Samples,
+                    ["required"] = defaults.MinSamples,
+                    ["windowDays"] = defaults.WindowDays,
+                },
             }, ct);
             if (proposal is not null) created++;
         }

@@ -126,6 +126,12 @@ public sealed class RuleSuggester : BackgroundService
                     + $"confidence {c.Confidence:P0} (P(action|trigger)). Validate with Simulate before approving.",
                 Source = "ml_proposer",
                 RuleId = savedRule.Id,
+                Evidence = new Dictionary<string, double>
+                {
+                    ["support"] = c.Support,
+                    ["confidence"] = c.Confidence,
+                    ["windowDays"] = _options.ProposalWindowDays,
+                },
             };
             var savedProposal = await _db.CreateProposalAsync(proposal, ct);
             if (savedProposal is null)

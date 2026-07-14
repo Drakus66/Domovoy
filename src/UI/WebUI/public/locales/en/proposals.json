@@ -1,54 +1,121 @@
-﻿{
+{
   "title": "Proposals",
-  "caption": "Everything I would like to change, gathered in one queue — ML block promotions, model pins and proposed rules. Nothing activates without your approval (Epic 2C). Rules are justified by replay, model-backed proposals by the backtest scorecard.",
+  "caption": "The house proposes — you decide. Everything the house would like to change is here: new rules and ML block authority. Nothing turns on without your approval.",
   "filter": {
     "pending": "Pending",
     "all": "All"
   },
   "actions": {
-    "runProposer": "Run proposer",
-    "runDiscovery": "Discover patterns",
+    "scanNow": "Check now",
+    "scanNowHint": "Run all three scanners immediately: the event-log scanner, pattern discovery and the ML-task scanner. They also run on their own schedule.",
     "simulate": "Simulate",
+    "simulateHint": "Replay the rule over the last 7 days of history and see how often it would have fired. Nothing is actually executed.",
     "approve": "Approve",
-    "reject": "Reject"
+    "reject": "Reject",
+    "help": "How this works",
+    "openRule": "Open rule",
+    "openBlock": "Open block",
+    "openMl": "Open ML"
   },
-  "rejectTooltip": "Reject — the target is left untouched",
-  "discoveryTooltip": "Search history for regularities I could automate (Epic 2F): mutual-information screening, false-discovery control, then propose the survivors.",
+  "rejectTooltip": "Dismiss the card. Nothing in the house changes.",
+  "help": {
+    "what": "Each card is one concrete change. \"Approve\" applies it immediately (the card says exactly what will happen), \"Reject\" just dismisses the card without changing anything. An approved decision keeps an id so the action stays traceable.",
+    "sourcesTitle": "Where proposals come from",
+    "sources": {
+      "ml_proposer": "Event-log scanner — spots simple pairs \"sensor fired → you turned a device on yourself\" that repeat day after day.",
+      "discovery": "Pattern discovery — a statistical search for richer regularities (thresholds, time of day) with false-discovery control.",
+      "ml_task_scanner": "ML-task scanner — notices quantities with enough accumulated history and suggests starting to train a model.",
+      "user": "You — e.g. an ML block promotion requested from the Blocks page."
+    },
+    "schedule": "The scanners run on their own schedule (every few hours). \"Check now\" runs all three immediately.",
+    "review": "Before approving a rule, press \"Simulate\" — the rule is replayed over 7 days of history so you can see when it would have fired. Approve once the result matches your expectation."
+  },
   "kind": {
     "Rule": "Rule",
-    "BlockPromotion": "Block promotion",
-    "ModelSelection": "Model selection",
-    "MlTask": "ML task"
+    "BlockPromotion": "Block authority",
+    "ModelSelection": "Model version",
+    "MlTask": "Training task"
+  },
+  "source": {
+    "user": "you",
+    "ml_proposer": "event-log scanner",
+    "discovery": "pattern discovery",
+    "ml_task_scanner": "ML-task scanner",
+    "demo": "demo",
+    "other": "{{source}}"
+  },
+  "sourceHint": {
+    "user": "Created by you manually",
+    "ml_proposer": "Found by the event-log scanner: a simple \"sensor → your action\" pair",
+    "discovery": "Found by the statistical pattern search over history",
+    "ml_task_scanner": "Suggested by the ML-task scanner: enough history to train",
+    "demo": "A test proposal from the demo script — safe to reject",
+    "other": "Source: {{source}}"
+  },
+  "status": {
+    "Approved": "Approved",
+    "Rejected": "Rejected"
   },
   "stageName": {
     "shadow": "Shadow",
     "bounded": "Bounded",
     "full": "Full"
   },
-  "provenance": {
-    "stage": "stage {{from}} → {{to}}",
-    "pinModel": "pin model v{{version}}",
-    "mlTask": "start learning '{{target}}'"
+  "effect": {
+    "prefix": "On approve:",
+    "rule": "the rule becomes active and starts running on its own.",
+    "promotion": "the block gets the \"{{to}}\" stage (currently \"{{from}}\").",
+    "pin": "the block is pinned to model version v{{version}} and stops switching to newer ones.",
+    "unpin": "the block will follow the latest model version.",
+    "mlTask": "a \"{{target}}\" training task appears — tune it on the ML page."
   },
+  "rule": {
+    "sentence": "If {{when}} — {{then}}",
+    "stateActive": "\"{{device}}\": {{capability}}",
+    "state": "\"{{device}}\": {{capability}} {{op}} {{value}}",
+    "daily": "daily at {{time}}",
+    "cron": "on schedule ({{cron}})",
+    "sunrise": "at sunrise",
+    "sunset": "at sunset",
+    "offset": "{{event}} ({{minutes}} min)",
+    "timeWindow": "between {{from}} and {{to}}",
+    "mode": "in \"{{mode}}\" mode",
+    "whileDark": "while dark",
+    "whileLight": "while light",
+    "turnOn": "turn on \"{{device}}\"",
+    "turnOff": "turn off \"{{device}}\"",
+    "set": "set {{capability}} = {{value}} on \"{{device}}\"",
+    "wait": "wait {{seconds}} s",
+    "notify": "notify: {{message}}",
+    "on": "on",
+    "off": "off"
+  },
+  "evidence": {
+    "coocc": "Over the last {{windowDays}} days this happened {{support}} times: in {{confidence}}% of cases the trigger was followed by this action.",
+    "stats": "That is {{lift}}× the base rate (significance p = {{p}}).",
+    "setpoint": "You set ≈{{value}} at this time {{support}} times (spread ±{{stdDev}}).",
+    "mlTask": "{{samples}} records accumulated over {{windowDays}} days (≥ {{required}} needed) — enough history, and a block exists that can consume the model."
+  },
+  "mlTaskTitle": "Start learning: {{target}}",
   "meta": {
     "proposed": "proposed {{when}}",
     "decided": "decided {{when}}",
     "decision": "decision {{id}}"
   },
-  "proposerResult": "I went through the event log: {{created}} new candidate(s) out of {{candidates}} found ({{note}}).",
-  "discoveryResult": "I searched for patterns: {{created}} new candidate(s) out of {{patterns}} passed screening ({{note}}).",
+  "scanResult": "Done. Event-log scanner: +{{suggested}}, pattern discovery: +{{discovered}}, ML tasks: +{{tasks}}.",
+  "scanNothing": "Checked everything — no new proposals. Everything found was either proposed before, or the history has too few repeated actions yet.",
+  "scanPartial": "Some scanners did not respond ({{failed}}). The rest produced: +{{created}}.",
   "approved": "Approved \"{{title}}\" (decision {{id}}).",
-  "simResult_one": "Would have fired {{count}}× over 7d ({{events}} events scanned)",
-  "simResult_other": "Would have fired {{count}}× over 7d ({{events}} events scanned)",
+  "simResult_one": "Would have fired {{count}}× over 7 days ({{events}} events scanned)",
+  "simResult_other": "Would have fired {{count}}× over 7 days ({{events}} events scanned)",
   "simNotes": " — {{notes}}",
   "empty": {
-    "pending": "Nothing needs your approval right now. Promote an ML block, or let me look for patterns (Run proposer).",
-    "all": "No proposals yet."
+    "pending": "Nothing is waiting for your decision. Press \"Check now\" to look for proposals — or come back later: the scanners run on their own schedule.",
+    "all": "No proposals yet. The house starts proposing once repeated actions accumulate in the event log."
   },
   "errors": {
     "load": "Failed to load proposals. Check ApiGateway / DbGateway connection.",
-    "proposer": "Proposer request failed — is the AutomationService reachable?",
-    "discovery": "Discovery request failed — is the AutomationService reachable?",
+    "scan": "Failed to run the scanners — is the AutomationService reachable?",
     "approve": "Approve failed — the target may no longer exist, or a service is unreachable.",
     "reject": "Reject failed — is the gateway reachable?",
     "simulate": "Simulate failed — is the AutomationService reachable?"

@@ -74,6 +74,13 @@ public class Proposal
     public double? Score { get; set; }
 
     /// <summary>
+    /// Structured numeric evidence behind <see cref="Rationale"/> (support, confidence, lift, mi, p, samples,
+    /// windowDays, …) so the WebUI can render a localized justification instead of the English fallback text.
+    /// Numeric-only by design, mirroring <c>ControlBlock.Params</c>; producers fill what they measured.
+    /// </summary>
+    public Dictionary<string, double>? Evidence { get; set; }
+
+    /// <summary>
     /// Provenance handle stamped when the proposal is approved and applied (Epic 2C DoD: an activated action
     /// is traceable to a decision). Generated on approve; empty while Proposed/Rejected.
     /// </summary>
