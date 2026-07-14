@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 namespace Domovoy.AutomationService;
 
 using Blocks;
@@ -77,20 +81,24 @@ internal static class Program
             builder.Services.AddSingleton<MlModelService>();   // 2A/2I: load/serve per-scope models for inference
             builder.Services.AddSingleton<BlockCatalog>();    // 1H: built-in control-block types (incl. ml_setpoint)
             builder.Services.AddSingleton<BlockStore>();
+            builder.Services.AddSingleton<BlockStateStore>(); // 2Q: persist block state across restarts
 
             // Order matters only loosely: RefreshLoop seeds rules/devices/mode, the engine + scheduler fire them.
             builder.Services.AddHostedService<RefreshLoop>();
             builder.Services.AddHostedService<AutomationEngine>();
             builder.Services.AddHostedService<AutomationScheduler>();
             builder.Services.AddHostedService<HomeModeMonitor>();   // 1G: track current home mode from the bus
-            builder.Services.AddHostedService<PresenceMonitor>();   // 1G: presence-driven Home/Away switching
+            // 1G presence auto-switch: no longer a hosted service — household policy moved to the
+            // user-created `presence_mode` block driving the Home virtual device (see SystemSensorService).
             builder.Services.AddSingleton<BlockRuntime>();          // 1H: tick control blocks as virtual devices
             builder.Services.AddHostedService(sp => sp.GetRequiredService<BlockRuntime>()); // + expose runtime health
-            builder.Services.AddHostedService<SystemSensorService>(); // 2L: publish platform virtual sensors (Sun)
+            builder.Services.AddHostedService<SystemSensorService>(); // 2L: virtual sensors (Sun/Time/Calendar/Home)
             builder.Services.AddSingleton<MlTrainingService>();     // 2A: train + keep the model loaded
             builder.Services.AddHostedService(sp => sp.GetRequiredService<MlTrainingService>());
             builder.Services.AddSingleton<RuleSuggester>();         // 2C: heuristic rule proposer (stub-precursor to 2F)
             builder.Services.AddHostedService(sp => sp.GetRequiredService<RuleSuggester>());
+            builder.Services.AddSingleton<Ml.MlTaskSuggester>();    // 2P: propose training tasks for consumable targets
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Ml.MlTaskSuggester>());
             builder.Services.AddSingleton<Ml.ArchetypeAdvisor>();  // 2D: ML.NET archetype classifier (advisory)
             builder.Services.AddSingleton<Services.Discovery.DiscoveryEngine>(); // 2F: full MI/FDR pattern-discovery funnel
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Services.Discovery.DiscoveryEngine>());
@@ -110,17 +118,39 @@ internal static class Program
             app.MapPost("/api/replay", async (ReplayRequest request, ReplayService replay, CancellationToken ct) =>
                 Results.Ok(await replay.RunAsync(request, ct)));
 
-            // Train an ML model now (roadmap Epic 2A): trains on recent telemetry, registers it, reloads it.
-            app.MapPost("/api/ml/train", async (MlTrainingService ml, CancellationToken ct) =>
-                Results.Ok(await ml.TrainOnceAsync(ct)));
+            // Train now (roadmap Epic 2A/2P): with taskId — that task; without — every enabled task.
+            // Training runs on CancellationToken.None deliberately: it is a batch operation, and a client
+            // abort (proxy timeout, closed tab) mid-run must not cancel model registration / the status write
+            // half-way — the run completes and the outcome lands on the task either way.
+            app.MapPost("/api/ml/train", async (MlTrainingService ml, string? taskId, CancellationToken ct) =>
+            {
+                if (string.IsNullOrEmpty(taskId)) return Results.Ok(await ml.TrainAllAsync(CancellationToken.None));
 
-            // Backtest scorecard (roadmap Epic 2B): the loaded model's prediction vs actual telemetry.
-            app.MapGet("/api/ml/backtest", async (MlTrainingService ml, int? days, CancellationToken ct) =>
-                Results.Ok(await ml.BacktestAsync(days ?? 7, ct)));
+                var task = await ml.FindTaskAsync(taskId, ct);
+                if (task is null) return Results.NotFound(new { error = $"no ML task {taskId}" });
+                var result = await ml.TrainTaskAsync(task, CancellationToken.None);
+                return Results.Ok(new[] { new MlTrainingService.TaskTrainResult(task.Id, task.TargetCapability, result) });
+            });
+
+            // Backtest scorecard (roadmap Epic 2B/2P): the serving model of (target, scope) vs actual history.
+            // All parameters optional — the bare form scores the default target's global model (back-compat).
+            app.MapGet("/api/ml/backtest",
+                async (MlTrainingService ml, string? target, string? level, string? key, int? days, CancellationToken ct) =>
+                    Results.Ok(await ml.BacktestAsync(target, level, key, days ?? 7, ct)));
+
+            // Data-sufficiency check (roadmap Epic 2P): raw sample counts per scope for a (prospective) task —
+            // powers the wizard's instant "will this train?" feedback and the task card's diagnostics.
+            app.MapGet("/api/ml/data-check",
+                async (MlTrainingService ml, string target, int? windowDays, int? minSamples, bool? zones, CancellationToken ct) =>
+                    Results.Ok(await ml.CheckDataAsync(target, windowDays ?? 30, minSamples ?? 20, zones ?? true, ct)));
 
             // Run the heuristic rule proposer now (roadmap Epic 2C): mine the event-log, queue candidates.
             app.MapPost("/api/proposals/suggest", async (RuleSuggester suggester, CancellationToken ct) =>
                 Results.Ok(await suggester.SuggestOnceAsync(ct)));
+
+            // Scan for ML-task candidates now (roadmap Epic 2P): consumable targets with enough history → queue.
+            app.MapPost("/api/ml/suggest-tasks", async (Ml.MlTaskSuggester suggester, CancellationToken ct) =>
+                Results.Ok(await suggester.ScanOnceAsync(ct)));
 
             // Run the pattern-discovery engine now (roadmap Epic 2F): MI/FDR funnel over history → queued proposals.
             app.MapPost("/api/discovery/scan", async (Services.Discovery.DiscoveryEngine engine, CancellationToken ct) =>
@@ -170,7 +200,14 @@ internal static class Program
                     typeId = t.TypeId,
                     title = t.Title,
                     description = t.Description,
-                    inputs = t.Inputs.Select(p => new { name = p.Name, kind = p.Kind.ToString(), description = p.Description }),
+                    // Epic 2Q: picker category (template/control/filter/logic/time/math/ml) — the UI groups
+                    // the ~30 types by this instead of rendering a flat chip wall.
+                    category = t.Category,
+                    // Epic 2P: which ML target an ML-governor type consumes — lets the UI join "task → its
+                    // consumer blocks" and "device → applicable models" without heuristics. Null for
+                    // deterministic types.
+                    mlTargetCapability = (t as Ml.Governors.IMlGovernorBlockType)?.MlTargetCapability,
+                    inputs = t.Inputs.Select(p => new { name = p.Name, kind = p.Kind.ToString(), description = p.Description, optional = p.Optional }),
                     outputs = t.Outputs.Select(c => new
                     {
                         id = c.Id,
@@ -181,6 +218,12 @@ internal static class Program
                     @params = t.Params.Select(p => new
                     {
                         name = p.Name, @default = p.Default, unit = p.Unit, min = p.Min, max = p.Max, description = p.Description,
+                    }),
+                    // Epic 2Q: non-numeric options (enum/bool/text) — the authoring form renders these
+                    // separately from numeric params (a dropdown for enum, a switch for bool, a field for text).
+                    options = t.Options.Select(op => new
+                    {
+                        name = op.Name, kind = op.Kind.ToString(), @default = op.Default, description = op.Description, values = op.Values,
                     }),
                 })));
 

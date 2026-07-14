@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 namespace Domovoy.Contracts.Blocks;
 
 /// <summary>
@@ -37,6 +41,13 @@ public class ControlBlock
     /// <summary>Numeric parameters keyed by the block type's parameter name (e.g. <c>tau</c>, <c>setpoint</c>).</summary>
     public Dictionary<string, double> Params { get; set; } = new();
 
+    /// <summary>
+    /// Non-numeric options keyed by the block type's option name (roadmap Epic 2Q) — enum/bool/text values that
+    /// don't fit <see cref="Params"/> (numeric-only), e.g. a comparator's <c>op</c>, a PID's <c>preset</c>, an
+    /// expression block's <c>script</c>. Empty for the numeric-only built-ins.
+    /// </summary>
+    public Dictionary<string, string> Options { get; set; } = new();
+
     /// <summary>Input port name → the device+capability it reads from (composition / wiring).</summary>
     public Dictionary<string, PortBinding> Inputs { get; set; } = new();
 
@@ -48,6 +59,13 @@ public class ControlBlock
     /// </summary>
     public Dictionary<string, PortBinding> Outputs { get; set; } = new();
 
+    /// <summary>
+    /// Optional canvas position of this block's node in the flow editor (roadmap Epic 1E). Persisted so a
+    /// hand-arranged graph survives reloads; <c>null</c> means "auto-layout". Editor-only metadata — the
+    /// runtime ignores it, and a non-layout update (e.g. the typed form) preserves the saved arrangement.
+    /// </summary>
+    public BlockLayout? Layout { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
@@ -57,4 +75,11 @@ public class PortBinding
 {
     public string DeviceId { get; set; } = string.Empty;
     public string CapabilityId { get; set; } = string.Empty;
+}
+
+/// <summary>Canvas coordinates of a block node in the flow editor (roadmap Epic 1E). Editor-only metadata.</summary>
+public class BlockLayout
+{
+    public double X { get; set; }
+    public double Y { get; set; }
 }

@@ -1,9 +1,19 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import apiClient from './client';
 
 /** Binds a block input port to a source device capability (matches DbGateway PortBinding). */
 export interface PortBinding {
   deviceId: string;
   capabilityId: string;
+}
+
+/** Canvas position of a block node in the flow editor (matches Contracts BlockLayout, Epic 1E). */
+export interface BlockLayout {
+  x: number;
+  y: number;
 }
 
 /** A control-block instance (matches Domovoy.Contracts ControlBlock, Epic 1H). */
@@ -15,14 +25,22 @@ export interface ControlBlock {
   zoneId?: string | null;
   enabled: boolean;
   params: Record<string, number>;
+  /** Non-numeric options (enum/bool/text) keyed by option name — e.g. a comparator's `op`, a PID's `preset` (Epic 2Q). */
+  options?: Record<string, string>;
   inputs: Record<string, PortBinding>;
   outputs: Record<string, PortBinding>;
+  layout?: BlockLayout | null; // hand-arranged canvas position; null = auto-layout (Epic 1E)
   createdAt: string;
   updatedAt: string;
 }
 
-export type NewBlock = Pick<ControlBlock, 'name' | 'typeId' | 'enabled' | 'params' | 'inputs' | 'outputs'> & {
+export type NewBlock = Pick<
+  ControlBlock,
+  'name' | 'typeId' | 'enabled' | 'params' | 'inputs' | 'outputs'
+> & {
   zoneId?: string | null;
+  options?: Record<string, string>;
+  layout?: BlockLayout | null;
 };
 
 /** Runtime health of one block (matches AutomationService BlockStatus, Epic 1H). */
@@ -41,9 +59,18 @@ export interface BlockCatalogEntry {
   typeId: string;
   title: string;
   description: string;
-  inputs: { name: string; kind: string; description: string }[];
+  /** Picker category key (template/control/filter/logic/time/math/ml/other) — groups the catalog (Epic 2Q). */
+  category?: string;
+  /**
+   * For ML governor types (Epic 2P): the ML target capability the type consumes. Joins an ML task to its
+   * consumer block types/instances and a device to the models applicable to it. Null for deterministic types.
+   */
+  mlTargetCapability?: string | null;
+  inputs: { name: string; kind: string; description: string; optional?: boolean }[];
   outputs: { id: string; kind: string; unit?: string | null; writable: boolean }[];
   params: { name: string; default: number; unit?: string | null; min?: number | null; max?: number | null; description: string }[];
+  /** Non-numeric options (enum/bool/text) — the form renders a dropdown/switch/field per option (Epic 2Q). */
+  options?: { name: string; kind: string; default: string; description: string; values?: string[] | null }[];
 }
 
 export const blocksApi = {

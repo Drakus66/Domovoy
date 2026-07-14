@@ -1,4 +1,9 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 using System.Collections.Concurrent;
+using System.Globalization;
 
 using Domovoy.AutomationService.Services;
 using Domovoy.Contracts.Blocks;
@@ -40,20 +45,25 @@ public sealed class BlockRuntime : BackgroundService
     private readonly DeviceRegistry _registry;
     private readonly BlockCatalog _catalog;
     private readonly BlockStore _store;
+    private readonly BlockStateStore _stateStore;
     private readonly ZoneCache _zones;
     private readonly ILogger<BlockRuntime> _logger;
 
     private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(15);
+    // Persist state every this-many ticks (2Q): a snapshot roughly every 2 min, deduped on unchanged JSON.
+    private const int PersistEveryTicks = 8;
     private readonly ConcurrentDictionary<string, RunningBlock> _running = new();
+    private long _tickCounter;
 
     public BlockRuntime(
         IMessageBus bus, DeviceRegistry registry, BlockCatalog catalog, BlockStore store,
-        ZoneCache zones, ILogger<BlockRuntime> logger)
+        BlockStateStore stateStore, ZoneCache zones, ILogger<BlockRuntime> logger)
     {
         _bus = bus;
         _registry = registry;
         _catalog = catalog;
         _store = store;
+        _stateStore = stateStore;
         _zones = zones;
         _logger = logger;
     }
@@ -68,6 +78,9 @@ public sealed class BlockRuntime : BackgroundService
             env => HandleCommand(env),
             stoppingToken);
 
+        // 2Q: load the last persisted state so latches/counters/timers resume where they left off.
+        await _stateStore.LoadAsync(stoppingToken);
+
         _logger.LogInformation("BlockRuntime started (tick {Seconds}s)", TickInterval.TotalSeconds);
 
         using var timer = new PeriodicTimer(TickInterval);
@@ -78,6 +91,7 @@ public sealed class BlockRuntime : BackgroundService
                 await _zones.RefreshAsync(stoppingToken); // 2I: keep zone-kind lookup fresh for model-scope chains
                 await SyncInstances(stoppingToken);
                 await TickAll(stoppingToken);
+                if (++_tickCounter % PersistEveryTicks == 0) await PersistState(stoppingToken);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
@@ -87,6 +101,16 @@ public sealed class BlockRuntime : BackgroundService
 
             if (!await timer.WaitForNextTickAsync(stoppingToken)) break;
         }
+
+        // Final snapshot on graceful shutdown so nothing since the last periodic save is lost.
+        await PersistState(CancellationToken.None);
+    }
+
+    // 2Q: snapshot each running block's state bag (BlockStateStore dedupes unchanged JSON).
+    private async Task PersistState(CancellationToken ct)
+    {
+        foreach (var rb in _running.Values)
+            await _stateStore.SaveAsync(rb.Config.Id, rb.State, ct);
     }
 
     // Reconcile running instances with the latest configs: add new, drop removed, rebuild on config change.
@@ -95,7 +119,10 @@ public sealed class BlockRuntime : BackgroundService
         var configs = _store.Blocks.ToDictionary(b => b.Id, StringComparer.Ordinal);
 
         foreach (var goneId in _running.Keys.Where(id => !configs.ContainsKey(id)).ToList())
+        {
             _running.TryRemove(goneId, out _);
+            await _stateStore.DeleteAsync(goneId, ct); // 2Q: drop persisted state for a removed block
+        }
 
         foreach (var config in configs.Values)
         {
@@ -111,6 +138,10 @@ public sealed class BlockRuntime : BackgroundService
 
             var deviceId = ResolveDeviceId(config);
             var running = new RunningBlock(config, type.Create(), deviceId, config.UpdatedAt);
+            // 2Q: re-seed persisted state so a restart (or config edit) resumes latches/counters/timers.
+            var saved = _stateStore.Take(config.Id);
+            if (saved is not null)
+                foreach (var kv in saved) running.State[kv.Key] = kv.Value;
             _running[config.Id] = running;
 
             await AnnounceDevice(config, type, deviceId, ct);
@@ -140,8 +171,16 @@ public sealed class BlockRuntime : BackgroundService
                 _logger.LogError(ex, "Block {Id} ({Type}) tick threw", rb.Config.Id, rb.Config.TypeId);
                 rb.LastError = ex.Message;
                 rb.LastErrorAt = DateTime.UtcNow;
+                // A block is an active entity: surface a failing tick in the Activity Center so it is not
+                // silently stuck (Epic 1H run record). Deduped so a persistent fault logs once, not every tick.
+                await PublishBlockRun(rb, ok: false, EmptyEmitted, ex.Message, ct);
                 continue;
             }
+
+            // Run record (Epic 1H): a block ticks continuously, so publish only when its emitted decision
+            // changes — this is what makes the block layer visible in the journal, including a Shadow-stage
+            // governor that emits a proposal but drives nothing. Deduped on the emitted signature inside.
+            await PublishBlockRun(rb, ok: true, emitted, detail: null, ct);
 
             if (emitted.Count == 0) continue;
 
@@ -181,6 +220,53 @@ public sealed class BlockRuntime : BackgroundService
             await _bus.PublishAsync(BusTopology.CommandsExchange, BusTopology.DeviceCommandKey, envelope, ct);
         }
     }
+
+    private static readonly IReadOnlyDictionary<string, object?> EmptyEmitted = new Dictionary<string, object?>();
+
+    /// <summary>
+    /// Publish a block run record (Epic 1H) for the Activity Center, deduped on the emitted signature so a
+    /// block that ticks every 15s only logs when its decision actually changes (or when a failing/recovering
+    /// tick flips its ok state). Doubles are coarsened to one decimal for the signature so a continuously
+    /// drifting monitoring output (e.g. a governor's rolling drift) doesn't churn the journal.
+    /// </summary>
+    private async Task PublishBlockRun(
+        RunningBlock rb, bool ok, IReadOnlyDictionary<string, object?> emitted, string? detail, CancellationToken ct)
+    {
+        var signature = ok ? "ok|" + Signature(emitted) : "err|" + detail;
+        if (rb.LastRunSignature == signature) return; // unchanged decision — nothing new to record
+        rb.LastRunSignature = signature;
+
+        var envelope = Envelope<BlockTriggeredV1>.Create(
+            MessageTypes.BlockTriggered,
+            source: $"block:{rb.Config.Id}",
+            data: new BlockTriggeredV1(
+                rb.Config.Id, rb.Config.Name, rb.Config.TypeId, DateTimeOffset.Now,
+                Ok: ok, Summary: ok ? SummarizeEmitted(emitted) : "tick failed", Detail: detail),
+            subject: rb.DeviceId.ToString());
+        await _bus.PublishAsync(BusTopology.EventsExchange, BusTopology.BlockTriggeredKey, envelope, ct);
+    }
+
+    // Human-readable one-liner of what the block emitted this tick ("proposed_setpoint=21.5, ml_effective_stage=0").
+    private static string SummarizeEmitted(IReadOnlyDictionary<string, object?> emitted) =>
+        emitted.Count == 0
+            ? "no output"
+            : string.Join(", ", emitted.OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                .Select(kv => $"{kv.Key}={FormatValue(kv.Value)}"));
+
+    // Coarse signature for dedup — doubles rounded to 1 decimal so slowly-varying monitoring outputs settle.
+    private static string Signature(IReadOnlyDictionary<string, object?> emitted) =>
+        string.Join(",", emitted.OrderBy(kv => kv.Key, StringComparer.Ordinal)
+            .Select(kv => kv.Value is double d
+                ? $"{kv.Key}={Math.Round(d, 1).ToString(CultureInfo.InvariantCulture)}"
+                : $"{kv.Key}={FormatValue(kv.Value)}"));
+
+    private static string FormatValue(object? v) => v switch
+    {
+        null => "—",
+        bool b => b ? "on" : "off",
+        double d => d.ToString("0.###", CultureInfo.InvariantCulture),
+        _ => v.ToString() ?? string.Empty,
+    };
 
     private async Task AnnounceDevice(ControlBlock config, IBlockType type, Guid deviceId, CancellationToken ct)
     {
@@ -255,6 +341,8 @@ public sealed class BlockRuntime : BackgroundService
         public Dictionary<string, object?> Commanded { get; } = new();
         /// <summary>Last value sent to each bound output's target (actuation dedup, Epic 1D).</summary>
         public Dictionary<string, object?> LastCommanded { get; } = new();
+        /// <summary>Last published run-record signature (Epic 1H) — dedupes the Activity Center block feed.</summary>
+        public string? LastRunSignature { get; set; }
 
         // --- health (surfaced via Snapshot for the UI) ---
         public DateTime? LastTickAt { get; set; }
@@ -302,13 +390,16 @@ public sealed class BlockRuntime : BackgroundService
         public double Param(string key, double fallback) =>
             _rb.Config.Params.TryGetValue(key, out var v) ? v : fallback;
 
+        public string? Option(string key) =>
+            _rb.Config.Options.TryGetValue(key, out var v) ? v : null;
+
         public object? Commanded(string capabilityId) =>
             _rb.Commanded.TryGetValue(capabilityId, out var v) ? v : null;
 
         public void Emit(string capabilityId, object? value) => _emitted[capabilityId] = value;
 
         public T? GetState<T>(string key) =>
-            _rb.State.TryGetValue(key, out var v) && v is T t ? t : default;
+            _rb.State.TryGetValue(key, out var v) ? StateCoerce.As<T>(v) : default;
 
         public void SetState<T>(string key, T value) => _rb.State[key] = value;
 

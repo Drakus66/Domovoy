@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import { useState } from 'react';
 import { Box, IconButton, ListItemText, Menu, MenuItem, Tooltip } from '@mui/material';
 import TranslateRoundedIcon from '@mui/icons-material/TranslateRounded';

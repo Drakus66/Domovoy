@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 using System.Text.Json;
 
 using Domovoy.Contracts.Messaging;
@@ -39,7 +43,7 @@ public class DeviceControlController : ControllerBase
 
         var envelope = Envelope<DeviceCommandV1>.Create(
             MessageTypes.DeviceCommand,
-            source: "apigateway",
+            source: CommandSource(),
             data: new DeviceCommandV1(deviceId, normalized),
             subject: id);
 
@@ -47,6 +51,19 @@ public class DeviceControlController : ControllerBase
 
         _logger.LogInformation("Capability command published for {DeviceId}: {Caps}", deviceId, string.Join(", ", set.Keys));
         return Accepted(new { deviceId = id, capabilities = set.Keys });
+    }
+
+    /// <summary>
+    /// Actor-string for the command's envelope source. Until Phase 3 auth the WebUI may send a
+    /// <b>self-declared</b> local user (Epic 2E model) in the <c>X-Domovoy-User</c> header — "who of the
+    /// household is at this browser", not authentication. With the header: <c>user:{id}</c>, so the
+    /// event-log can attribute the command to that user; without it: the anonymous <c>apigateway</c>.
+    /// </summary>
+    private string CommandSource()
+    {
+        var userId = Request.Headers["X-Domovoy-User"].FirstOrDefault()?.Trim();
+        if (string.IsNullOrEmpty(userId) || userId.Length > 64 || userId.Contains(':')) return "apigateway";
+        return $"user:{userId}";
     }
 
     private static object? Normalize(JsonElement value) => value.ValueKind switch

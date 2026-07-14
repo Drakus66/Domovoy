@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 namespace Domovoy.Contracts.Proposals;
 
 using System.Text.Json.Serialization;
@@ -53,6 +57,11 @@ public class Proposal
     /// <summary>ModelSelection: model version to pin to the block on approve (patches <c>Params["model_version"]</c>; 0 = latest).</summary>
     public int? ModelVersion { get; set; }
 
+    // --- kind: MlTask (create an ML training task, Epic 2P) ---
+
+    /// <summary>MlTask: target capability the proposed training task would learn. Approve → creates the task in <c>ml_tasks</c>.</summary>
+    public string? MlTaskTarget { get; set; }
+
     // --- provenance / scorecard (model-backed proposals) ---
 
     /// <summary>Model id backing this proposal (BlockPromotion/ModelSelection) — links to the scorecard.</summary>
@@ -63,6 +72,13 @@ public class Proposal
 
     /// <summary>Holdout score of the backing model (the honest "prediction vs fact" signal, Epic 2B).</summary>
     public double? Score { get; set; }
+
+    /// <summary>
+    /// Structured numeric evidence behind <see cref="Rationale"/> (support, confidence, lift, mi, p, samples,
+    /// windowDays, …) so the WebUI can render a localized justification instead of the English fallback text.
+    /// Numeric-only by design, mirroring <c>ControlBlock.Params</c>; producers fill what they measured.
+    /// </summary>
+    public Dictionary<string, double>? Evidence { get; set; }
 
     /// <summary>
     /// Provenance handle stamped when the proposal is approved and applied (Epic 2C DoD: an activated action
@@ -88,6 +104,9 @@ public enum ProposalKind
 
     /// <summary>Pin a specific model version to a block instance (justified by 2B scorecard).</summary>
     ModelSelection,
+
+    /// <summary>Create an ML training task for a capability with enough history (Epic 2P auto-suggestions).</summary>
+    MlTask,
 }
 
 /// <summary>Proposal lifecycle. Only <see cref="Proposed"/> is actionable; approve/reject are terminal.</summary>

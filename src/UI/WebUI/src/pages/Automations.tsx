@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from 'i18next';
@@ -19,6 +23,7 @@ import {
 } from '../api/automations';
 import { replayApi, ReplayResult } from '../api/replay';
 import { capabilityDevicesApi, CapabilityDevice } from '../api/capabilityDevices';
+import { useFocusParam, scrollIntoViewRef } from '../hooks/useFocusParam';
 
 const OPERATORS = ['eq', 'ne', 'gt', 'lt', 'gte', 'lte', 'changed'];
 // User-selectable lifecycle (Proposed/Approved are reserved for ML proposals, Epic 1F/Phase 2).
@@ -55,6 +60,7 @@ const EMPTY_DRAFT: DraftState = {
 
 export default function Automations() {
   const { t } = useTranslation('automations');
+  const focusId = useFocusParam();
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [devices, setDevices] = useState<CapabilityDevice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -175,7 +181,8 @@ export default function Automations() {
         ) : (
           <Stack spacing={1.5}>
             {sorted.map((rule) => (
-              <Card key={rule.id} variant="outlined">
+              <Card key={rule.id} variant="outlined" ref={scrollIntoViewRef(focusId === rule.id)}
+                sx={focusId === rule.id ? { borderColor: 'primary.main', boxShadow: 2 } : undefined}>
                 <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
                   <Stack direction="row" alignItems="flex-start" spacing={2}>
                     <Box flex={1} minWidth={0}>

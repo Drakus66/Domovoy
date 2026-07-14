@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -7,7 +11,6 @@ import {
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import ClearRoundedIcon from '@mui/icons-material/ClearRounded';
-import 'leaflet/dist/leaflet.css';
 import LocationMap from '../settings/LocationMap';
 import { settingsApi, GeocodeResult } from '../../api/settings';
 

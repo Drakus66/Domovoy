@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 // Shared i18n configuration used by both the runtime init (index.ts, http-backend)
 // and the test init (src/test/setup.ts, inline resources). Keeping the namespace
 // list and defaults here means the two init paths can never drift apart.
@@ -25,6 +29,7 @@ export const namespaces = [
   'users',
   'plugins',
   'logs',
+  'diary',
   'status',
   'zigbee',
 ] as const;

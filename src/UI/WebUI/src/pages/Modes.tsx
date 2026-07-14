@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -6,14 +10,17 @@ import {
 } from '@mui/material';
 import { modeApi, HomeState } from '../api/mode';
 import { historyApi, EventLogEntry } from '../api/history';
+import { capabilityDevicesApi } from '../api/capabilityDevices';
 import { fmtDateTime } from '../i18n/format';
 import { MODE_ICONS, modeIcon as iconFor } from '../components/modes/modeVisuals';
+import TriggerChip from '../components/common/TriggerChip';
 
 export default function Modes() {
   const { t } = useTranslation('modes');
   const [state, setState] = useState<HomeState | null>(null);
   const [options, setOptions] = useState<string[]>([]);
   const [history, setHistory] = useState<EventLogEntry[]>([]);
+  const [deviceNames, setDeviceNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +52,13 @@ export default function Modes() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  // Device names for presence attribution — "which sensor drove the switch" (Epic 2G tail).
+  useEffect(() => {
+    capabilityDevicesApi.getDevices()
+      .then((ds) => setDeviceNames(Object.fromEntries(ds.map((d) => [d.id, d.name]))))
+      .catch(() => undefined);
+  }, []);
+
   const switchTo = async (mode: string) => {
     if (busy || mode === state?.mode) return;
     setBusy(true);
@@ -74,7 +88,11 @@ export default function Modes() {
             <Chip
               color="primary"
               icon={iconFor(state.mode)}
-              label={t('chipLabel', { mode: nameFor(state.mode), source: state.source })}
+              label={t('chipLabel', {
+                mode: nameFor(state.mode),
+                // The stored source is an actor-string ("presence:{deviceId}") — show the kind only.
+                source: t(`common:trigger.${state.source.split(':')[0]}`, { defaultValue: state.source.split(':')[0] }),
+              })}
               sx={{ fontWeight: 700, '& .MuiChip-icon': { color: 'inherit' } }}
             />
           )}
@@ -134,7 +152,9 @@ export default function Modes() {
                           <Typography component="span" fontWeight={600}>
                             {h.oldValue ? nameFor(h.oldValue as string) : '—'} → {h.newValue ? nameFor(h.newValue as string) : '—'}
                           </Typography>
-                          <Chip size="small" variant="outlined" label={t('changedBy', { source: h.triggerSource })} />
+                          <TriggerChip kind={h.triggerSource}
+                            id={h.triggerId}
+                            name={h.triggerId ? deviceNames[h.triggerId] ?? null : null} />
                         </Stack>
                       }
                       secondary={fmtDateTime(h.timestamp)}

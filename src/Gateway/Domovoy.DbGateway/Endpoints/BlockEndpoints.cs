@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 using Domovoy.Contracts.Blocks;
 using Domovoy.Contracts.Devices;
 
@@ -51,6 +55,7 @@ public static class BlockEndpoints
             block.Id = id;
             block.DeviceId = existing.DeviceId; // stable virtual device id
             block.CreatedAt = existing.CreatedAt;
+            block.Layout ??= existing.Layout;   // editor-only; a non-layout update keeps the saved arrangement (Epic 1E)
             block.UpdatedAt = DateTime.UtcNow;
             await Blocks(db).ReplaceOneAsync(x => x.Id == id, block);
             return Results.NoContent();

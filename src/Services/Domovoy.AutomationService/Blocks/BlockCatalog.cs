@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 using Domovoy.AutomationService.Blocks.Composite;
 using Domovoy.AutomationService.Configuration;
 using Domovoy.AutomationService.Ml;
@@ -30,6 +34,43 @@ public sealed class BlockCatalog
             new IrrigationSequencerType(),
             new SunGateType(sun),                                     // Epic 1D: outdoor lighting by sun
             new MlSetpointType(models, o.SetpointMin, o.SetpointMax), // Epic 2A: ML-driven setpoint
+            new MlPredictorType(models),                              // Epic 2Q: ML prediction as a source signal
+
+            // Epic 2Q: generalized primitives — small reusable building blocks that compose into any control
+            // loop (a thermostat = setpoint → hysteresis, etc.), replacing bespoke domain blocks over time.
+            new ComparatorType(),
+            new HysteresisType(),
+            new WindowType(),
+            new LogicType(),
+            new SelectType(),
+            new LinearMapType(),
+            new ClampType(),
+            new DeadbandType(),
+            new RateLimiterType(),
+            new AggregateType(),
+            new MinDwellType(),
+            new PidType(),
+
+            // Epic 2Q Phase 2: time/state primitives (delays, pulses, edges, latches, counters, windowed filters).
+            new OnDelayType(),
+            new OffDelayType(),
+            new PulseType(),
+            new IntervalType(),
+            new EdgeType(),
+            new LatchType(),
+            new CounterType(),
+            new SampleHoldType(),
+            new DebounceType(),
+            new MovingAverageType(),
+            new MedianFilterType(),
+
+            // Epic 2Q Phase 3: control ramp + the custom expression (script) block.
+            new RampType(),
+            new ExpressionType(),
+
+            // Presence → home mode as a user-owned block (replaces the hardcoded 1G PresenceMonitor):
+            // household policy lives in the block layer, not in platform code.
+            new PresenceModeType(),
         };
 
         // Epic 2I: ML governors are catalog-driven instances of generic types — a new ML-governed output is a
@@ -41,14 +82,13 @@ public sealed class BlockCatalog
 
         // Epic 1H E2: composite blocks are declarative (DSL) documents, not code — parsed against the primitives
         // above and added as first-class types. A new composite is a config entry (built-in example + options),
-        // so it needs no rebuild. Composites reference primitives only in v1, so the dict is complete here.
-        foreach (var composite in CompositeDefinitions(o))
-            _types[composite.TypeId] = new CompositeBlockType(composite, Get);
+        // so it needs no rebuild.
+        RegisterComposites(CompositeSpecs(o));
     }
 
-    // Built-in example composite + any authored via config, each parsed defensively (a malformed one is skipped,
-    // not fatal). The canonical loop: raw temperature → EWMA smoothing → hysteresis thermostat, as one line.
-    private List<CompositeDefinition> CompositeDefinitions(AutomationOptions o)
+    // Built-in example composites + any authored via config. The canonical loop: raw temperature → EWMA smoothing
+    // → hysteresis thermostat, as one line; plus a nested example proving composite-in-composite.
+    private static List<CompositeSpec> CompositeSpecs(AutomationOptions o)
     {
         var specs = new List<CompositeSpec>
         {
@@ -59,27 +99,102 @@ public sealed class BlockCatalog
                 Description = "Smooths a temperature with an EWMA filter, then drives a hysteresis thermostat — the canonical filter→controller composite.",
                 Dsl = "input(temperature) |> ewma_filter(tau=300) |> thermostat(setpoint=21, hysteresis=0.5)",
             },
+            new()
+            {
+                // Epic 1D multi-zone irrigation as a branching composite: one shared rain/soil inhibit fans out to
+                // several irrigation_sequencer nodes, each surfaced as its own valve output. Authored in the graph
+                // DSL (no |>), proving fan-out + multiple outputs end-to-end through the catalog.
+                TypeId = "irrigation_multizone",
+                Title = "Multi-zone irrigation",
+                Description = "Runs several irrigation zones on independent schedules from one shared rain/soil inhibit.",
+                Dsl = """
+                    in inhibit
+                    z1 = irrigation_sequencer(intervalHours=24, runMinutes=15) <- inhibit
+                    z2 = irrigation_sequencer(intervalHours=24, runMinutes=20) <- inhibit
+                    z3 = irrigation_sequencer(intervalHours=48, runMinutes=10) <- inhibit
+                    out zone1 = z1.on_off
+                    out zone2 = z2.on_off
+                    out zone3 = z3.on_off
+                    """,
+            },
+
+            // Epic 2Q templates: recipes built from the generalized primitives, showing that the domain blocks
+            // are decomposable (a thermostat = smoothing → hysteresis) and that string options flow through the DSL.
+            new()
+            {
+                TypeId = "smoothed_sensor",
+                Title = "Smoothed sensor",
+                Description = "Rejects spikes with a median filter, then smooths with an EWMA — a clean signal from a noisy sensor.",
+                Dsl = "input(value) |> median_filter(window=5) |> ewma_filter(tau=120)",
+            },
+            new()
+            {
+                TypeId = "cooling_relay",
+                Title = "Cooling relay (hysteresis)",
+                Description = "Generic cooling demand: turns on above the high threshold and off below the low, using the inverted hysteresis primitive.",
+                Dsl = "input(temperature) |> hysteresis(high=25, low=24, invert=true)",
+            },
+            new()
+            {
+                TypeId = "smart_thermostat",
+                Title = "Thermostat (from primitives)",
+                Description = "The classic thermostat rebuilt from primitives: EWMA smoothing → hysteresis relay. Bind heat to a boiler/valve.",
+                Dsl = """
+                    in temperature
+                    f = ewma_filter(tau=300) <- temperature
+                    h = hysteresis(high=21.5, low=20.5) <- f.value
+                    out heat = h.state
+                    """,
+            },
         };
         if (o.Composites is not null) specs.AddRange(o.Composites);
-
-        var defs = new List<CompositeDefinition>();
-        foreach (var c in specs)
-        {
-            if (string.IsNullOrWhiteSpace(c.TypeId) || string.IsNullOrWhiteSpace(c.Dsl)) continue;
-            try { defs.Add(BlockDsl.Parse(c.TypeId, c.Title ?? c.TypeId, c.Description ?? "", c.Dsl!, Get)); }
-            catch (FormatException) { /* skip a malformed composite rather than fail the whole catalog */ }
-        }
-        return defs;
+        return specs;
     }
 
-    /// <summary>The configured ML governor instances (Epic 2I). They share one predictor over the loaded model.</summary>
+    // Parse + register composites iteratively (roadmap Epic 1H E2). A composite may reference another composite
+    // (nesting), so we can't assume the referenced type exists on the first pass: each round registers every spec
+    // whose referenced types now resolve, and repeats while it makes progress. An UnknownBlockTypeException means
+    // "defer — maybe a later-registered composite"; any other FormatException is a malformed DSL and is dropped.
+    // When a round adds nothing, whatever remains references a truly-unknown type (or forms a cycle) and is dropped
+    // — a bad composite is skipped, never fatal to the catalog.
+    private void RegisterComposites(List<CompositeSpec> specs)
+    {
+        var pending = specs
+            .Where(c => !string.IsNullOrWhiteSpace(c.TypeId) && !string.IsNullOrWhiteSpace(c.Dsl))
+            .ToList();
+
+        bool progressed = true;
+        while (progressed && pending.Count > 0)
+        {
+            progressed = false;
+            for (var i = pending.Count - 1; i >= 0; i--)
+            {
+                var c = pending[i];
+                try
+                {
+                    var def = BlockDsl.Parse(c.TypeId, c.Title ?? c.TypeId, c.Description ?? "", c.Dsl!, Get);
+                    _types[def.TypeId] = new CompositeBlockType(def, Get);
+                    pending.RemoveAt(i);
+                    progressed = true;
+                }
+                catch (UnknownBlockTypeException) { /* defer: a referenced composite may register in a later round */ }
+                catch (FormatException) { pending.RemoveAt(i); /* malformed → drop, don't fail the catalog */ }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The configured ML governor instances (Epic 2I). Each type's predictor closes over its own ML target
+    /// (Epic 2P) — the measured input — so multi-target serving needs no signature change in the governors:
+    /// the thermostat asks for temperature models, the switch for on_off models, and so on.
+    /// </summary>
     private static IEnumerable<IBlockType> MlGovernors(MlModelService models, AutomationOptions o)
     {
         // Predictors thread the instance's pinned model version (Epic 2C); 0 = latest.
-        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> predict =
-            (now, chain, version) => models.TryPredict(now, chain, version, out var v) ? v : null;
-        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, string?> predictClass =
-            (now, chain, version) => models.TryPredictClass(now, chain, version);
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> PredictFor(string target) =>
+            (now, chain, version) => models.TryPredict(target, now, chain, version, out var v) ? v : null;
+        Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, string?> PredictClassFor(string target) =>
+            (now, chain, version) => models.TryPredictClass(target, now, chain, version);
 
         yield return new MlSetpointGovernorType(
             typeId: "ml_thermostat",
@@ -89,7 +204,7 @@ public sealed class BlockCatalog
             output: WellKnownCapabilities.TemperatureSetpoint(min: o.SetpointMin, max: o.SetpointMax, step: 0.5),
             floorMin: o.SetpointMin,
             floorMax: o.SetpointMax,
-            predict: predict);
+            predict: PredictFor(CapabilityIds.Temperature));
 
         yield return new MlToggleGovernorType(
             typeId: "ml_switch",
@@ -97,7 +212,7 @@ public sealed class BlockCatalog
             description: "Proposes a learned on/off schedule to a deterministic switch, staged Shadow → Bounded → Full with a probability threshold + anti-chatter dwell (Epic 2I). Use when the trained target is a boolean capability.",
             measuredInput: CapabilityIds.OnOff,
             output: WellKnownCapabilities.OnOff(writable: true),
-            predict: predict);
+            predict: PredictFor(CapabilityIds.OnOff));
 
         const string hvacMode = "hvac_mode";
         yield return new MlSelectorGovernorType(
@@ -106,7 +221,7 @@ public sealed class BlockCatalog
             description: "Proposes a learned enum schedule (e.g. an HVAC mode) to a deterministic loop, staged Shadow → Bounded → Full, Bounded limited to adjacent values (Epic 2I). Use when the trained target is an enum capability.",
             measuredInput: hvacMode,
             output: WellKnownCapabilities.Enum(hvacMode, new[] { "off", "eco", "comfort", "boost" }, writable: true),
-            predict: predictClass);
+            predict: PredictClassFor(hvacMode));
     }
 
     public IReadOnlyCollection<IBlockType> Types => _types.Values;

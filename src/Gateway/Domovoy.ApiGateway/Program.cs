@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 namespace Domovoy.ApiGateway;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -112,7 +116,9 @@ internal static class Program
             builder.Services.AddHttpClient("automation-service", client =>
             {
                 client.BaseAddress = new Uri(automationUrl);
-                client.Timeout = TimeSpan.FromSeconds(30); // replay scans history; allow headroom
+                // Replay scans history; ML training (2P) pages telemetry + fits several templates per scope —
+                // a multi-zone train run takes tens of seconds, so give the proxy real headroom.
+                client.Timeout = TimeSpan.FromSeconds(180);
             });
 
             // PluginSupervisor hosts the plugin registry + lifecycle API (roadmap Epic 1C); proxy to it.

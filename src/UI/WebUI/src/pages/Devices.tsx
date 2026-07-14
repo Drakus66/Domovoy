@@ -1,13 +1,19 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from 'i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Container, Box, Typography, IconButton, LinearProgress, Alert, Tooltip, Stack,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import CategoryRoundedIcon from '@mui/icons-material/CategoryRounded';
 import { HubConnection } from '@microsoft/signalr';
 import { capabilityDevicesApi, CapabilityDevice, isUnassignedZone } from '../api/capabilityDevices';
+import { mlApi, ArchetypeDisagreement } from '../api/ml';
 import { zonesApi, Zone } from '../api/zones';
 import type { Dashboard } from '../api/dashboards';
 import { buildDeviceHubConnection, startDeviceHub } from '../api/deviceHub';
@@ -30,6 +36,7 @@ export default function Devices() {
   const { t } = useTranslation('devices');
   const navigate = useNavigate();
   const { tabId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [devices, setDevices] = useState<CapabilityDevice[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +44,19 @@ export default function Devices() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorTarget, setEditorTarget] = useState<Dashboard | null>(null);
+  // ML device-type review (Epic 2D, lives here since 2P): run the classifier, list disagreements.
+  const [classifying, setClassifying] = useState(false);
+  const [classifyInfo, setClassifyInfo] = useState<string | null>(null);
+  const [disagreements, setDisagreements] = useState<ArchetypeDisagreement[] | null>(null);
   const hubRef = useRef<HubConnection | null>(null);
+
+  // Deep-link from attribution chips (Epic 2G tail): /?device={id} opens the device drawer directly.
+  useEffect(() => {
+    const focus = searchParams.get('device');
+    if (!focus) return;
+    setSelectedId(focus);
+    setSearchParams((p) => { p.delete('device'); return p; }, { replace: true });
+  }, [searchParams, setSearchParams]);
   // Device ids seen by the last successful fetch; null until the baseline load,
   // so restarts don't announce the whole house as "new residents".
   const knownIdsRef = useRef<Set<string> | null>(null);
@@ -60,6 +79,23 @@ export default function Devices() {
       setError(t('errors.loadDevices'));
     } finally {
       setLoading(false);
+    }
+  }, [t]);
+
+  const classify = useCallback(async () => {
+    setClassifying(true); setClassifyInfo(null); setDisagreements(null);
+    try {
+      const r = await mlApi.classifyArchetypes();
+      if (!r.trained) {
+        setClassifyInfo(t('classify.notTrained', { note: r.note }));
+      } else {
+        setDisagreements(r.disagreements);
+        setClassifyInfo(t('classify.done', { trainedOn: r.trainedOn, count: r.disagreements.length }));
+      }
+    } catch {
+      setClassifyInfo(t('classify.error'));
+    } finally {
+      setClassifying(false);
     }
   }, [t]);
 
@@ -189,12 +225,38 @@ export default function Devices() {
               {totalPower > 0 && <Stat label={t('stats.power')} value={`${Math.round(totalPower)} W`} />}
             </Stack>
           </Box>
-          <Tooltip title={t('actions.refresh')}>
-            <span>
-              <IconButton onClick={fetchDevices} disabled={loading}><RefreshIcon /></IconButton>
-            </span>
-          </Tooltip>
+          <Stack direction="row" spacing={0.5} alignItems="center">
+            {/* ML device-type review (Epic 2D, moved here from the ML page in 2P — it is about devices). */}
+            <Tooltip title={t('classify.actionHint')}>
+              <span>
+                <IconButton onClick={classify} disabled={classifying} aria-label={t('classify.action')}>
+                  <CategoryRoundedIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title={t('actions.refresh')}>
+              <span>
+                <IconButton onClick={fetchDevices} disabled={loading}><RefreshIcon /></IconButton>
+              </span>
+            </Tooltip>
+          </Stack>
         </Stack>
+
+        {classifyInfo && (
+          <Alert severity="info" sx={{ mb: 2 }} onClose={() => setClassifyInfo(null)}>{classifyInfo}</Alert>
+        )}
+        {disagreements && disagreements.length > 0 && (
+          <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setDisagreements(null)}>
+            <Typography variant="subtitle2" gutterBottom>{t('classify.reviewTitle')}</Typography>
+            <Stack spacing={0.5}>
+              {disagreements.map((d) => (
+                <Typography key={d.deviceId} variant="body2">
+                  {d.name}: {d.current} → <b>{d.predicted}</b> ({(d.confidence * 100).toFixed(0)}%)
+                </Typography>
+              ))}
+            </Stack>
+          </Alert>
+        )}
 
         <DashboardTabs
           spheres={spheres}

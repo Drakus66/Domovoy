@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 using Domovoy.AutomationService.Blocks;
 using Domovoy.Contracts.Capabilities;
 
@@ -23,6 +27,7 @@ public sealed class MlSetpointType : IBlockType
     }
 
     public string TypeId => "ml_setpoint";
+    public string Category => Blocks.BlockCategories.Ml;
     public string Title => "ML setpoint (learned schedule)";
     public string Description => "Emits a temperature setpoint predicted by the learned schedule model (Epic 2A).";
 

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 namespace Domovoy.Contracts.Home;
 
 /// <summary>
@@ -29,7 +33,7 @@ public static class WellKnownModes
 
     /// <summary>
     /// Modes that presence may auto-switch between. Night/Vacation are deliberately manual — presence
-    /// must never override an occupant's explicit choice (see PresenceMonitor in the AutomationService).
+    /// must never override an occupant's explicit choice (the presence_mode block's manual-mode guard).
     /// </summary>
     public static bool IsPresenceManaged(string? mode) =>
         string.Equals(mode, Home, StringComparison.OrdinalIgnoreCase) ||

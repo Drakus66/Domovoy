@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -87,6 +91,12 @@ public static class TimeSeriesInitializer
         await CreateIndexes(history, logger, ct,
             ("RuleId", "Timestamp"));
         await CreateIndexes(history, logger, ct, (null, "Timestamp"));
+
+        // Control-block run history (Epic 1H) — the 'block' Activity source queries by time window.
+        var blockHistory = database.GetCollection<BsonDocument>(Models.BlockHistory.Collection);
+        await CreateIndexes(blockHistory, logger, ct,
+            ("BlockId", "Timestamp"));
+        await CreateIndexes(blockHistory, logger, ct, (null, "Timestamp"));
     }
 
     private static async Task CreateIndexes(

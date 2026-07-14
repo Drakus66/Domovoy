@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import { Container, Box, Typography, Button } from '@mui/material';
 import ExploreOffRoundedIcon from '@mui/icons-material/ExploreOffRounded';
 import { useTranslation } from 'react-i18next';

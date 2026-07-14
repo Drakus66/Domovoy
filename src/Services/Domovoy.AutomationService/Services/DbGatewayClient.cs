@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -51,6 +55,47 @@ public sealed class DbGatewayClient
         {
             _logger.LogWarning(ex, "Could not load control blocks from DbGateway");
             return null;
+        }
+    }
+
+    /// <summary>Persisted block runtime state (Epic 2Q, Phase 2), or null if the gateway is unreachable.</summary>
+    public async Task<List<BlockStateRecord>?> GetBlockStatesAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<List<BlockStateRecord>>("api/block-state", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load block state from DbGateway");
+            return null;
+        }
+    }
+
+    /// <summary>Snapshot one block's state (Epic 2Q, Phase 2). Best-effort — a failure just delays persistence.</summary>
+    public async Task SaveBlockStateAsync(string blockId, string stateJson, CancellationToken ct)
+    {
+        try
+        {
+            await _http.PutAsJsonAsync($"api/block-state/{Uri.EscapeDataString(blockId)}",
+                new BlockStateRecord { Id = blockId, StateJson = stateJson }, Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not persist state for block {BlockId}", blockId);
+        }
+    }
+
+    /// <summary>Drop a removed block's persisted state (Epic 2Q, Phase 2).</summary>
+    public async Task DeleteBlockStateAsync(string blockId, CancellationToken ct)
+    {
+        try
+        {
+            await _http.DeleteAsync($"api/block-state/{Uri.EscapeDataString(blockId)}", ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not delete state for block {BlockId}", blockId);
         }
     }
 
@@ -296,13 +341,18 @@ public sealed class DbGatewayClient
         }
     }
 
-    /// <summary>Register a freshly trained model (metadata + serialized artifact). Returns the stored metadata.</summary>
-    public async Task<MlModel?> RegisterModelAsync(MlModel model, byte[] artifact, CancellationToken ct)
+    /// <summary>
+    /// Register a freshly trained model (metadata + serialized artifact). <paramref name="keepLastVersions"/>
+    /// &gt; 0 asks the gateway to prune the registered (kind, target, scope) line down to that many versions
+    /// (Epic 2P retention). Returns the stored metadata.
+    /// </summary>
+    public async Task<MlModel?> RegisterModelAsync(MlModel model, byte[] artifact, int keepLastVersions, CancellationToken ct)
     {
         try
         {
             var body = new { model, artifactBase64 = Convert.ToBase64String(artifact) };
-            var response = await _http.PostAsJsonAsync("api/ml/models", body, Json, ct);
+            var url = keepLastVersions > 0 ? $"api/ml/models?keepLast={keepLastVersions}" : "api/ml/models";
+            var response = await _http.PostAsJsonAsync(url, body, Json, ct);
             if (!response.IsSuccessStatusCode) return null;
             return await response.Content.ReadFromJsonAsync<MlModel>(Json, ct);
         }
@@ -312,6 +362,108 @@ public sealed class DbGatewayClient
             return null;
         }
     }
+
+    // ===== ML tasks (Epic 2P) =====
+
+    /// <summary>All ML training tasks, or null if the gateway is unreachable.</summary>
+    public async Task<List<MlTask>?> GetMlTasksAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<List<MlTask>>("api/ml/tasks", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load ML tasks from DbGateway");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// First-run seed of the options-derived default task (Epic 2P). Idempotent on the gateway side — it
+    /// inserts only while the ml_tasks collection has never been written, so user deletions stick.
+    /// </summary>
+    public async Task<bool> SeedDefaultMlTaskAsync(MlTask task, CancellationToken ct)
+    {
+        try
+        {
+            var response = await _http.PostAsJsonAsync("api/ml/tasks/seed", task, Json, ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not seed the default ML task");
+            return false;
+        }
+    }
+
+    /// <summary>Record the outcome of a training attempt on its task (trainer-owned status subdocument).</summary>
+    public async Task UpdateMlTaskStatusAsync(string taskId, MlTaskStatus status, CancellationToken ct)
+    {
+        try
+        {
+            await _http.PutAsJsonAsync($"api/ml/tasks/{Uri.EscapeDataString(taskId)}/status", status, Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not update ML task status for {TaskId}", taskId);
+        }
+    }
+
+    /// <summary>Telemetry sample count in a window (Epic 2P data-sufficiency check), or null if unreachable.</summary>
+    public async Task<long?> CountTelemetryAsync(string capabilityId, DateTime fromUtc, CancellationToken ct, string? zoneId = null)
+    {
+        var url = $"api/telemetry/count?capabilityId={Uri.EscapeDataString(capabilityId)}&from={fromUtc:o}";
+        if (!string.IsNullOrEmpty(zoneId)) url += $"&zoneId={Uri.EscapeDataString(zoneId)}";
+        return await CountAsync(url, ct);
+    }
+
+    /// <summary>Per-zone telemetry sample counts in a window (one aggregation round-trip), or null.</summary>
+    public Task<IReadOnlyDictionary<string, long>?> CountTelemetryByZoneAsync(string capabilityId, DateTime fromUtc, CancellationToken ct) =>
+        CountByZoneAsync($"api/telemetry/count-by-zone?capabilityId={Uri.EscapeDataString(capabilityId)}&from={fromUtc:o}", ct);
+
+    /// <summary>State-change event count for one capability in a window, or null if unreachable.</summary>
+    public async Task<long?> CountCapabilityEventsAsync(string capabilityId, DateTime fromUtc, CancellationToken ct, string? zoneId = null)
+    {
+        var url = $"api/events/count?capabilityId={Uri.EscapeDataString(capabilityId)}&from={fromUtc:o}";
+        if (!string.IsNullOrEmpty(zoneId)) url += $"&zoneId={Uri.EscapeDataString(zoneId)}";
+        return await CountAsync(url, ct);
+    }
+
+    /// <summary>Per-zone state-change event counts for one capability in a window, or null.</summary>
+    public Task<IReadOnlyDictionary<string, long>?> CountCapabilityEventsByZoneAsync(string capabilityId, DateTime fromUtc, CancellationToken ct) =>
+        CountByZoneAsync($"api/events/count-by-zone?capabilityId={Uri.EscapeDataString(capabilityId)}&from={fromUtc:o}", ct);
+
+    private async Task<long?> CountAsync(string url, CancellationToken ct)
+    {
+        try
+        {
+            var dto = await _http.GetFromJsonAsync<CountDto>(url, Json, ct);
+            return dto?.Count;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load count from {Url}", url);
+            return null;
+        }
+    }
+
+    private async Task<IReadOnlyDictionary<string, long>?> CountByZoneAsync(string url, CancellationToken ct)
+    {
+        try
+        {
+            var rows = await _http.GetFromJsonAsync<List<ZoneCountDto>>(url, Json, ct);
+            return rows?.ToDictionary(r => r.ZoneId, r => r.Count, StringComparer.Ordinal);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load per-zone counts from {Url}", url);
+            return null;
+        }
+    }
+
+    private sealed record CountDto(long Count);
+    private sealed record ZoneCountDto(string ZoneId, long Count);
 
     /// <summary>All registered model metadata (artifact projected out), newest first, or null (Epic 2I).</summary>
     public async Task<List<MlModel>?> GetModelsAsync(CancellationToken ct)

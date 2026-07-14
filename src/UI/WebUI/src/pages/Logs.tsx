@@ -1,24 +1,33 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fmtDateTime } from '../i18n/format';
 import {
   Container, Box, Typography, Stack, Chip, TextField, MenuItem, InputAdornment,
   LinearProgress, Alert, Card, IconButton, Tooltip, Divider, Button,
+  ToggleButtonGroup, ToggleButton,
 } from '@mui/material';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import DevicesRoundedIcon from '@mui/icons-material/DevicesRounded';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
+import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
 import TerminalRoundedIcon from '@mui/icons-material/TerminalRounded';
 import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
 import SendRoundedIcon from '@mui/icons-material/SendRounded';
 import { activityApi, ActivityEntry, ActivitySource, ActivitySeverity } from '../api/activity';
 import { capabilityDevicesApi } from '../api/capabilityDevices';
 import { notificationsApi, NotificationChannels } from '../api/notifications';
+import DiaryView from '../components/logs/DiaryView';
+import TriggerChip from '../components/common/TriggerChip';
 
 const SOURCE_META: Record<ActivitySource, { icon: JSX.Element; color: 'primary' | 'secondary' | 'default' }> = {
   device: { icon: <DevicesRoundedIcon fontSize="small" />, color: 'primary' },
   automation: { icon: <BoltRoundedIcon fontSize="small" />, color: 'secondary' },
+  block: { icon: <AccountTreeRoundedIcon fontSize="small" />, color: 'secondary' },
   system: { icon: <TerminalRoundedIcon fontSize="small" />, color: 'default' },
 };
 
@@ -48,6 +57,7 @@ export default function Logs() {
   const [search, setSearch] = useState('');
   const [channels, setChannels] = useState<NotificationChannels | null>(null);
   const [testMsg, setTestMsg] = useState<string | null>(null);
+  const [view, setView] = useState<'activity' | 'diary'>('activity');
 
   const since = useMemo(() => new Date(Date.now() - hours * 3600 * 1000).toISOString(), [hours]);
 
@@ -106,9 +116,18 @@ export default function Logs() {
               {t('subtitle')}
             </Typography>
           </Box>
-          <Tooltip title={t('refresh')}><IconButton onClick={load} disabled={loading}><RefreshRoundedIcon /></IconButton></Tooltip>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v) => v && setView(v)}>
+              <ToggleButton value="activity">{t('view.activity')}</ToggleButton>
+              <ToggleButton value="diary">{t('view.diary')}</ToggleButton>
+            </ToggleButtonGroup>
+            {view === 'activity' && (
+              <Tooltip title={t('refresh')}><IconButton onClick={load} disabled={loading}><RefreshRoundedIcon /></IconButton></Tooltip>
+            )}
+          </Stack>
         </Stack>
 
+        {view === 'diary' ? <DiaryView /> : (<>
         <Card variant="outlined" sx={{ px: 2, py: 1.25, mb: 2 }}>
           <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
             <NotificationsRoundedIcon fontSize="small" color="action" />
@@ -168,7 +187,11 @@ export default function Logs() {
         ) : (
           <Card variant="outlined">
             <Stack divider={<Divider />}>
-              {entries.map((e, i) => (
+              {entries.map((e, i) => {
+                // With a structured initiator the clickable chip replaces the textual "by …" detail;
+                // details that carry more than attribution (trigger summaries, errors) stay visible.
+                const detail = e.triggerKind && e.detail?.startsWith('by ') ? null : e.detail;
+                return (
                 <Stack key={`${e.timestamp}-${i}`} direction="row" spacing={1.5} alignItems="flex-start"
                   sx={{ px: 2, py: 1.25, borderLeft: '3px solid', borderLeftColor: SEVERITY_BAR[e.severity] }}>
                   <Box flex={1} minWidth={0}>
@@ -179,12 +202,15 @@ export default function Logs() {
                         <Chip size="small" color={SEVERITY_COLOR[e.severity]} label={t(`severity.${e.severity}`)} />
                       )}
                       <Typography variant="body2" fontWeight={600} sx={{ wordBreak: 'break-word' }}>{e.title}</Typography>
+                      {e.triggerKind && (
+                        <TriggerChip kind={e.triggerKind} id={e.triggerId} name={e.triggerName} />
+                      )}
                     </Stack>
-                    {(e.detail || e.deviceId || e.service) && (
+                    {(detail || e.deviceId || e.service) && (
                       <Typography variant="caption" color="text.secondary">
                         {e.deviceId ? `${deviceNames[e.deviceId] ?? e.deviceId} · ` : ''}
                         {e.service ? `${e.service} · ` : ''}
-                        {e.detail ?? ''}
+                        {detail ?? ''}
                       </Typography>
                     )}
                   </Box>
@@ -192,10 +218,12 @@ export default function Logs() {
                     {fmtDateTime(e.timestamp)}
                   </Typography>
                 </Stack>
-              ))}
+                );
+              })}
             </Stack>
           </Card>
         )}
+        </>)}
       </Box>
     </Container>
   );

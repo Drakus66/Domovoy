@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import apiClient from './client';
 
 /** Area/zone of the home and grounds (matches DbGateway Zone model, roadmap P0-3). */

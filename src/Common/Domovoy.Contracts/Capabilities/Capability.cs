@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 namespace Domovoy.Contracts.Capabilities;
 
 /// <summary>
@@ -67,6 +71,7 @@ public static class CapabilityIds
     public const string IsWeekend = "is_weekend";                  // bool — today is a configured weekend day
     public const string IsHoliday = "is_holiday";                  // bool — today is a configured holiday
     public const string CalendarDate = "date";                     // text, local yyyy-MM-dd
+    public const string HomeMode = "home_mode";                    // enum (writable) — Home/Away/Night/Vacation (open set, Epic 1G)
 }
 
 /// <summary>

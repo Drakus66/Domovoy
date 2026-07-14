@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 using Domovoy.AutomationService.Services;
 using Domovoy.Contracts.Capabilities;
 
@@ -103,6 +107,7 @@ public sealed class SystemSensorTests
     }
 
     private static SystemSensorService NewService(SunCalculator sun, SiteContext site, CalendarContext? calendar = null) =>
-        // Compute* methods never touch the bus, so a null bus is safe for these pure-computation tests.
-        new(bus: null!, sun, site, calendar ?? new CalendarContext(), NullLogger<SystemSensorService>.Instance);
+        // Compute* methods never touch the bus/mode/gateway, so nulls are safe for these pure-computation tests.
+        new(bus: null!, sun, site, calendar ?? new CalendarContext(),
+            new HomeModeState(), db: null!, NullLogger<SystemSensorService>.Instance);
 }

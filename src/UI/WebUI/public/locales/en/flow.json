@@ -1,6 +1,7 @@
 {
   "title": "Flow editor",
   "subtitle": "Visual trigger → conditions → actions, Homey-style. Click a card to edit it on the right.",
+  "canvasHint": "Click a card — edit it on the panel to the right →",
   "open": "Open",
   "selectFlow": "— select a flow —",
   "new": "New",
@@ -35,7 +36,8 @@
     "conditionN": "Condition {{index}}",
     "actionN": "Action {{index}}",
     "delete": "Delete",
-    "selectCard": "Select a card to edit it."
+    "selectCard": "Select a card on the canvas to edit it here.",
+    "editing": "Editing: {{card}}"
   },
   "trigger": {
     "heading": "When (trigger)",

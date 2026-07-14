@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 namespace Domovoy.Contracts.Messaging;
 
 /// <summary>
@@ -11,6 +15,7 @@ public static class MessageTypes
     public const string DeviceCommand = "domovoy.device.command.v1";
     public const string DeviceOnlineChanged = "domovoy.device.online.v1";
     public const string AutomationTriggered = "domovoy.automation.triggered.v1";
+    public const string BlockTriggered = "domovoy.block.triggered.v1";
     public const string HomeModeChanged = "domovoy.home.mode.v1";
 
     // Plugin settings channel (Epic 2M tail): the plugin announces its settings schema, the supervisor
@@ -39,6 +44,7 @@ public static class BusTopology
     public const string DeviceStateUpdatedKey = "device.state.updated";
     public const string DeviceOnlineChangedKey = "device.online.changed";
     public const string AutomationTriggeredKey = "automation.triggered";
+    public const string BlockTriggeredKey = "block.triggered";
     public const string HomeModeChangedKey = "home.mode.changed";
 
     // Plugin settings: schema is announced on one shared key (the supervisor binds it); effective values are

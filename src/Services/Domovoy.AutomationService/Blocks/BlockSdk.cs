@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 using Domovoy.Contracts.Capabilities;
 
 namespace Domovoy.AutomationService.Blocks;
@@ -14,6 +18,30 @@ public interface IBlock
     void Tick(IBlockContext ctx);
 }
 
+/// <summary>
+/// Catalog categories for the authoring UI (roadmap Epic 2Q). With ~30 registered types a flat list is
+/// unusable; the picker groups by these keys (localized client-side as <c>blocks:category.&lt;key&gt;</c>).
+/// </summary>
+public static class BlockCategories
+{
+    /// <summary>Ready-made loops — domain blocks and composites a non-expert reaches for first.</summary>
+    public const string Template = "template";
+    /// <summary>Closed-loop regulation: pid, hysteresis, ramp.</summary>
+    public const string Control = "control";
+    /// <summary>Signal conditioning: smoothing, spike rejection, debounce, slew.</summary>
+    public const string Filter = "filter";
+    /// <summary>Comparison and boolean combination: comparator, window, logic, select.</summary>
+    public const string Logic = "logic";
+    /// <summary>Timers, pulses, edges, latches, counters.</summary>
+    public const string Time = "time";
+    /// <summary>Value transforms: scaling, clamping, aggregation, custom expressions.</summary>
+    public const string Math = "math";
+    /// <summary>ML-backed blocks: predictors and governors.</summary>
+    public const string Ml = "ml";
+    /// <summary>Fallback for uncategorized (e.g. plugin-supplied) types.</summary>
+    public const string Other = "other";
+}
+
 /// <summary>A registered block type: its schema (ports/params/outputs) and a factory for instances.</summary>
 public interface IBlockType
 {
@@ -22,6 +50,9 @@ public interface IBlockType
 
     string Title { get; }
     string Description { get; }
+
+    /// <summary>Catalog category key for the authoring UI picker (roadmap Epic 2Q). See <see cref="BlockCategories"/>.</summary>
+    string Category => BlockCategories.Other;
 
     /// <summary>Bindable input ports (wired to a device+capability).</summary>
     IReadOnlyList<BlockPortSpec> Inputs { get; }
@@ -32,14 +63,34 @@ public interface IBlockType
     /// <summary>Tunable numeric parameters.</summary>
     IReadOnlyList<BlockParamSpec> Params { get; }
 
+    /// <summary>
+    /// Non-numeric (enum/bool/text) options — the escape from <see cref="BlockParamSpec"/> being numeric-only
+    /// (roadmap Epic 2Q). A comparator's operator, a logic gate's function, an expression's formula live here.
+    /// Default: none, so existing types need no change.
+    /// </summary>
+    IReadOnlyList<BlockOptionSpec> Options => Array.Empty<BlockOptionSpec>();
+
     IBlock Create();
 }
 
-/// <summary>An input port: a named slot bound to some device capability of a given kind.</summary>
-public sealed record BlockPortSpec(string Name, CapabilityKind Kind, string Description);
+/// <summary>
+/// An input port: a named slot bound to some device capability of a given kind. <paramref name="Optional"/>
+/// ports may be left unbound (e.g. a PID's feedforward input, an irrigation inhibit) — the block handles null.
+/// </summary>
+public sealed record BlockPortSpec(string Name, CapabilityKind Kind, string Description, bool Optional = false);
 
 /// <summary>A tunable numeric parameter with a default and range (drives the typed authoring form).</summary>
 public sealed record BlockParamSpec(string Name, double Default, string? Unit, double? Min, double? Max, string Description);
+
+/// <summary>Kind of a non-numeric block option — drives the authoring control the UI renders.</summary>
+public enum BlockOptionKind { Enum, Bool, Text }
+
+/// <summary>
+/// A non-numeric block option (roadmap Epic 2Q). For <see cref="BlockOptionKind.Enum"/>, <paramref name="Values"/>
+/// lists the allowed choices. The value is always carried as a string in <see cref="Domovoy.Contracts.Blocks.ControlBlock.Options"/>.
+/// </summary>
+public sealed record BlockOptionSpec(
+    string Name, BlockOptionKind Kind, string Default, string Description, IReadOnlyList<string>? Values = null);
 
 /// <summary>
 /// What a block sees while ticking: the clock, its bound inputs (read from the blackboard), its tunable
@@ -63,6 +114,12 @@ public interface IBlockContext
 
     /// <summary>Parameter value (falls back to <paramref name="fallback"/> when not configured).</summary>
     double Param(string key, double fallback);
+
+    /// <summary>
+    /// Non-numeric option value (enum/bool/text), or null when not configured (roadmap Epic 2Q). Default
+    /// implementation returns null so existing <see cref="IBlockContext"/> implementations need no change.
+    /// </summary>
+    string? Option(string key) => null;
 
     /// <summary>Latest value commanded to a writable output capability (e.g. a setpoint), or null.</summary>
     object? Commanded(string capabilityId);

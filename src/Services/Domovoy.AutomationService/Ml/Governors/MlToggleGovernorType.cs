@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 using Domovoy.AutomationService.Blocks;
 using Domovoy.Contracts.Capabilities;
 using Domovoy.Contracts.Ml;
@@ -9,7 +13,7 @@ namespace Domovoy.AutomationService.Ml.Governors;
 /// type, one class yields many instances: the same code becomes an ML light scheduler, an ML fan governor,
 /// etc., by binding a different boolean output. Registered in the <see cref="BlockCatalog"/> from config.
 /// </summary>
-public sealed class MlToggleGovernorType : IBlockType
+public sealed class MlToggleGovernorType : IBlockType, IMlGovernorBlockType
 {
     private readonly Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> _predict;
     private readonly string _measuredInput;
@@ -40,8 +44,12 @@ public sealed class MlToggleGovernorType : IBlockType
     }
 
     public string TypeId { get; }
+    public string Category => BlockCategories.Ml;
     public string Title { get; }
     public string Description { get; }
+
+    /// <summary>The ML target this governor consumes = its measured input (Epic 2P): the model predicts the monitored signal.</summary>
+    public string MlTargetCapability => _measuredInput;
 
     public IReadOnlyList<BlockPortSpec> Inputs { get; }
     public IReadOnlyList<Capability> Outputs { get; }

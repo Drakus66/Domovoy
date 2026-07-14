@@ -1,71 +1,50 @@
-import { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-// Vite fingerprints the marker PNGs, so Leaflet's default icon paths 404 unless we point them at the
-// bundled assets. Do this once at module load.
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
+import { useEffect, useState } from 'react';
+import { Map, Marker } from 'pigeon-maps';
 
 interface LocationMapProps {
   latitude: number;
   longitude: number;
-  /** Fired when the user clicks the map or drags the marker to a new spot. */
+  /** Fired when the user clicks the map to choose a new spot. */
   onPick: (lat: number, lon: number) => void;
-}
-
-// Keep the map centred on the current coordinates when they change from outside (search / manual entry).
-function Recenter({ latitude, longitude }: { latitude: number; longitude: number }) {
-  const map = useMap();
-  useEffect(() => {
-    map.setView([latitude, longitude], map.getZoom());
-  }, [latitude, longitude, map]);
-  return null;
-}
-
-function ClickCapture({ onPick }: { onPick: (lat: number, lon: number) => void }) {
-  useMapEvents({
-    click: (e) => onPick(e.latlng.lat, e.latlng.lng),
-  });
-  return null;
 }
 
 /**
  * Interactive location picker (roadmap Epic 2K). OSM tiles need network, but the map is purely a
- * convenience: clicking or dragging the marker just reports coordinates back to the editor, which also
- * accepts manual lat/lon entry — so an offline install never depends on this component.
+ * convenience: clicking reports coordinates back to the editor, which also accepts manual lat/lon
+ * entry — so an offline install never depends on this component.
+ *
+ * Uses pigeon-maps (MIT, zero-dependency) rather than Leaflet: the previous react-leaflet wrapper
+ * shipped under the Hippocratic License, which is not permissive and clashed with the project's
+ * AGPL + commercial dual-licensing posture.
  */
 export default function LocationMap({ latitude, longitude, onPick }: LocationMapProps) {
+  // pigeon-maps is controlled: we own center/zoom so panning and zooming work, and we recenter
+  // when the coordinates change from outside (search / manual entry / a fresh pick).
+  const [center, setCenter] = useState<[number, number]>([latitude, longitude]);
+  const [zoom, setZoom] = useState(11);
+
+  useEffect(() => {
+    setCenter([latitude, longitude]);
+  }, [latitude, longitude]);
+
   return (
-    <MapContainer
-      center={[latitude, longitude]}
-      zoom={11}
-      style={{ height: 320, width: '100%', borderRadius: 8 }}
-      scrollWheelZoom
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <Marker
-        position={[latitude, longitude]}
-        draggable
-        eventHandlers={{
-          dragend: (e) => {
-            const { lat, lng } = e.target.getLatLng();
-            onPick(lat, lng);
-          },
+    <div style={{ height: 320, width: '100%', borderRadius: 8, overflow: 'hidden' }}>
+      <Map
+        height={320}
+        center={center}
+        zoom={zoom}
+        onBoundsChanged={({ center: c, zoom: z }) => {
+          setCenter(c);
+          setZoom(z);
         }}
-      />
-      <Recenter latitude={latitude} longitude={longitude} />
-      <ClickCapture onPick={onPick} />
-    </MapContainer>
+        onClick={({ latLng }) => onPick(latLng[0], latLng[1])}
+      >
+        <Marker width={40} color="#1976d2" anchor={[latitude, longitude]} />
+      </Map>
+    </div>
   );
 }

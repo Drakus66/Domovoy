@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 using Domovoy.AutomationService.Configuration;
 using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Capabilities;
@@ -96,6 +100,16 @@ public sealed class DiscoveryEngine : BackgroundService
                 Rationale = RationaleFor(p) + ArchetypeNote(p, archetypeById),
                 Source = "discovery",
                 RuleId = savedRule.Id,
+                Evidence = new Dictionary<string, double>
+                {
+                    ["support"] = p.Support,
+                    ["confidence"] = p.Confidence,
+                    ["lift"] = p.Lift,
+                    ["baseRate"] = p.BaseRate,
+                    ["mi"] = p.MutualInfo,
+                    ["p"] = p.PValue,
+                    ["windowDays"] = _options.DiscoveryWindowDays,
+                },
             };
             var savedProposal = await _db.CreateProposalAsync(proposal, ct);
             if (savedProposal is null)
@@ -128,6 +142,13 @@ public sealed class DiscoveryEngine : BackgroundService
                 Rationale = SetpointRationale(pref),
                 Source = "discovery",
                 RuleId = savedRule.Id,
+                Evidence = new Dictionary<string, double>
+                {
+                    ["support"] = pref.Support,
+                    ["value"] = pref.Value,
+                    ["stdDev"] = pref.StdDev,
+                    ["windowDays"] = _options.DiscoveryWindowDays,
+                },
             };
             var savedProposal = await _db.CreateProposalAsync(proposal, ct);
             if (savedProposal is null) continue;

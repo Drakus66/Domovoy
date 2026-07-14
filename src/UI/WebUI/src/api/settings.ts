@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import apiClient from './client';
 
 /** The installation's site location (roadmap Epic 2K) — coordinates drive sunrise/sunset locally. */

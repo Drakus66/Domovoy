@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 namespace Domovoy.Contracts.Messaging;
 
 using Domovoy.Contracts.Devices;
@@ -48,6 +52,25 @@ public sealed record AutomationTriggeredV1(
     bool Success,
     string TriggerSummary,
     int ActionsExecuted,
+    string? Detail = null);
+
+/// <summary>
+/// A control block ran and its decision changed (roadmap Epic 1H). Published by the BlockRuntime on a
+/// <b>meaningful</b> tick — when the block's emitted outputs change or its tick errors — so the block-layer,
+/// which is an active entity like a rule, gets a first-class run record in the Activity Center. Unlike a
+/// rule (Epic 1A) a block does not "fire and skip"; it ticks continuously, so the runtime deduplicates on
+/// the emitted signature and publishes only on change, including in Shadow stage where a governor emits its
+/// proposal but drives nothing. The DbGateway persists it to <c>block_history</c> for the <c>block</c>
+/// Activity source; it is intentionally separate from device deltas and rule runs.
+/// </summary>
+/// <remarks>Envelope type: <see cref="MessageTypes.BlockTriggered"/>.</remarks>
+public sealed record BlockTriggeredV1(
+    string BlockId,
+    string BlockName,
+    string TypeId,
+    DateTimeOffset TickedAt,
+    bool Ok,
+    string Summary,
     string? Detail = null);
 
 /// <summary>

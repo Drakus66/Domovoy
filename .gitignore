@@ -5,6 +5,11 @@
 **/bin/
 **/obj/
 *.log
+**/node_modules/
+*.tsbuildinfo
+
+# Local MCP tooling scratch (Playwright browser session artifacts), not project content.
+/.playwright-mcp/
 
 # Runtime plugin drops (rw mount): track only the hand-authored manifest, never the built
 # binaries or the persisted per-plugin settings (which may hold secrets like API keys).

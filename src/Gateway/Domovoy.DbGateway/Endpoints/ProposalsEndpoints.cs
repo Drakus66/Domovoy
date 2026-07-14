@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Blocks;
 using Domovoy.Contracts.Proposals;
@@ -111,8 +115,33 @@ public static class ProposalApplication
         ProposalKind.Rule => ApplyRuleAsync(db, p),
         ProposalKind.BlockPromotion => ApplyBlockParamAsync(db, p, "stage", p.ToStage),
         ProposalKind.ModelSelection => ApplyBlockParamAsync(db, p, "model_version", p.ModelVersion),
+        ProposalKind.MlTask => ApplyMlTaskAsync(db, p),
         _ => Task.FromResult<(bool, string?)>((false, "unknown proposal kind")),
     };
+
+    // ML-task proposal (Epic 2P): approving creates the training task with defaults — the user tunes window/
+    // clamps later on the ML hub. One task per target: an already-existing task fails the approve with a reason.
+    private static async Task<(bool Ok, string? Error)> ApplyMlTaskAsync(IMongoDatabase db, Proposal p)
+    {
+        if (string.IsNullOrWhiteSpace(p.MlTaskTarget)) return (false, "proposal has no mlTaskTarget");
+
+        var target = p.MlTaskTarget.Trim();
+        var tasks = db.GetCollection<Models.MlTaskDocument>(MlTaskEndpoints.Collection);
+        var targetKey = target.ToLowerInvariant();
+        if (await tasks.Find(x => x.TargetKey == targetKey).AnyAsync())
+            return (false, $"a task for '{target}' already exists");
+
+        await tasks.InsertOneAsync(new Models.MlTaskDocument
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = target,
+            TargetCapability = target,
+            TargetKey = targetKey,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        });
+        return (true, null);
+    }
 
     // Rule proposal: flip the candidate rule (Proposed) to Active so the engine starts executing it.
     private static async Task<(bool Ok, string? Error)> ApplyRuleAsync(IMongoDatabase db, Proposal p)

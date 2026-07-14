@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 namespace Domovoy.DbGateway;
 
 using Config;
@@ -65,6 +69,19 @@ internal static class Program
             // Seed the built-in roles (admin/resident/guest) so the roles model is usable out of the box (Epic 2E).
             builder.Services.AddHostedService<Services.SecuritySeeder>();
 
+            // House Diary (Epic 2N): the deterministic NLG renderer + locale selector + language-pack provider.
+            // The deterministic Russian renderer is the mandatory default; an optional assisted (LLM/plugin)
+            // renderer (Phase 4) can be registered as another INarrativeRenderer and the selector prefers it.
+            builder.Services.AddSingleton<Domovoy.Narrative.INarrativeRenderer, Domovoy.Narrative.RuLanguagePackRenderer>();
+            builder.Services.AddSingleton<Domovoy.Narrative.INarrativeRendererSelector, Domovoy.Narrative.NarrativeRendererSelector>();
+            builder.Services.AddSingleton<Services.LanguagePackProvider>();
+
+            // The diary builder (Epic 2N Phase 2): mines events → scenes → significance → prose, materialized
+            // into home_story. Registered as a singleton + hosted so the manual rebuild endpoint can invoke it.
+            builder.Services.AddSingleton<Services.DiaryMiner>();
+            builder.Services.AddSingleton<Services.HouseDiaryBuilder>();
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<Services.HouseDiaryBuilder>());
+
             // Optional geocoder for the site-location editor (Epic 2K). Network-only and best-effort — a failure
             // degrades to manual lat/lon entry, so the location feature stays fully usable offline.
             builder.Services.AddHttpClient<Services.IGeocoder, Services.NominatimGeocoder>(client =>
@@ -104,8 +121,12 @@ internal static class Program
             app.MapAutomationEndpoints();
             app.MapModeEndpoints();
             app.MapBlockEndpoints();
+            app.MapBlockStateEndpoints();
             app.MapActivityEndpoints();
+            app.MapHomeStoryEndpoints();
+            app.MapNarrativeEntityEndpoints();
             app.MapMlEndpoints();
+            app.MapMlTaskEndpoints();
             app.MapProposalsEndpoints();
             app.MapRoleEndpoints();
             app.MapUserEndpoints();

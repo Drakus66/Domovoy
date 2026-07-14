@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 namespace Domovoy.Contracts.Capabilities;
 
 /// <summary>
@@ -90,6 +94,11 @@ public static class WellKnownCapabilities
 
     public static Capability CalendarDate() =>
         Text(CapabilityIds.CalendarDate, writable: false);
+
+    /// <summary>Home mode as a writable enum on the Home virtual device (Epic 1G as a device):
+    /// commanding it is THE way blocks/rules change the mode. Open set — well-known values listed.</summary>
+    public static Capability HomeMode() =>
+        Enum(CapabilityIds.HomeMode, Home.WellKnownModes.All, writable: true);
 
     public static Capability Color(bool writable = true) =>
         new(CapabilityIds.Color, CapabilityKind.Color,

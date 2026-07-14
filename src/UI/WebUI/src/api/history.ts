@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import apiClient from './client';
 
 /** Domain event-log record — a state delta or command (matches DbGateway EventLogDto, P0-5). */
@@ -9,7 +13,9 @@ export interface EventLogEntry {
   capabilityId: string;
   oldValue?: unknown;
   newValue?: unknown;
-  triggerSource: string; // user | rule | device | ml
+  triggerSource: string; // user | rule | device | ml | block | presence
+  /** Concrete initiator id (rule/block/user/presence-sensor), when known. */
+  triggerId?: string | null;
   ruleId?: string | null;
   decisionId?: string | null;
   mode?: string | null;

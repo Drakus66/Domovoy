@@ -1,6 +1,10 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 import apiClient from './client';
 
-export type ProposalKind = 'Rule' | 'BlockPromotion' | 'ModelSelection';
+export type ProposalKind = 'Rule' | 'BlockPromotion' | 'ModelSelection' | 'MlTask';
 export type ProposalStatus = 'Proposed' | 'Approved' | 'Rejected';
 
 /** A candidate change awaiting approval (matches Domovoy.Contracts Proposal, Epic 2C). */
@@ -16,9 +20,13 @@ export interface Proposal {
   fromStage?: number | null;
   toStage?: number | null;
   modelVersion?: number | null;
+  /** MlTask: target capability the proposed training task would learn (Epic 2P). */
+  mlTaskTarget?: string | null;
   modelId?: string | null;
   metric?: string | null;
   score?: number | null;
+  /** Structured numeric evidence behind the rationale (support, confidence, lift, mi, p, samples, windowDays, …). */
+  evidence?: Record<string, number> | null;
   decisionId: string;
   createdAt: string;
   decidedAt?: string | null;
@@ -34,6 +42,13 @@ export interface SuggestResult {
 /** Outcome of a discovery scan (matches AutomationService DiscoveryEngine.ScanResult, Epic 2F). */
 export interface DiscoverResult {
   patterns: number;
+  created: number;
+  note: string;
+}
+
+/** Outcome of an ML-task suggestion scan (matches AutomationService MlTaskSuggester.ScanResult, Epic 2P). */
+export interface SuggestTasksResult {
+  candidates: number;
   created: number;
   note: string;
 }
@@ -66,4 +81,8 @@ export const proposalsApi = {
   /** Run the full pattern-discovery engine now — MI/FDR funnel over history (Epic 2F). */
   discover: (): Promise<DiscoverResult> =>
     apiClient.post<DiscoverResult>('/api/proposals/discover').then((r) => r.data),
+
+  /** Scan for ML training-task candidates now — consumable targets with enough history (Epic 2P). */
+  suggestTasks: (): Promise<SuggestTasksResult> =>
+    apiClient.post<SuggestTasksResult>('/api/ml/suggest-tasks').then((r) => r.data),
 };

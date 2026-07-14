@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 // Locale-aware formatting helpers that follow the ACTIVE UI language, not the
 // browser's. They read i18n.language at call time (i18next is a singleton), so a
 // language switch re-formats dates/numbers on the next render. Native Intl handles

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
@@ -62,7 +66,8 @@ public class EventInterceptor : BackgroundService
     /// </summary>
     private bool? _zigbeeBridgeOnline;
 
-    private sealed record RecentCommand(DateTime At, string TriggerSource, string? CorrelationId, IReadOnlyDictionary<string, object?> Set);
+    private sealed record RecentCommand(
+        DateTime At, string TriggerSource, string? TriggerId, string? CorrelationId, IReadOnlyDictionary<string, object?> Set);
 
     public EventInterceptor(
         IMessageBus messageBus,
@@ -131,6 +136,13 @@ public class EventInterceptor : BackgroundService
             BusTopology.AutomationTriggeredKey,
             HandleAutomationTriggered);
 
+        // Control-block run history (Epic 1H) — persisted from BlockTriggeredV1 for the 'block' Activity source.
+        await _messageBus.SubscribeAsync<Envelope<BlockTriggeredV1>>(
+            "dbgateway-block-history",
+            BusTopology.EventsExchange,
+            BusTopology.BlockTriggeredKey,
+            HandleBlockTriggered);
+
         // Home mode changes (Epic 1G) — track the current mode and record the change in the event-log.
         await _messageBus.SubscribeAsync<Envelope<HomeModeChangedV1>>(
             "dbgateway-home-mode",
@@ -193,7 +205,7 @@ public class EventInterceptor : BackgroundService
             var oldState = existing?.State ?? new Dictionary<string, object>();
 
             // Append the event-log delta + telemetry BEFORE overwriting the read-model state (P0-5).
-            await RecordStateDeltas(report, zoneId, oldState, existing);
+            await RecordStateDeltas(report, envelope.Source, zoneId, oldState, existing);
 
             var update = Builders<CapabilityDeviceDocument>.Update
                 .Set(x => x.IsOnline, true)
@@ -274,12 +286,12 @@ public class EventInterceptor : BackgroundService
         var cmd = envelope.Data;
         if (cmd is null || cmd.Set.Count == 0) return;
 
-        var trigger = MapTriggerSource(envelope.Source);
+        var (trigger, triggerId) = ParseTrigger(envelope.Source);
         var correlationId = envelope.CorrelationId ?? envelope.Id;
         var normalizedSet = cmd.Set.ToDictionary(kv => kv.Key, kv => Normalize(kv.Value));
 
         // Remember the command so a state change arriving shortly after can be attributed to it.
-        _recentCommands[cmd.DeviceId] = new RecentCommand(DateTime.UtcNow, trigger, correlationId,
+        _recentCommands[cmd.DeviceId] = new RecentCommand(DateTime.UtcNow, trigger, triggerId, correlationId,
             normalizedSet.ToDictionary(kv => kv.Key, kv => (object?)kv.Value));
 
         try
@@ -292,6 +304,8 @@ public class EventInterceptor : BackgroundService
                 CapabilityId = kv.Key,
                 NewValue = kv.Value,
                 TriggerSource = trigger,
+                TriggerId = triggerId,
+                RuleId = trigger == TriggerSources.Rule ? triggerId : null,
                 Mode = _currentMode,
                 CorrelationId = correlationId,
             }).ToList();
@@ -306,12 +320,20 @@ public class EventInterceptor : BackgroundService
 
     private async Task RecordStateDeltas(
         DeviceStateReportV1 report,
+        string? reportSource,
         string zoneId,
         IReadOnlyDictionary<string, object> oldState,
         CapabilityDeviceDocument? existing)
     {
         var correlated = _recentCommands.TryGetValue(report.DeviceId, out var recent)
             && (DateTime.UtcNow - recent!.At) <= CommandCorrelationWindow;
+
+        // A block's virtual device reports its own outputs with source "block:{id}" (Epic 1H BlockRuntime).
+        // Without this, a governor's proposed_setpoint / ml_drift deltas would be attributed "by device",
+        // indistinguishable from a sensor. Adapters report with their own name → stays Device.
+        var isBlockReport = reportSource?.StartsWith("block", StringComparison.OrdinalIgnoreCase) == true;
+        var uncorrelatedSource = isBlockReport ? TriggerSources.Block : TriggerSources.Device;
+        var uncorrelatedId = isBlockReport ? SourceId(reportSource!) : null;
 
         // System virtual sensors (Epic 2L) report continuously-varying values every minute (sun
         // elevation/azimuth, clock/time_of_day, date). Those would swamp the activity event-log with
@@ -351,6 +373,9 @@ public class EventInterceptor : BackgroundService
 
             // For a System sensor, only discrete (Boolean/Enum) transitions belong in the activity log.
             if (isSystem && !IsDiscreteCapability(existing, kv.Key)) continue;
+            // The Home device mirrors the home mode as a capability (device→mode bridge); the canonical
+            // journal record for a switch is the mode_change event — don't log the mirror's delta twice.
+            if (isSystem && kv.Key == ContextCapabilities.HomeMode) continue;
 
             var commanded = correlated && recent!.Set.ContainsKey(kv.Key);
             logs.Add(new DeviceEventLog
@@ -360,7 +385,9 @@ public class EventInterceptor : BackgroundService
                 CapabilityId = kv.Key,
                 OldValue = oldValue,
                 NewValue = newValue,
-                TriggerSource = commanded ? recent!.TriggerSource : TriggerSources.Device,
+                TriggerSource = commanded ? recent!.TriggerSource : uncorrelatedSource,
+                TriggerId = commanded ? recent!.TriggerId : uncorrelatedId,
+                RuleId = commanded && recent!.TriggerSource == TriggerSources.Rule ? recent.TriggerId : null,
                 Mode = _currentMode,
                 CorrelationId = commanded ? recent!.CorrelationId : null,
             });
@@ -395,6 +422,30 @@ public class EventInterceptor : BackgroundService
         }
     }
 
+    private async Task HandleBlockTriggered(Envelope<BlockTriggeredV1> envelope)
+    {
+        var e = envelope.Data;
+        if (e is null) return;
+
+        try
+        {
+            await _database.GetCollection<BlockHistory>(BlockHistory.Collection).InsertOneAsync(new BlockHistory
+            {
+                Timestamp = e.TickedAt.UtcDateTime,
+                BlockId = e.BlockId,
+                BlockName = e.BlockName,
+                TypeId = e.TypeId,
+                Ok = e.Ok,
+                Summary = e.Summary,
+                Detail = e.Detail,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error persisting block history for block {BlockId}", e.BlockId);
+        }
+    }
+
     // ====================================================================
     // Home mode / presence context (roadmap Epic 1G)
     // ====================================================================
@@ -425,6 +476,7 @@ public class EventInterceptor : BackgroundService
         // Record the mode change itself as a feature-store event so history/replay can reconstruct context.
         try
         {
+            var (trigger, triggerId) = ParseModeTrigger(change.Source);
             await EventLog.InsertOneAsync(new DeviceEventLog
             {
                 Timestamp = change.ChangedAt.UtcDateTime,
@@ -432,7 +484,9 @@ public class EventInterceptor : BackgroundService
                 CapabilityId = ContextCapabilities.HomeMode,
                 OldValue = change.PreviousMode,
                 NewValue = change.Mode,
-                TriggerSource = MapModeSource(change.Source),
+                TriggerSource = trigger,
+                TriggerId = triggerId,
+                RuleId = trigger == TriggerSources.Rule ? triggerId : null,
                 Mode = change.Mode,
             });
             _logger.LogInformation("Home mode changed to {Mode} (was {Previous}, by {Source})",
@@ -444,13 +498,23 @@ public class EventInterceptor : BackgroundService
         }
     }
 
-    private static string MapModeSource(string? source)
+    /// <summary>
+    /// Parse a mode-change source into (trigger, initiator id). Presence-driven switches used to be
+    /// collapsed into <c>device</c> — masking the culprit. Today the primary automated path is the
+    /// <c>presence_mode</c> control block commanding the Home virtual device (source <c>block:{id}</c>,
+    /// passed through the device→mode bridge); the <c>presence:{deviceId}</c> form stays recognized for
+    /// any other presence-shaped sender. A user switch may carry the self-declared user id (<c>user:{id}</c>).
+    /// </summary>
+    private static (string Kind, string? Id) ParseModeTrigger(string? source)
     {
         var s = source?.ToLowerInvariant() ?? string.Empty;
-        if (s.Contains("ml")) return TriggerSources.Ml;
-        if (s.Contains("rule") || s.Contains("automation")) return TriggerSources.Rule;
-        if (s.Contains("presence") || s.Contains("device")) return TriggerSources.Device;
-        return TriggerSources.User;
+        var id = source is null ? null : SourceId(source);
+        if (s.StartsWith("block")) return (TriggerSources.Block, id);
+        if (s.Contains("ml")) return (TriggerSources.Ml, id);
+        if (s.Contains("rule") || s.Contains("automation")) return (TriggerSources.Rule, id);
+        if (s.Contains("presence")) return (TriggerSources.Presence, id);
+        if (s.Contains("device")) return (TriggerSources.Device, id);
+        return (TriggerSources.User, id);
     }
 
     private IMongoCollection<DeviceEventLog> EventLog =>
@@ -480,14 +544,34 @@ public class EventInterceptor : BackgroundService
             || string.Equals(kind, nameof(CapabilityKind.Enum), StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string MapTriggerSource(string? source)
+    /// <summary>
+    /// Parse the actor-string convention in <c>Envelope.Source</c> — <c>{kind}:{id}</c> — into the coarse
+    /// trigger bucket plus the concrete initiator id: <c>automation:{ruleId}</c> → (rule, ruleId),
+    /// <c>block:{id}</c> → (block, id), <c>user:{userId}</c> (self-declared, Phase 3 auth pending) →
+    /// (user, userId). A bare <c>apigateway</c> stays an anonymous user command.
+    /// </summary>
+    private static (string Kind, string? Id) ParseTrigger(string? source)
     {
-        if (string.IsNullOrEmpty(source)) return TriggerSources.User;
+        if (string.IsNullOrEmpty(source)) return (TriggerSources.User, null);
         var s = source.ToLowerInvariant();
-        if (s.Contains("automation") || s.Contains("rule")) return TriggerSources.Rule;
-        if (s.Contains("ml")) return TriggerSources.Ml;
+        var id = SourceId(source);
+        // Control-block actuation is published as source "block:{id}" (Epic 1H BlockRuntime). Attribute it
+        // to the block, not the user, so a thermostat/sequencer loop is distinguishable from manual actions.
+        if (s.StartsWith("block")) return (TriggerSources.Block, id);
+        if (s.Contains("automation") || s.Contains("rule")) return (TriggerSources.Rule, id);
+        if (s.StartsWith("user")) return (TriggerSources.User, id);
+        if (s.Contains("ml")) return (TriggerSources.Ml, id);
         // Commands today originate from user actions through the gateway.
-        return TriggerSources.User;
+        return (TriggerSources.User, null);
+    }
+
+    /// <summary>The id part of an actor-string (<c>kind:id</c>), or null when there is none.</summary>
+    private static string? SourceId(string source)
+    {
+        var idx = source.IndexOf(':');
+        if (idx < 0 || idx == source.Length - 1) return null;
+        var id = source[(idx + 1)..].Trim();
+        return string.IsNullOrEmpty(id) ? null : id;
     }
 
     // ====================================================================
