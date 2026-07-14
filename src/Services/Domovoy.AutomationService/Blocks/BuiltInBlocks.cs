@@ -18,6 +18,7 @@ namespace Domovoy.AutomationService.Blocks;
 public sealed class EwmaFilterType : IBlockType
 {
     public string TypeId => "ewma_filter";
+    public string Category => BlockCategories.Filter;
     public string Title => "EWMA filter";
     public string Description => "Exponentially-weighted moving average — smooths a noisy numeric signal.";
 
@@ -86,6 +87,7 @@ public sealed class EwmaFilterBlock : IBlock
 public sealed class ThermostatType : IBlockType
 {
     public string TypeId => "thermostat";
+    public string Category => BlockCategories.Template;
     public string Title => "Thermostat (hysteresis)";
     public string Description => "Bang-bang heating/cooling demand from a temperature input and a setpoint, with hysteresis.";
 
@@ -178,6 +180,7 @@ public sealed class ThermostatBlock : IBlock
 public sealed class Co2VentilationType : IBlockType
 {
     public string TypeId => "co2_ventilation";
+    public string Category => BlockCategories.Template;
     public string Title => "CO₂ ventilation";
     public string Description => "Demands ventilation when CO₂ rises above a threshold (with hysteresis).";
 
@@ -228,6 +231,7 @@ public sealed class Co2VentilationBlock : IBlock
 public sealed class IrrigationSequencerType : IBlockType
 {
     public string TypeId => "irrigation_sequencer";
+    public string Category => BlockCategories.Template;
     public string Title => "Irrigation cycle";
     public string Description => "Opens a valve for a run time on a fixed interval; an inhibit input (rain) skips a cycle.";
 
@@ -317,6 +321,7 @@ public sealed class SunGateType : IBlockType
     public SunGateType(SunCalculator sun) => _sun = sun;
 
     public string TypeId => "sun_gate";
+    public string Category => BlockCategories.Template;
     public string Title => "Sun gate (outdoor lighting)";
     public string Description => "On while it is dark at the site (dusk-to-dawn), with a lead/trail offset — for outdoor lights.";
 

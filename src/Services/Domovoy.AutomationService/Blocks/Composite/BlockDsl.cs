@@ -49,7 +49,7 @@ public static class BlockDsl
         var stages = dsl.Split("|>", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (stages.Length < 2) throw new FormatException("a composite needs an input() and at least one stage");
 
-        var (head, inputArg) = ParseCall(stages[0]);
+        var (head, inputArg, _) = ParseCall(stages[0]);
         if (!string.Equals(head, "input", StringComparison.OrdinalIgnoreCase))
             throw new FormatException("a pipeline must start with input(<port>)");
         var inputName = inputArg.Keys.FirstOrDefault() ?? throw new FormatException("input() needs a port name, e.g. input(temperature)");
@@ -60,14 +60,14 @@ public static class BlockDsl
 
         for (var i = 1; i < stages.Length; i++)
         {
-            var (nodeType, args) = ParseCall(stages[i]);
+            var (nodeType, args, opts) = ParseCall(stages[i]);
             var type = resolveType(nodeType) ?? throw new UnknownBlockTypeException(nodeType);
             if (type.Inputs.Count == 0) throw new FormatException($"'{nodeType}' has no input to pipe into");
 
             var nodeId = $"n{i - 1}";
             var primaryInput = type.Inputs[0];
             nodes.Add(new CompositeNode(nodeId, type.TypeId, args,
-                new Dictionary<string, string> { [primaryInput.Name] = prevSource }));
+                new Dictionary<string, string> { [primaryInput.Name] = prevSource }, opts));
 
             compositeInput ??= new CompositeInput(inputName, primaryInput.Kind, $"Input for {typeId}");
 
@@ -93,7 +93,7 @@ public static class BlockDsl
         foreach (var node in def.Nodes)
         {
             sb.Append(" |> ").Append(node.TypeId).Append('(');
-            sb.Append(string.Join(", ", node.Params.Select(p => $"{p.Key}={p.Value.ToString(CultureInfo.InvariantCulture)}")));
+            sb.Append(RenderArgs(node));
             sb.Append(')');
         }
         return sb.ToString();
@@ -159,7 +159,7 @@ public static class BlockDsl
                 }
                 else { call = rhs; srcs = Array.Empty<string>(); }
 
-                var (typeName, args) = ParseCall(call);
+                var (typeName, args, opts) = ParseCall(call);
                 var type = resolveType(typeName) ?? throw new UnknownBlockTypeException(typeName);
                 if (label.Length == 0) throw new FormatException($"node needs a label in '{stmt}'");
                 if (nodeTypes.ContainsKey(label)) throw new FormatException($"duplicate node label '{label}'");
@@ -170,7 +170,7 @@ public static class BlockDsl
                 for (var i = 0; i < srcs.Length; i++)
                     inputs[type.Inputs[i].Name] = ToWiredSource(srcs[i]);
 
-                nodes.Add(new CompositeNode(label, type.TypeId, args, inputs));
+                nodes.Add(new CompositeNode(label, type.TypeId, args, inputs, opts));
                 nodeTypes[label] = type;
             }
         }
@@ -243,7 +243,7 @@ public static class BlockDsl
         foreach (var node in def.Nodes)
         {
             sb.Append(node.Id).Append(" = ").Append(node.TypeId).Append('(');
-            sb.Append(string.Join(", ", node.Params.Select(p => $"{p.Key}={p.Value.ToString(CultureInfo.InvariantCulture)}")));
+            sb.Append(RenderArgs(node));
             sb.Append(')');
             if (node.Inputs.Count > 0)
                 sb.Append(" <- ").Append(string.Join(", ", node.Inputs.Values.Select(FromWiredSource)));
@@ -254,12 +254,23 @@ public static class BlockDsl
         return sb.ToString().TrimEnd('\n');
     }
 
+    // Render a node's params + string options back into "k=v, ..." argument form (Epic 2Q).
+    private static string RenderArgs(CompositeNode node)
+    {
+        var parts = node.Params.Select(p => $"{p.Key}={p.Value.ToString(CultureInfo.InvariantCulture)}");
+        if (node.Options is { Count: > 0 })
+            parts = parts.Concat(node.Options.Select(o => $"{o.Key}={o.Value}"));
+        return string.Join(", ", parts);
+    }
+
     // Wiring form → DSL source token (inverse of ToWiredSource): "$name" → "name"; "label#cap" → "label.cap".
     private static string FromWiredSource(string wired) =>
         wired.StartsWith('$') ? wired[1..] : wired.Replace('#', '.');
 
-    // Parse "name(k=v, k2=v2)" → (name, {k:v}). A bare "input(temperature)" yields {temperature: 0}.
-    private static (string Name, Dictionary<string, double> Args) ParseCall(string stage)
+    // Parse "name(k=v, k2=v2)" → (name, numeric params, string options). A value that parses as a number is a
+    // param; anything else (e.g. op=gt, invert=true) is a string option (Epic 2Q). A bare "input(temperature)"
+    // yields a param {temperature: 0}.
+    private static (string Name, Dictionary<string, double> Params, Dictionary<string, string> Options) ParseCall(string stage)
     {
         var open = stage.IndexOf('(');
         var close = stage.LastIndexOf(')');
@@ -267,20 +278,22 @@ public static class BlockDsl
 
         var name = stage[..open].Trim();
         var body = stage[(open + 1)..close].Trim();
-        var args = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-        if (body.Length == 0) return (name, args);
+        var pars = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        var opts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (body.Length == 0) return (name, pars, opts);
 
         foreach (var part in body.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var eq = part.IndexOf('=');
-            if (eq < 0) { args[part] = 0; continue; } // a bare token (e.g. input(temperature)) → the port name
+            if (eq < 0) { pars[part] = 0; continue; } // a bare token (e.g. input(temperature)) → the port name
             var key = part[..eq].Trim();
-            var valueText = part[(eq + 1)..].Trim();
-            if (!double.TryParse(valueText, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
-                throw new FormatException($"'{valueText}' is not a number in stage '{stage}'");
-            args[key] = value;
+            var valueText = part[(eq + 1)..].Trim().Trim('"', '\'');
+            if (double.TryParse(valueText, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
+                pars[key] = value;
+            else
+                opts[key] = valueText; // non-numeric → string option (enum/bool/text)
         }
-        return (name, args);
+        return (name, pars, opts);
     }
 }
 

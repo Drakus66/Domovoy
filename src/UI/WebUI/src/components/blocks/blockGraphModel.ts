@@ -130,6 +130,7 @@ export function toNewBlock(b: ControlBlock): NewBlock {
     typeId: b.typeId,
     enabled: b.enabled,
     params: b.params,
+    options: b.options ?? undefined,
     inputs: b.inputs,
     outputs: b.outputs,
     zoneId: b.zoneId ?? undefined,

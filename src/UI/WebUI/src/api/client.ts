@@ -3,6 +3,7 @@
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
 import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
+import { getCurrentUserId } from './currentUser';
 
 // Create axios instance with base configuration
 const apiClient = axios.create({
@@ -21,7 +22,12 @@ apiClient.interceptors.request.use(
     // if (token) {
     //   config.headers.Authorization = `Bearer ${token}`;
     // }
-    
+
+    // Self-declared user (attribution, Epic 2G tail — NOT auth): lets the gateway stamp commands
+    // with user:{id} so the event-log answers "which of the household did it".
+    const userId = getCurrentUserId();
+    if (userId) config.headers['X-Domovoy-User'] = userId;
+
     return config;
   },
   (error: AxiosError) => {

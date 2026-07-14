@@ -28,7 +28,7 @@ public static class HistoryEndpoints
     /// <summary>Flattened event-log record for the client (Meta unpacked, no ObjectId).</summary>
     public record EventLogDto(
         DateTime Timestamp, string DeviceId, string ZoneId, string Kind, string CapabilityId,
-        object? OldValue, object? NewValue, string TriggerSource,
+        object? OldValue, object? NewValue, string TriggerSource, string? TriggerId,
         string? RuleId, string? DecisionId, string? Mode, string? CorrelationId);
 
     /// <summary>Flattened telemetry sample for the client.</summary>
@@ -72,7 +72,7 @@ public static class HistoryEndpoints
 
             return Results.Ok(docs.Select(d => new EventLogDto(
                 d.Timestamp, d.Meta.DeviceId, d.Meta.ZoneId, d.Meta.Kind, d.CapabilityId,
-                d.OldValue, d.NewValue, d.TriggerSource, d.RuleId, d.DecisionId, d.Mode, d.CorrelationId)));
+                d.OldValue, d.NewValue, d.TriggerSource, d.TriggerId, d.RuleId, d.DecisionId, d.Mode, d.CorrelationId)));
         });
 
         // GET /api/telemetry?deviceId=&capabilityId=&zoneId=&from=&to=&limit=&format=json|csv
@@ -104,6 +104,47 @@ public static class HistoryEndpoints
                 return Results.Text(ToCsv(samples), "text/csv", Encoding.UTF8);
 
             return Results.Ok(samples);
+        });
+
+        // Lightweight sample counters for the ML data-sufficiency check (Epic 2P) — "is there enough history
+        // to train?" answered by Mongo counts/aggregation instead of paging the raw series to the caller.
+
+        // GET /api/telemetry/count?capabilityId=&zoneId=&from=&to=
+        group.MapGet("/telemetry/count", async (
+            string? capabilityId, string? zoneId, DateTime? from, DateTime? to, IMongoDatabase db) =>
+        {
+            var count = await db.GetCollection<SensorReading>(TimeSeriesInitializer.SensorReadingsCollection)
+                .CountDocumentsAsync(TelemetryFilter(capabilityId, zoneId, from, to));
+            return Results.Ok(new { count });
+        });
+
+        // GET /api/telemetry/count-by-zone?capabilityId=&from=&to= → [{ zoneId, count }]
+        group.MapGet("/telemetry/count-by-zone", async (
+            string? capabilityId, DateTime? from, DateTime? to, IMongoDatabase db) =>
+        {
+            var rows = await CountByZone(
+                db.GetCollection<SensorReading>(TimeSeriesInitializer.SensorReadingsCollection),
+                TelemetryFilter(capabilityId, null, from, to));
+            return Results.Ok(rows);
+        });
+
+        // GET /api/events/count?capabilityId=&zoneId=&from=&to=
+        group.MapGet("/events/count", async (
+            string? capabilityId, string? zoneId, DateTime? from, DateTime? to, IMongoDatabase db) =>
+        {
+            var count = await db.GetCollection<DeviceEventLog>(TimeSeriesInitializer.DeviceEventsCollection)
+                .CountDocumentsAsync(EventFilter(capabilityId, zoneId, from, to));
+            return Results.Ok(new { count });
+        });
+
+        // GET /api/events/count-by-zone?capabilityId=&from=&to= → [{ zoneId, count }]
+        group.MapGet("/events/count-by-zone", async (
+            string? capabilityId, DateTime? from, DateTime? to, IMongoDatabase db) =>
+        {
+            var rows = await CountByZone(
+                db.GetCollection<DeviceEventLog>(TimeSeriesInitializer.DeviceEventsCollection),
+                EventFilter(capabilityId, null, from, to));
+            return Results.Ok(rows);
         });
 
         // GET /api/telemetry/aggregate?deviceId=&capabilityId=&zoneId=&from=&to=&bucket=hour&agg=avg
@@ -173,6 +214,49 @@ public static class HistoryEndpoints
               .Append(s.Value.ToString(CultureInfo.InvariantCulture)).Append('\n');
         return sb.ToString();
     }
+
+    private static FilterDefinition<SensorReading> TelemetryFilter(
+        string? capabilityId, string? zoneId, DateTime? from, DateTime? to)
+    {
+        var (lo, hi, _) = Window(from, to, null);
+        var b = Builders<SensorReading>.Filter;
+        var filter = b.Gte(x => x.Timestamp, lo) & b.Lte(x => x.Timestamp, hi);
+        if (!string.IsNullOrEmpty(capabilityId)) filter &= b.Eq(x => x.Meta.CapabilityId, capabilityId);
+        if (!string.IsNullOrEmpty(zoneId)) filter &= b.Eq(x => x.Meta.ZoneId, zoneId);
+        return filter;
+    }
+
+    private static FilterDefinition<DeviceEventLog> EventFilter(
+        string? capabilityId, string? zoneId, DateTime? from, DateTime? to)
+    {
+        var (lo, hi, _) = Window(from, to, null);
+        var b = Builders<DeviceEventLog>.Filter;
+        var filter = b.Gte(x => x.Timestamp, lo) & b.Lte(x => x.Timestamp, hi);
+        if (!string.IsNullOrEmpty(capabilityId)) filter &= b.Eq(x => x.CapabilityId, capabilityId);
+        if (!string.IsNullOrEmpty(zoneId)) filter &= b.Eq(x => x.Meta.ZoneId, zoneId);
+        return filter;
+    }
+
+    /// <summary>Group matching documents by <c>Meta.ZoneId</c> and count each zone (one aggregation round-trip).</summary>
+    private static async Task<List<ZoneCount>> CountByZone<T>(
+        IMongoCollection<T> collection, FilterDefinition<T> filter)
+    {
+        var rows = await collection.Aggregate()
+            .Match(filter)
+            .Group(new BsonDocument
+            {
+                { "_id", "$Meta.ZoneId" },
+                { "count", new BsonDocument("$sum", 1) },
+            })
+            .ToListAsync();
+
+        return rows
+            .Select(r => new ZoneCount(r["_id"].IsBsonNull ? "" : r["_id"].AsString, r["count"].ToInt64()))
+            .ToList();
+    }
+
+    /// <summary>Per-zone sample count for the ML data-sufficiency check (Epic 2P).</summary>
+    public record ZoneCount(string ZoneId, long Count);
 
     private static (DateTime from, DateTime to, int limit) Window(DateTime? from, DateTime? to, int? limit)
     {

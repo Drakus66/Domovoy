@@ -31,7 +31,7 @@ public sealed class MlSelectorGovernor : IBlock
     private readonly string _boundOutput;
     private readonly IReadOnlyList<string> _values;
 
-    private readonly Queue<(DateTimeOffset At, double Error)> _errors = new();
+    private readonly DriftWindow _drift = new();
 
     public MlSelectorGovernor(
         Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, string?> predict,
@@ -47,8 +47,7 @@ public sealed class MlSelectorGovernor : IBlock
     {
         var configuredStage = (int)Math.Round(Math.Clamp(ctx.Param("stage", Shadow), Shadow, Full));
 
-        var pinnedVersion = (int)Math.Max(0, Math.Round(ctx.Param(MlGovernorBase.ModelVersionParam, 0)));
-        var proposed = _predict(ctx.Now, BuildScopeChain(ctx), pinnedVersion);
+        var proposed = _predict(ctx.Now, MlGovernorCore.BuildScopeChain(ctx), MlGovernorCore.PinnedVersion(ctx));
         if (string.IsNullOrEmpty(proposed))
         {
             ctx.Emit(MlGovernorBase.EffectiveStage, (double)Shadow);
@@ -104,20 +103,7 @@ public sealed class MlSelectorGovernor : IBlock
 
         var windowMin = Math.Max(1, ctx.Param("driftWindowMin", 60));
         var error = string.Equals(proposed, measured, StringComparison.OrdinalIgnoreCase) ? 0.0 : 1.0;
-        _errors.Enqueue((ctx.Now, error));
-        while (_errors.Count > 0 && (ctx.Now - _errors.Peek().At).TotalMinutes > windowMin)
-            _errors.Dequeue();
-
-        return _errors.Count == 0 ? null : _errors.Average(e => e.Error);
-    }
-
-    private static IReadOnlyList<ModelScope> BuildScopeChain(IBlockContext ctx)
-    {
-        var chain = new List<ModelScope>(3);
-        if (!string.IsNullOrEmpty(ctx.ZoneId)) chain.Add(ModelScope.Zone(ctx.ZoneId));
-        if (!string.IsNullOrEmpty(ctx.ZoneKind)) chain.Add(ModelScope.ZoneKind(ctx.ZoneKind));
-        chain.Add(ModelScope.Global);
-        return chain;
+        return _drift.Push(ctx.Now, error, windowMin);
     }
 
     private static string? AsClass(object? v) => v switch

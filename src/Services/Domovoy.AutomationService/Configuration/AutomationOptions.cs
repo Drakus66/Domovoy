@@ -32,54 +32,53 @@ public class AutomationOptions
     /// </summary>
     public int BoundedActiveCooldownSeconds { get; set; } = 300;
 
-    // --- Presence-driven home mode (roadmap Epic 1G) ---
-
-    /// <summary>
-    /// When true, presence sensors auto-switch the home mode between Home and Away (never Night/Vacation,
-    /// which are manual). Disable to keep the mode purely manual.
-    /// </summary>
-    public bool PresenceAutoMode { get; set; } = true;
-
-    /// <summary>Capability ids treated as presence/occupancy signals.</summary>
-    public string[] PresenceCapabilities { get; set; } = { "presence", "occupancy" };
-
-    /// <summary>How long all presence signals must stay clear before switching Home → Away.</summary>
-    public int AwayDelaySeconds { get; set; } = 600;
+    // NOTE (Epic 1G → block layer): presence-driven Home/Away switching is no longer platform config.
+    // The former PresenceAutoMode/PresenceCapabilities/AwayDelaySeconds options died with the hardcoded
+    // PresenceMonitor — that policy now lives in a user-created `presence_mode` control block driving the
+    // Home virtual device (homes without presence sensors simply have no such block).
 
     // --- ML substrate (roadmap Epic 2A) ---
+    //
+    // NOTE (Epic 2P): the runtime source of truth for WHAT/HOW to train is the `ml_tasks` collection,
+    // edited from the WebUI ML hub. The ML fields below are only (a) the seed values of the default task
+    // created on first run and (b) the static safety floor baked into governor block types at startup.
 
-    /// <summary>Capability the schedule model is trained to predict (and the ML-setpoint block emits for).</summary>
+    /// <summary>Seed default (Epic 2P): target capability of the first-run default task; also the legacy ml_setpoint target.</summary>
     public string TrainCapability { get; set; } = "temperature";
 
-    /// <summary>History window (days) pulled from telemetry for training.</summary>
+    /// <summary>Seed default (Epic 2P): history window (days) of the first-run default task.</summary>
     public int TrainWindowDays { get; set; } = 30;
 
-    /// <summary>Minimum samples required to train (cold-start guard).</summary>
+    /// <summary>Seed default (Epic 2P): minimum samples of the first-run default task (cold-start guard).</summary>
     public int MinSamples { get; set; } = 20;
 
-    /// <summary>How often to retrain automatically.</summary>
+    /// <summary>Seed default (Epic 2P): auto-retrain interval of the first-run default task.</summary>
     public int TrainIntervalHours { get; set; } = 24;
 
     /// <summary>How often to check the registry for a newer model to load for inference.</summary>
     public int ModelRefreshMinutes { get; set; } = 10;
 
-    /// <summary>Safety clamp on the ML-predicted setpoint (°C).</summary>
+    /// <summary>
+    /// Static safety floor on ML-governed setpoints (°C): baked into governor block types at startup — the
+    /// hard bound the task's runtime-editable soft clamps (Epic 2P) can never widen. Also seeds the default
+    /// task's clamps.
+    /// </summary>
     public double SetpointMin { get; set; } = 16;
     public double SetpointMax { get; set; } = 26;
 
     // --- Per-zone model scoping (roadmap Epic 2I) ---
 
     /// <summary>
-    /// When true, training also fits shared per-zone-kind models and, where they earn it, per-zone models —
-    /// so a thermostat resolves its model along the zone → zone_kind → global chain. The global model is
-    /// always trained; this only adds the more specific scopes.
+    /// Seed default (Epic 2P): when true, the first-run default task also fits shared per-zone-kind models
+    /// and, where they earn it, per-zone models — a thermostat resolves its model along the
+    /// zone → zone_kind → global chain. The global model is always trained.
     /// </summary>
     public bool TrainZoneModels { get; set; } = true;
 
     /// <summary>
-    /// How much a per-zone candidate must beat its fallback (zone_kind/global) on holdout to be registered
-    /// (auto-promotion gate, in the template's metric units). Keeps a zone on the shared model until its own
-    /// behaviour genuinely diverges, instead of splintering on noise.
+    /// Seed default (Epic 2P): how much a per-zone candidate must beat its fallback (zone_kind/global) on
+    /// holdout to be registered (auto-promotion gate, in the template's metric units). Keeps a zone on the
+    /// shared model until its own behaviour genuinely diverges, instead of splintering on noise.
     /// </summary>
     public double ZonePromotionMargin { get; set; } = 0.25;
 

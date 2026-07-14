@@ -13,7 +13,9 @@ export interface EventLogEntry {
   capabilityId: string;
   oldValue?: unknown;
   newValue?: unknown;
-  triggerSource: string; // user | rule | device | ml
+  triggerSource: string; // user | rule | device | ml | block | presence
+  /** Concrete initiator id (rule/block/user/presence-sensor), when known. */
+  triggerId?: string | null;
   ruleId?: string | null;
   decisionId?: string | null;
   mode?: string | null;

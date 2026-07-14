@@ -2,6 +2,8 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using System.Text.Json;
+
 using Domovoy.Contracts.Automations;
 using Domovoy.DbGateway.Models;
 
@@ -44,6 +46,7 @@ public static class AutomationEndpoints
             if (string.IsNullOrWhiteSpace(rule.Name))
                 return Results.BadRequest(new { error = "rule name is required" });
 
+            NormalizeJsonValues(rule);
             rule.Id = Guid.NewGuid().ToString();
             rule.IsProtected = false; // safety-floor rules are config-only, never created via API
             rule.CreatedAt = rule.UpdatedAt = DateTime.UtcNow;
@@ -59,6 +62,7 @@ public static class AutomationEndpoints
             var existing = await Rules(db).Find(x => x.Id == id).FirstOrDefaultAsync();
             if (existing is null) return Results.NotFound();
 
+            NormalizeJsonValues(rule);
             rule.Id = id;
             rule.IsProtected = false;
             rule.CreatedAt = existing.CreatedAt;
@@ -97,6 +101,38 @@ public static class AutomationEndpoints
             return Results.Ok(rows);
         });
     }
+
+    /// <summary>
+    /// HTTP binding leaves the <c>object</c>-typed comparison/command values as <see cref="JsonElement"/>,
+    /// which the Mongo <c>ObjectSerializer</c> (deliberately) refuses to persist. Flatten them to BCL
+    /// primitives at the boundary so rules store as plain BSON regardless of who posted them (WebUI,
+    /// RuleSuggester, DiscoveryEngine, scripts). Public so tests can exercise the exact endpoint logic.
+    /// </summary>
+    public static void NormalizeJsonValues(AutomationRule rule)
+    {
+        foreach (var t in rule.Triggers) t.Value = ToPlain(t.Value);
+        foreach (var c in rule.Conditions) c.Value = ToPlain(c.Value);
+        foreach (var a in rule.Actions)
+        {
+            if (a.Set is null) continue;
+            foreach (var key in a.Set.Keys.ToList()) a.Set[key] = ToPlain(a.Set[key]);
+        }
+    }
+
+    private static object? ToPlain(object? value) => value switch
+    {
+        JsonElement e => e.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Number => e.TryGetInt64(out var l) ? l : e.GetDouble(),
+            JsonValueKind.String => e.GetString(),
+            JsonValueKind.Array => e.EnumerateArray().Select(x => ToPlain(x)).ToList(),
+            JsonValueKind.Object => e.EnumerateObject().ToDictionary(p => p.Name, p => ToPlain(p.Value)),
+            _ => null,
+        },
+        _ => value,
+    };
 
     private static IMongoCollection<AutomationRule> Rules(IMongoDatabase db) =>
         db.GetCollection<AutomationRule>(Collection);

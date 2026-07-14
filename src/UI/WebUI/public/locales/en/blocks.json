@@ -1,4 +1,4 @@
-{
+﻿{
   "title": "Control blocks",
   "subtitle": "Stateful loops between rules and devices — filters, thermostats, sequencers. Each block is a virtual device you can chart, wire and command.",
   "errors": {
@@ -9,7 +9,23 @@
     "promote": "Failed to queue promotion proposal."
   },
   "confirmDelete": "Delete block \"{{name}}\"? Its virtual device disappears.",
-  "empty": "No control loops yet — add one from the catalog above and I will keep it running.",
+  "empty": "No control loops yet — press “Add block” and I will keep it running.",
+  "addBlock": "Add block",
+  "picker": {
+    "title": "Add block",
+    "search": "Search by name or description…",
+    "noMatch": "Nothing matches the search."
+  },
+  "category": {
+    "template": "Ready-made loops",
+    "control": "Control",
+    "filter": "Signal filters",
+    "logic": "Logic & comparison",
+    "time": "Time & state",
+    "math": "Math & expressions",
+    "ml": "Machine learning",
+    "other": "Other"
+  },
   "chip": {
     "disabled": "disabled",
     "stage": "stage: {{stage}}"
@@ -108,13 +124,16 @@
     "inputsSection": "Inputs (wiring)",
     "outputsSection": "Outputs (actuate — optional)",
     "parametersSection": "Parameters",
+    "optionsSection": "Options",
+    "yes": "Yes",
+    "no": "No",
     "deviceSuffix": "{{port}} · device",
     "outputDeviceSuffix": "{{output}} → device",
     "capability": "capability",
     "none": "None",
     "outputHelper": "Leave empty to only report (no actuation)",
     "authorityStage": "authority stage",
-    "stageLocked": "Change the stage via Promote (approval queue), not here",
+    "stageDirect": "Saving is your explicit approval of the stage; on drift the block auto-demotes back to Shadow",
     "outputsSummary": "Outputs: {{list}}",
     "writable": "writable"
   },

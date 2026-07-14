@@ -72,6 +72,17 @@
     "suggestionsWaiting_one": "{{count}} suggestion waiting for you",
     "suggestionsWaiting_other": "{{count}} suggestions waiting for you"
   },
+  "trigger": {
+    "user": "User",
+    "rule": "Automation",
+    "block": "Block",
+    "device": "Device",
+    "presence": "Presence",
+    "ml": "ML",
+    "goTo": "Go to",
+    "unknownName": "Name unknown",
+    "presenceHint": "The sensor that last saw presence before the mode switch"
+  },
   "newResident": "A new resident has moved in: {{name}}",
   "error": {
     "title": "Something went wrong",

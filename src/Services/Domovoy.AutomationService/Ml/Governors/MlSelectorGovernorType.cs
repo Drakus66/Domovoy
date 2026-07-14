@@ -13,7 +13,7 @@ namespace Domovoy.AutomationService.Ml.Governors;
 /// the same code becomes an ML HVAC-mode selector, an ML fan-level selector, etc., by binding a different enum
 /// output. The Bounded-Active adjacency order comes from the output capability's declared <c>Values</c>.
 /// </summary>
-public sealed class MlSelectorGovernorType : IBlockType
+public sealed class MlSelectorGovernorType : IBlockType, IMlGovernorBlockType
 {
     private readonly Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, string?> _predict;
     private readonly string _measuredInput;
@@ -48,8 +48,12 @@ public sealed class MlSelectorGovernorType : IBlockType
     }
 
     public string TypeId { get; }
+    public string Category => BlockCategories.Ml;
     public string Title { get; }
     public string Description { get; }
+
+    /// <summary>The ML target this governor consumes = its measured input (Epic 2P): the model predicts the monitored signal.</summary>
+    public string MlTargetCapability => _measuredInput;
 
     public IReadOnlyList<BlockPortSpec> Inputs { get; }
     public IReadOnlyList<Capability> Outputs { get; }

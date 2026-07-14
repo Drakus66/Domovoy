@@ -21,6 +21,9 @@ public static class MlEndpoints
     /// <summary>Register payload: metadata + base64-encoded ML.NET artifact.</summary>
     public record RegisterRequest(MlModel Model, string ArtifactBase64);
 
+    /// <summary>Prune payload (Epic 2P retention): versions kept per (kind, target, scope) line; optional target filter.</summary>
+    public record PruneRequest(int KeepLast, string? Target);
+
     public static void MapMlEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/ml").WithTags("ML").WithOpenApi();
@@ -58,8 +61,33 @@ public static class MlEndpoints
                 : Results.Bytes(doc.Artifact, "application/octet-stream");
         });
 
-        // Register a freshly trained model (from the AutomationService trainer).
-        group.MapPost("/models", async (RegisterRequest req, IMongoDatabase db) =>
+        // Delete a single model version (Epic 2P retention). The UI warns when the version is pinned by a
+        // block (`model_version` param) — a deleted pin falls back to the scope's latest on the next refresh.
+        group.MapDelete("/models/{id}", async (string id, IMongoDatabase db) =>
+        {
+            var r = await Models(db).DeleteOneAsync(x => x.Id == id);
+            return r.DeletedCount == 0 ? Results.NotFound() : Results.NoContent();
+        });
+
+        // Prune old versions across (kind, target, scope) lines, keeping the N most recent of each (Epic 2P).
+        // Age-based only — pin-awareness (reading blocks' model_version params) is deliberately deferred;
+        // the UI warns before deleting a pinned version by hand.
+        group.MapPost("/models/prune", async (PruneRequest req, IMongoDatabase db) =>
+        {
+            if (req.KeepLast < 1) return Results.BadRequest(new { error = "keepLast must be at least 1" });
+
+            var b = Builders<MlModelDocument>.Filter;
+            var filter = string.IsNullOrEmpty(req.Target)
+                ? FilterDefinition<MlModelDocument>.Empty
+                : b.Eq(x => x.TargetCapability, req.Target);
+
+            var deleted = await PruneAsync(db, filter, req.KeepLast);
+            return Results.Ok(new { deleted });
+        });
+
+        // Register a freshly trained model (from the AutomationService trainer). `keepLast` > 0 auto-prunes
+        // the registered model's own (kind, target, scope) line right after the insert (Epic 2P retention).
+        group.MapPost("/models", async (RegisterRequest req, int? keepLast, IMongoDatabase db) =>
         {
             if (req.Model is null || string.IsNullOrEmpty(req.ArtifactBase64))
                 return Results.BadRequest(new { error = "model and artifact are required" });
@@ -91,8 +119,41 @@ public static class MlEndpoints
                 Artifact = Convert.FromBase64String(req.ArtifactBase64),
             };
             await Models(db).InsertOneAsync(doc);
+
+            if (keepLast is > 0)
+            {
+                var line = b.And(
+                    b.Eq(x => x.Kind, model.Kind),
+                    b.Eq(x => x.TargetCapability, model.TargetCapability),
+                    b.Eq(x => x.Scope.Level, model.Scope.Level),
+                    b.Eq(x => x.Scope.Key, model.Scope.Key));
+                await PruneAsync(db, line, keepLast.Value);
+            }
+
             return Results.Created($"/api/ml/models/{doc.Id}", ToMetadata(doc));
         });
+    }
+
+    /// <summary>
+    /// Delete everything older than the <paramref name="keepLast"/> most recent versions of each
+    /// (kind, target, scope) line matching <paramref name="filter"/>. Metadata-only scan (artifact projected
+    /// out), then a single DeleteMany by id. Public so retention tests exercise it against a real Mongo.
+    /// </summary>
+    public static async Task<long> PruneAsync(IMongoDatabase db, FilterDefinition<MlModelDocument> filter, int keepLast)
+    {
+        var metas = await Models(db).Find(filter)
+            .Project(x => new { x.Id, x.Kind, x.TargetCapability, x.Scope, x.Version })
+            .ToListAsync();
+
+        var stale = metas
+            .GroupBy(m => (m.Kind, Target: m.TargetCapability.ToLowerInvariant(), Key: (m.Scope ?? ModelScope.Global).AsKey()))
+            .SelectMany(g => g.OrderByDescending(m => m.Version).Skip(keepLast))
+            .Select(m => m.Id)
+            .ToList();
+        if (stale.Count == 0) return 0;
+
+        var r = await Models(db).DeleteManyAsync(Builders<MlModelDocument>.Filter.In(x => x.Id, stale));
+        return r.DeletedCount;
     }
 
     private static MlModel ToMetadata(MlModelDocument d) => new()

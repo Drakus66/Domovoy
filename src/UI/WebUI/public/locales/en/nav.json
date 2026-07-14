@@ -1,11 +1,11 @@
-{
+﻿{
   "dashboard": "Dashboard",
   "zones": "Zones",
   "modes": "Modes",
   "automations": "Automations",
   "flow": "Flow editor",
   "blocks": "Control blocks",
-  "models": "ML models",
+  "models": "ML",
   "proposals": "Proposals",
   "users": "Users",
   "plugins": "Plugins",

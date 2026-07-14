@@ -14,7 +14,7 @@ namespace Domovoy.AutomationService.Ml.Governors;
 /// CO₂-setpoint, an ML humidity-setpoint, etc. The <see cref="BlockCatalog"/> registers concrete instances
 /// from a config list, so a new ML-governed setpoint is configuration, not a new bespoke block class.
 /// </summary>
-public sealed class MlSetpointGovernorType : IBlockType
+public sealed class MlSetpointGovernorType : IBlockType, IMlGovernorBlockType
 {
     private readonly Func<DateTimeOffset, IReadOnlyList<ModelScope>, int, double?> _predict;
     private readonly string _measuredInput;
@@ -58,8 +58,12 @@ public sealed class MlSetpointGovernorType : IBlockType
     }
 
     public string TypeId { get; }
+    public string Category => BlockCategories.Ml;
     public string Title { get; }
     public string Description { get; }
+
+    /// <summary>The ML target this governor consumes = its measured input (Epic 2P): the model predicts the monitored signal.</summary>
+    public string MlTargetCapability => _measuredInput;
 
     public IReadOnlyList<BlockPortSpec> Inputs { get; }
     public IReadOnlyList<Capability> Outputs { get; }

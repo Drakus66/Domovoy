@@ -33,7 +33,7 @@ public static class WellKnownModes
 
     /// <summary>
     /// Modes that presence may auto-switch between. Night/Vacation are deliberately manual — presence
-    /// must never override an occupant's explicit choice (see PresenceMonitor in the AutomationService).
+    /// must never override an occupant's explicit choice (the presence_mode block's manual-mode guard).
     /// </summary>
     public static bool IsPresenceManaged(string? mode) =>
         string.Equals(mode, Home, StringComparison.OrdinalIgnoreCase) ||

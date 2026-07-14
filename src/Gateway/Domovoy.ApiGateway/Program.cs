@@ -116,7 +116,9 @@ internal static class Program
             builder.Services.AddHttpClient("automation-service", client =>
             {
                 client.BaseAddress = new Uri(automationUrl);
-                client.Timeout = TimeSpan.FromSeconds(30); // replay scans history; allow headroom
+                // Replay scans history; ML training (2P) pages telemetry + fits several templates per scope —
+                // a multi-zone train run takes tens of seconds, so give the proxy real headroom.
+                client.Timeout = TimeSpan.FromSeconds(180);
             });
 
             // PluginSupervisor hosts the plugin registry + lifecycle API (roadmap Epic 1C); proxy to it.

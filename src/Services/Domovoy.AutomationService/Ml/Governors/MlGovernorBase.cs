@@ -45,8 +45,8 @@ public abstract class MlGovernorBase : IBlock
     /// <summary>The writable capability this governor commands on the deterministic loop.</summary>
     protected string BoundOutput { get; }
 
-    // Rolling drift window: (tick time, per-tick disagreement).
-    private readonly Queue<(DateTimeOffset At, double Error)> _errors = new();
+    // Rolling drift window (shared implementation across value-types, Epic 2Q).
+    private readonly DriftWindow _drift = new();
 
     /// <param name="predict">Value prediction for a time + model-scope chain, or null when no model is loaded.</param>
     /// <param name="measuredInput">Input port carrying the measured signal, for the drift monitor.</param>
@@ -66,7 +66,7 @@ public abstract class MlGovernorBase : IBlock
         // No model yet → safe default: stay in Shadow, drive nothing, surface the inactive stage. The model is
         // resolved along the instance's zone → zone_kind → global scope chain (Epic 2I), honoring a version pin
         // (Epic 2C) when the instance has one.
-        var raw = _predict(ctx.Now, BuildScopeChain(ctx), PinnedVersion(ctx));
+        var raw = _predict(ctx.Now, MlGovernorCore.BuildScopeChain(ctx), MlGovernorCore.PinnedVersion(ctx));
         if (raw is null)
         {
             ctx.Emit(EffectiveStage, (double)Shadow);
@@ -110,36 +110,14 @@ public abstract class MlGovernorBase : IBlock
     /// <summary>Default drift threshold when the instance doesn't set one (value-type scale).</summary>
     protected virtual double DefaultDriftThreshold => 3;
 
-    /// <summary>The instance's pinned model version (Epic 2C), or 0 for latest.</summary>
-    protected static int PinnedVersion(IBlockContext ctx) =>
-        (int)Math.Max(0, Math.Round(ctx.Param(ModelVersionParam, 0)));
-
-    /// <summary>
-    /// The instance's model-scope fallback chain, most specific first (Epic 2I): zone → zone_kind → global.
-    /// The predictor returns the first scope that has a loaded model, so a bedroom uses its own model if
-    /// trained, else the shared "living rooms" model, else the house-wide one.
-    /// </summary>
-    private static IReadOnlyList<ModelScope> BuildScopeChain(IBlockContext ctx)
-    {
-        var chain = new List<ModelScope>(3);
-        if (!string.IsNullOrEmpty(ctx.ZoneId)) chain.Add(ModelScope.Zone(ctx.ZoneId));
-        if (!string.IsNullOrEmpty(ctx.ZoneKind)) chain.Add(ModelScope.ZoneKind(ctx.ZoneKind));
-        chain.Add(ModelScope.Global);
-        return chain;
-    }
-
-    // Push the new disagreement, evict samples older than the window, return the window mean (null until seeded).
+    // Push the new disagreement into the shared window, return the window mean (null until seeded).
     private double? UpdateDrift(IBlockContext ctx, double proposed)
     {
         var measured = ctx.ReadNumber(_measuredInput);
         if (measured is null) return null;
 
         var windowMin = Math.Max(1, ctx.Param("driftWindowMin", 60));
-        _errors.Enqueue((ctx.Now, Disagreement(ctx, proposed, measured.Value)));
-        while (_errors.Count > 0 && (ctx.Now - _errors.Peek().At).TotalMinutes > windowMin)
-            _errors.Dequeue();
-
-        return _errors.Count == 0 ? null : _errors.Average(e => e.Error);
+        return _drift.Push(ctx.Now, Disagreement(ctx, proposed, measured.Value), windowMin);
     }
 
     protected static double? AsDouble(object? v) => v switch

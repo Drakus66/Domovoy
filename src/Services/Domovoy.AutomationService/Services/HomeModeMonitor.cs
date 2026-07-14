@@ -10,8 +10,8 @@ namespace Domovoy.AutomationService.Services;
 /// <summary>
 /// Keeps <see cref="HomeModeState"/> live by subscribing to <see cref="HomeModeChangedV1"/> on the bus
 /// (roadmap Epic 1G). The DbGateway is the persistence authority and the publisher; this just mirrors the
-/// latest mode into the engine so rule <c>Mode</c> conditions and the <see cref="PresenceMonitor"/> see it
-/// without an HTTP round-trip. The startup value is seeded separately by <see cref="RefreshLoop"/>.
+/// latest mode into the engine so rule <c>Mode</c> conditions and the <see cref="SystemSensorService"/>'s
+/// Home device see it without an HTTP round-trip. The startup value is seeded separately by <see cref="RefreshLoop"/>.
 /// </summary>
 public sealed class HomeModeMonitor : BackgroundService
 {

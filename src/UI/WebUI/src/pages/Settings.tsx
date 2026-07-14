@@ -17,7 +17,10 @@ import PaletteRoundedIcon from '@mui/icons-material/PaletteRounded';
 import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
+import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import { settingsApi, GeocodeResult } from '../api/settings';
+import { securityApi, User } from '../api/security';
+import { getCurrentUserId, setCurrentUserId } from '../api/currentUser';
 
 // A collapsible settings card. Collapsed by default so a long section (e.g. the location
 // map) doesn't dominate the page — the header stays a compact, clickable summary row.
@@ -80,6 +83,10 @@ export default function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  // Self-declared user for attribution (Epic 2G tail — NOT auth, Phase 3 replaces this).
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUser, setCurrentUser] = useState<string>(getCurrentUserId() ?? '');
+
   // Calendar sensor settings (Epic 2L).
   const [weekendDays, setWeekendDays] = useState<number[]>([6, 0]);
   const [holidays, setHolidays] = useState<string[]>([]);
@@ -89,6 +96,16 @@ export default function Settings() {
   const [calendarSaving, setCalendarSaving] = useState(false);
   const [calendarSaved, setCalendarSaved] = useState(false);
   const [importing, setImporting] = useState(false);
+
+  // Local users (Epic 2E model) for the self-declaration picker.
+  useEffect(() => {
+    securityApi.getUsers().then(setUsers).catch(() => setUsers([]));
+  }, []);
+
+  const pickUser = (id: string) => {
+    setCurrentUser(id);
+    setCurrentUserId(id || null);
+  };
 
   // Load the persisted location on mount.
   useEffect(() => {
@@ -402,6 +419,23 @@ export default function Settings() {
                 {t('calendar.save')}
               </Button>
             </Box>
+        </Section>
+
+        {/* ── Who am I (self-declared attribution, not auth) ────────── */}
+        <Section icon={<PersonRoundedIcon color="primary" />} title={t('whoami.title')} caption={t('whoami.caption')}>
+          <TextField
+            select size="small" sx={{ minWidth: 260 }}
+            label={t('whoami.label')}
+            value={currentUser}
+            onChange={(e) => pickUser(e.target.value)}
+            SelectProps={{ native: true }}
+            InputLabelProps={{ shrink: true }}
+          >
+            <option value="">{t('whoami.anonymous')}</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>{u.displayName}</option>
+            ))}
+          </TextField>
         </Section>
 
         {/* ── Appearance ───────────────────────────────────────────── */}

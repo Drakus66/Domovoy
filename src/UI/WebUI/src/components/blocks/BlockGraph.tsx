@@ -35,53 +35,89 @@ import { historyReducer, initHistory, canUndo, canRedo, type History, type Histo
  * this component is the React Flow shell over the three.
  */
 
-const slot = (i: number, n: number) => `${((i + 1) / (n + 1)) * 100}%`;
-const nodeMinHeight = (rows: number) => 34 + Math.max(rows, 1) * 24;
-const BLOCK_WIDTH = 190;
-const DEVICE_WIDTH = 170;
+// Node geometry is fixed-pixel (Epic 2Q graph redesign): a single-line ellipsized header of a known height
+// plus one row per port, so handle positions are computed — a long block name can never push labels onto
+// ports or misalign handles (the old percentage-of-measured-height scheme did exactly that).
+const BLOCK_WIDTH = 200;
+const DEVICE_WIDTH = 180;
+const HEADER_H = 40;      // block header: name + type id
+const DEV_HEADER_H = 28;  // device header: name only
+const ROW_H = 22;
+const PAD_BOTTOM = 6;
+
+const blockNodeHeight = (inputs: number, outputs: number) => HEADER_H + (inputs + outputs) * ROW_H + PAD_BOTTOM;
+const deviceNodeHeight = (caps: number) => DEV_HEADER_H + caps * ROW_H + PAD_BOTTOM;
 
 type BlockNodeData = { name: string; typeId: string; inputs: string[]; outputs: string[] };
 type DeviceNodeData = { label: string; caps: string[] };
 
+const portLabelSx = { fontSize: 10, color: 'text.secondary', lineHeight: 1 } as const;
+
 function BlockNode({ data }: NodeProps<Node<BlockNodeData>>) {
   return (
     <Box sx={{
-      position: 'relative', width: BLOCK_WIDTH, minHeight: nodeMinHeight(Math.max(data.inputs.length, data.outputs.length)),
-      background: 'var(--mui-palette-primary-main)', color: '#fff', borderRadius: 2, px: 1, py: 0.75, fontSize: 12,
+      position: 'relative', width: BLOCK_WIDTH, pb: `${PAD_BOTTOM}px`,
+      bgcolor: 'background.paper', border: '1.5px solid var(--mui-palette-primary-main)',
+      borderRadius: 2, boxShadow: 1,
     }}>
-      <Box sx={{ textAlign: 'center', fontWeight: 700, mb: 0.5 }}>{data.name}</Box>
-      <Box sx={{ textAlign: 'center', fontSize: 10, opacity: 0.8 }}>{data.typeId}</Box>
-      {data.inputs.map((p, i) => (
-        <span key={`in-${p}`}>
-          <Handle type="target" position={Position.Left} id={inputHandle(p)} style={{ top: slot(i, data.inputs.length), background: '#fff' }} />
-          <Box sx={{ position: 'absolute', left: 8, top: slot(i, data.inputs.length), transform: 'translateY(-50%)', fontSize: 9 }}>{p}</Box>
-        </span>
+      <Box sx={{
+        height: HEADER_H, px: 1, pt: 0.5, boxSizing: 'border-box',
+        borderBottom: '1px solid var(--mui-palette-divider)',
+      }}>
+        {/* Single-line + ellipsis: the header height stays fixed no matter how long the user named the block. */}
+        <Typography noWrap title={data.name} sx={{ fontSize: 12.5, fontWeight: 700, lineHeight: 1.4 }}>
+          {data.name}
+        </Typography>
+        <Typography noWrap sx={{ fontSize: 9.5, color: 'primary.main', lineHeight: 1.3 }}>{data.typeId}</Typography>
+      </Box>
+      {/* One row per port: inputs first (labels left), then outputs (labels right) — no side-by-side collisions. */}
+      {data.inputs.map((p) => (
+        <Box key={`in-${p}`} sx={{ height: ROW_H, display: 'flex', alignItems: 'center', px: 1 }}>
+          <Typography noWrap title={p} sx={portLabelSx}>{p}</Typography>
+        </Box>
       ))}
-      {data.outputs.map((o, i) => (
-        <span key={`out-${o}`}>
-          <Handle type="source" position={Position.Right} id={outputHandle(o)} style={{ top: slot(i, data.outputs.length), background: '#fff' }} />
-          <Box sx={{ position: 'absolute', right: 8, top: slot(i, data.outputs.length), transform: 'translateY(-50%)', fontSize: 9 }}>{o}</Box>
-        </span>
+      {data.outputs.map((o) => (
+        <Box key={`out-${o}`} sx={{ height: ROW_H, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', px: 1 }}>
+          <Typography noWrap title={o} sx={{ ...portLabelSx, color: 'text.primary', fontWeight: 600 }}>{o}</Typography>
+        </Box>
+      ))}
+      {data.inputs.map((p, i) => (
+        <Handle key={`h-in-${p}`} type="target" position={Position.Left} id={inputHandle(p)}
+          style={{ top: HEADER_H + (i + 0.5) * ROW_H, background: 'var(--mui-palette-info-main)' }} />
+      ))}
+      {data.outputs.map((o, j) => (
+        <Handle key={`h-out-${o}`} type="source" position={Position.Right} id={outputHandle(o)}
+          style={{ top: HEADER_H + (data.inputs.length + j + 0.5) * ROW_H, background: 'var(--mui-palette-primary-main)' }} />
       ))}
     </Box>
   );
 }
 
 function DeviceNode({ data }: NodeProps<Node<DeviceNodeData>>) {
-  const n = data.caps.length;
   return (
     <Box sx={{
-      position: 'relative', width: DEVICE_WIDTH, minHeight: nodeMinHeight(n),
-      background: 'var(--mui-palette-background-paper)', border: '1px solid var(--mui-palette-info-main)',
-      borderRadius: 2, px: 1, py: 0.75, fontSize: 12,
+      position: 'relative', width: DEVICE_WIDTH, pb: `${PAD_BOTTOM}px`,
+      bgcolor: 'background.paper', border: '1px dashed var(--mui-palette-info-main)',
+      borderRadius: 2,
     }}>
-      <Box sx={{ textAlign: 'center', fontWeight: 600, mb: 0.5 }}>{data.label}</Box>
+      <Box sx={{
+        height: DEV_HEADER_H, px: 1, display: 'flex', alignItems: 'center', boxSizing: 'border-box',
+        borderBottom: '1px solid var(--mui-palette-divider)',
+      }}>
+        <Typography noWrap title={data.label} sx={{ fontSize: 11.5, fontWeight: 600 }}>{data.label}</Typography>
+      </Box>
+      {data.caps.map((c) => (
+        <Box key={c} sx={{ height: ROW_H, display: 'flex', alignItems: 'center', justifyContent: 'center', px: 1.5 }}>
+          <Typography noWrap title={c} sx={portLabelSx}>{c}</Typography>
+        </Box>
+      ))}
       {data.caps.map((c, i) => (
-        <span key={c}>
+        <span key={`h-${c}`}>
           {/* Device capability: a source (sensor → block input) and a target (block output → actuator). */}
-          <Handle type="source" position={Position.Right} id={outputHandle(c)} style={{ top: slot(i, n), background: 'var(--mui-palette-info-main)' }} />
-          <Handle type="target" position={Position.Left} id={inputHandle(c)} style={{ top: slot(i, n), background: 'var(--mui-palette-success-main)' }} />
-          <Box sx={{ position: 'absolute', width: '100%', left: 0, top: slot(i, n), transform: 'translateY(-50%)', textAlign: 'center', fontSize: 9, color: 'text.secondary' }}>{c}</Box>
+          <Handle type="source" position={Position.Right} id={outputHandle(c)}
+            style={{ top: DEV_HEADER_H + (i + 0.5) * ROW_H, background: 'var(--mui-palette-info-main)' }} />
+          <Handle type="target" position={Position.Left} id={inputHandle(c)}
+            style={{ top: DEV_HEADER_H + (i + 0.5) * ROW_H, background: 'var(--mui-palette-success-main)' }} />
         </span>
       ))}
     </Box>
@@ -89,9 +125,6 @@ function DeviceNode({ data }: NodeProps<Node<DeviceNodeData>>) {
 }
 
 const nodeTypes = { block: BlockNode, device: DeviceNode };
-
-// The rows a node's handles occupy — drives its laid-out height (mirrors the rendered minHeight).
-const blockRows = (d: BlockNodeData) => Math.max(d.inputs.length, d.outputs.length);
 
 export default function BlockGraph({
   blocks,
@@ -161,10 +194,12 @@ export default function BlockGraph({
       });
     });
 
+    // No always-on wire labels (Epic 2Q declutter): both ends of a wire land on a labelled port row, so a
+    // label box on every edge only repeated what the nodes already say.
     const edges: Edge[] = deriveEdges(draft).map((e) => ({
       id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle,
-      label: e.label, markerEnd: { type: MarkerType.ArrowClosed },
-      style: { stroke: 'var(--mui-palette-text-secondary)' }, labelStyle: { fontSize: 10 },
+      markerEnd: { type: MarkerType.ArrowClosed },
+      style: { stroke: 'var(--mui-palette-text-secondary)', strokeWidth: 1.5 },
     }));
     return { nodes, edges };
   }, [draft, extraDeviceIds, deviceById, catalogByType]);
@@ -178,7 +213,7 @@ export default function BlockGraph({
 
   const signature = useMemo(() => JSON.stringify({
     n: derived.nodes.map((n) => [n.id, n.type, n.data]),
-    e: derived.edges.map((e) => [e.id, e.source, e.sourceHandle, e.target, e.targetHandle, e.label]),
+    e: derived.edges.map((e) => [e.id, e.source, e.sourceHandle, e.target, e.targetHandle]),
   }), [derived]);
 
   // Undo/redo and auto-arrange change only positions (which `signature` ignores), so they must force a
@@ -224,9 +259,13 @@ export default function BlockGraph({
   // Lay the whole graph out with dagre. Block positions persist into the document (undoable + dirty); device
   // positions are ephemeral, so we push them straight onto React Flow's node state.
   const autoArrange = useCallback(() => {
-    const layoutNodes: LayoutNode[] = nodes.map((n) => n.type === 'block'
-      ? { id: n.id, width: BLOCK_WIDTH, height: nodeMinHeight(blockRows(n.data as BlockNodeData)) }
-      : { id: n.id, width: DEVICE_WIDTH, height: nodeMinHeight((n.data as DeviceNodeData).caps.length) });
+    const layoutNodes: LayoutNode[] = nodes.map((n) => {
+      if (n.type === 'block') {
+        const d = n.data as BlockNodeData;
+        return { id: n.id, width: BLOCK_WIDTH, height: blockNodeHeight(d.inputs.length, d.outputs.length) };
+      }
+      return { id: n.id, width: DEVICE_WIDTH, height: deviceNodeHeight((n.data as DeviceNodeData).caps.length) };
+    });
     const layoutEdges: LayoutEdge[] = edges.map((e) => ({ source: e.source, target: e.target }));
     const pos = computeAutoLayout(layoutNodes, layoutEdges);
 

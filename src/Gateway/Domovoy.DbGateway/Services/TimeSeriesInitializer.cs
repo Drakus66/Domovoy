@@ -91,6 +91,12 @@ public static class TimeSeriesInitializer
         await CreateIndexes(history, logger, ct,
             ("RuleId", "Timestamp"));
         await CreateIndexes(history, logger, ct, (null, "Timestamp"));
+
+        // Control-block run history (Epic 1H) — the 'block' Activity source queries by time window.
+        var blockHistory = database.GetCollection<BsonDocument>(Models.BlockHistory.Collection);
+        await CreateIndexes(blockHistory, logger, ct,
+            ("BlockId", "Timestamp"));
+        await CreateIndexes(blockHistory, logger, ct, (null, "Timestamp"));
     }
 
     private static async Task CreateIndexes(

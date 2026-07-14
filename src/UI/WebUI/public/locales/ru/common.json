@@ -74,6 +74,17 @@
     "suggestionsWaiting_few": "{{count}} предложения ждут вас",
     "suggestionsWaiting_many": "{{count}} предложений ждут вас"
   },
+  "trigger": {
+    "user": "Пользователь",
+    "rule": "Автоматизация",
+    "block": "Блок",
+    "device": "Устройство",
+    "presence": "Присутствие",
+    "ml": "ML",
+    "goTo": "Перейти",
+    "unknownName": "Имя неизвестно",
+    "presenceHint": "Датчик, который последним видел присутствие перед переключением режима"
+  },
   "newResident": "В доме новый жилец: {{name}}",
   "error": {
     "title": "Что-то пошло не так",

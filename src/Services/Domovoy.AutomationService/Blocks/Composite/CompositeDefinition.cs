@@ -26,11 +26,13 @@ public sealed record CompositeDefinition(
 /// <param name="TypeId">The built-in type this node instantiates.</param>
 /// <param name="Params">Numeric params for the node (numeric-only, like <see cref="Domovoy.Contracts.Blocks.ControlBlock.Params"/>).</param>
 /// <param name="Inputs">Port → source. A source is <c>"$name"</c> (a composite input) or <c>"nodeId#capId"</c> (another node's output).</param>
+/// <param name="Options">Non-numeric (enum/bool/text) options for the node (roadmap Epic 2Q) — e.g. a comparator's <c>op</c>.</param>
 public sealed record CompositeNode(
     string Id,
     string TypeId,
     IReadOnlyDictionary<string, double> Params,
-    IReadOnlyDictionary<string, string> Inputs);
+    IReadOnlyDictionary<string, string> Inputs,
+    IReadOnlyDictionary<string, string>? Options = null);
 
 /// <summary>An exposed composite input port, bridged to the parent block context.</summary>
 public sealed record CompositeInput(string Name, CapabilityKind Kind, string Description);

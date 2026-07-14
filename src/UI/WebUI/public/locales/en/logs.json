@@ -11,6 +11,7 @@
     "all": "All",
     "device": "Devices",
     "automation": "Automations",
+    "block": "Blocks",
     "system": "System"
   },
   "severity": {

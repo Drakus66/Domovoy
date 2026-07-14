@@ -22,7 +22,9 @@ import { capabilityDevicesApi, CapabilityDevice } from '../api/capabilityDevices
 import { proposalsApi } from '../api/proposals';
 import { fmtDateTime } from '../i18n/format';
 import BlockGraph from '../components/blocks/BlockGraph';
+import AddBlockPicker from '../components/blocks/AddBlockPicker';
 import { toNewBlock } from '../components/blocks/blockGraphModel';
+import { useFocusParam, scrollIntoViewRef } from '../hooks/useFocusParam';
 
 const stageName = (s: number) =>
   i18n.t(s >= 2 ? 'blocks:stageName.full' : s === 1 ? 'blocks:stageName.bounded' : 'blocks:stageName.shadow');
@@ -75,12 +77,14 @@ interface BlockDraft {
   typeId: string;
   enabled: boolean;
   params: Record<string, number>;
+  options: Record<string, string>; // Epic 2Q: non-numeric knobs (enum/bool/text)
   inputs: Record<string, PortBinding>;
   outputs: Record<string, PortBinding>;
 }
 
 export default function Blocks() {
   const { t } = useTranslation('blocks');
+  const focusId = useFocusParam();
   const [blocks, setBlocks] = useState<ControlBlock[]>([]);
   const [catalog, setCatalog] = useState<BlockCatalogEntry[]>([]);
   const [devices, setDevices] = useState<CapabilityDevice[]>([]);
@@ -89,6 +93,7 @@ export default function Blocks() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [draft, setDraft] = useState<BlockDraft | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false); // categorized catalog picker (Epic 2Q)
   const [view, setView] = useState<'list' | 'graph'>('list');
 
   const load = useCallback(async () => {
@@ -130,6 +135,7 @@ export default function Blocks() {
       typeId: entry.typeId,
       enabled: true,
       params: Object.fromEntries(entry.params.map((p) => [p.name, p.default])),
+      options: Object.fromEntries((entry.options ?? []).map((o) => [o.name, o.default])),
       inputs: Object.fromEntries(entry.inputs.map((p) => [p.name, { deviceId: '', capabilityId: '' }])),
       outputs: Object.fromEntries(entry.outputs.map((o) => [o.id, { deviceId: '', capabilityId: '' }])),
     });
@@ -145,6 +151,7 @@ export default function Blocks() {
       typeId: b.typeId,
       enabled: b.enabled,
       params: { ...Object.fromEntries((entry?.params ?? []).map((p) => [p.name, p.default])), ...b.params },
+      options: { ...Object.fromEntries((entry?.options ?? []).map((o) => [o.name, o.default])), ...(b.options ?? {}) },
       inputs: { ...Object.fromEntries((entry?.inputs ?? []).map((p) => [p.name, { deviceId: '', capabilityId: '' }])), ...b.inputs },
       outputs: { ...Object.fromEntries((entry?.outputs ?? []).map((o) => [o.id, { deviceId: '', capabilityId: '' }])), ...b.outputs },
     });
@@ -160,7 +167,8 @@ export default function Blocks() {
       Object.entries(draft.outputs).filter(([, b]) => b.deviceId && b.capabilityId),
     );
     const payload: NewBlock = {
-      name: draft.name.trim(), typeId: draft.typeId, enabled: draft.enabled, params: draft.params, inputs, outputs,
+      name: draft.name.trim(), typeId: draft.typeId, enabled: draft.enabled,
+      params: draft.params, options: draft.options, inputs, outputs,
     };
     try {
       if (draft.id) await blocksApi.updateBlock(draft.id, payload);
@@ -214,28 +222,23 @@ export default function Blocks() {
   return (
     <Container maxWidth="lg">
       <Box py={{ xs: 3, md: 4 }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-          <Box>
+        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={2.5} spacing={2} flexWrap="wrap" useFlexGap>
+          <Box flex={1} minWidth={240}>
             <Typography variant="h4" component="h1" fontWeight={700}>{t('title')}</Typography>
             <Typography variant="caption" color="text.secondary">
               {t('subtitle')}
             </Typography>
           </Box>
-          <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v) => v && setView(v)}>
-            <ToggleButton value="list"><ViewListRoundedIcon fontSize="small" sx={{ mr: 0.5 }} />{t('view.list')}</ToggleButton>
-            <ToggleButton value="graph"><AccountTreeRoundedIcon fontSize="small" sx={{ mr: 0.5 }} />{t('view.graph')}</ToggleButton>
-          </ToggleButtonGroup>
-        </Stack>
-
-        {/* Catalog — one "New" per built-in type (typed authoring, roadmap Epic 1H). */}
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={3}>
-          {catalog.map((t) => (
-            <Tooltip key={t.typeId} title={t.description}>
-              <Button size="small" variant="outlined" startIcon={<AddRoundedIcon />} onClick={() => startCreate(t)}>
-                {t.title}
-              </Button>
-            </Tooltip>
-          ))}
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flexShrink: 0, pt: 0.5 }}>
+            <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v) => v && setView(v)}>
+              <ToggleButton value="list"><ViewListRoundedIcon fontSize="small" sx={{ mr: 0.5 }} />{t('view.list')}</ToggleButton>
+              <ToggleButton value="graph"><AccountTreeRoundedIcon fontSize="small" sx={{ mr: 0.5 }} />{t('view.graph')}</ToggleButton>
+            </ToggleButtonGroup>
+            {/* One entry point into the categorized catalog picker (Epic 2Q) — replaces the per-type chip wall. */}
+            <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setPickerOpen(true)}>
+              {t('addBlock')}
+            </Button>
+          </Stack>
         </Stack>
 
         {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
@@ -261,7 +264,8 @@ export default function Blocks() {
               const stage = Math.round(b.params.stage ?? 0);
               const health = blockHealth(b, statusById.get(b.id));
               return (
-                <Card key={b.id} variant="outlined">
+                <Card key={b.id} variant="outlined" ref={scrollIntoViewRef(focusId === b.id)}
+                  sx={focusId === b.id ? { borderColor: 'primary.main', boxShadow: 2 } : undefined}>
                   <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
                     <Stack direction="row" alignItems="flex-start" spacing={2}>
                       <Box flex={1} minWidth={0}>
@@ -326,6 +330,12 @@ export default function Blocks() {
           </Stack>
         )}
       </Box>
+
+      <AddBlockPicker
+        open={pickerOpen} catalog={catalog}
+        onPick={(entry) => { setPickerOpen(false); startCreate(entry); }}
+        onClose={() => setPickerOpen(false)}
+      />
 
       <CreateDialog
         draft={draft} catalog={typeById} devices={devices}
@@ -427,11 +437,12 @@ function CreateDialog({
                   {type.params.map((p) => (
                     p.name === 'stage' ? (
                       // ML authority stage (Epic 2B): a friendly selector over the numeric 0/1/2 param.
-                      // Locked while editing — the stage moves through the approval queue (Promote), not here.
+                      // Directly editable (Epic 2P decision №1): saving IS the human's explicit approval;
+                      // the Promote button (approval queue, 2C) remains the system-initiated path.
                       <TextField
-                        key={p.name} select label={t('dialog.authorityStage')} disabled={isEdit}
+                        key={p.name} select label={t('dialog.authorityStage')}
                         value={draft.params[p.name] ?? p.default}
-                        helperText={isEdit ? t('dialog.stageLocked') : paramDesc(draft.typeId, p)}
+                        helperText={isEdit ? t('dialog.stageDirect') : paramDesc(draft.typeId, p)}
                         onChange={(e) => onChange({
                           ...draft, params: { ...draft.params, [p.name]: Number(e.target.value) },
                         })}
@@ -465,6 +476,43 @@ function CreateDialog({
                       />
                     )
                   ))}
+                </Stack>
+              </Box>
+            )}
+
+            {(type.options?.length ?? 0) > 0 && (
+              <Box>
+                <Typography variant="overline" color="text.secondary">{t('dialog.optionsSection')}</Typography>
+                <Stack spacing={1.5} mt={1}>
+                  {type.options!.map((op) => {
+                    const value = draft.options[op.name] ?? op.default;
+                    const set = (v: string) => onChange({ ...draft, options: { ...draft.options, [op.name]: v } });
+                    if (op.kind === 'Enum') {
+                      return (
+                        <TextField key={op.name} select label={op.name} value={value} helperText={op.description}
+                          onChange={(e) => set(e.target.value)}>
+                          {(op.values ?? []).map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+                        </TextField>
+                      );
+                    }
+                    if (op.kind === 'Bool') {
+                      return (
+                        <TextField key={op.name} select label={op.name} value={value} helperText={op.description}
+                          onChange={(e) => set(e.target.value)}>
+                          <MenuItem value="true">{t('dialog.yes')}</MenuItem>
+                          <MenuItem value="false">{t('dialog.no')}</MenuItem>
+                        </TextField>
+                      );
+                    }
+                    // Text — a script (multiline monospace) or a free string.
+                    const isScript = op.name === 'script';
+                    return (
+                      <TextField key={op.name} label={op.name} value={value} helperText={op.description} fullWidth
+                        multiline={isScript} minRows={isScript ? 4 : undefined}
+                        InputProps={isScript ? { sx: { fontFamily: 'monospace', fontSize: 13 } } : undefined}
+                        onChange={(e) => set(e.target.value)} />
+                    );
+                  })}
                 </Stack>
               </Box>
             )}
