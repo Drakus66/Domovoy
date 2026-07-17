@@ -82,5 +82,29 @@
   },
   "widgets": {
     "modes": "Home mode"
+  },
+  "band": {
+    "mode": "Mode",
+    "since": "since {{time}}",
+    "climate": "Climate",
+    "humidity": "humidity {{value}}%",
+    "co2": "CO₂ {{value}}",
+    "security": "Security",
+    "secure": "Locked",
+    "open": "{{count}} open",
+    "allSecure": "under guard",
+    "noLocks": "no locks",
+    "energy": "Energy",
+    "watts": "{{value}} W",
+    "kwh": "{{value}} kWh total",
+    "empty": "—"
+  },
+  "rail": {
+    "today": "Domovoy today",
+    "history": "Full history →",
+    "pending": "Awaiting decision",
+    "approve": "Approve",
+    "defer": "Later",
+    "empty": "Quiet so far — I haven't changed anything today."
   }
 }

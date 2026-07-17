@@ -1,0 +1,146 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
+using Domovoy.DbGateway.Endpoints;
+using Domovoy.DbGateway.Models;
+using Domovoy.DbGateway.Services;
+
+using MongoDB.Driver;
+
+using Xunit;
+
+namespace Domovoy.IntegrationTests;
+
+/// <summary>
+/// Batch history read-path against real Mongo (dashboard fill): the multi-series telemetry aggregation
+/// (<c>POST /api/telemetry/aggregate/batch</c>) and per-device latest-event provenance
+/// (<c>POST /api/events/latest-by-device</c>). Verifies one round-trip returns correctly split-per-series
+/// buckets and the most-recent event per device — the primitive the sparklines / composed charts rely on.
+/// Unique device ids isolate this data from other tests sharing the infra fixture.
+/// </summary>
+[Collection("infra")]
+[Trait("Category", "Infra")]
+public sealed class HistoryBatchTests
+{
+    private readonly InfraFixture _fx;
+    public HistoryBatchTests(InfraFixture fx) => _fx = fx;
+
+    private IMongoCollection<SensorReading> Readings =>
+        _fx.Db.GetCollection<SensorReading>(TimeSeriesInitializer.SensorReadingsCollection);
+    private IMongoCollection<DeviceEventLog> Events =>
+        _fx.Db.GetCollection<DeviceEventLog>(TimeSeriesInitializer.DeviceEventsCollection);
+
+    private static SensorReading Reading(string deviceId, string cap, double value, DateTime ts) => new()
+    {
+        Timestamp = ts,
+        Meta = new TelemetryMeta { DeviceId = deviceId, ZoneId = "z", CapabilityId = cap },
+        Value = value,
+    };
+
+    [Fact]
+    public async Task AggregateBatch_SplitsBucketsPerSeries_AndHonorsAgg()
+    {
+        var a = Guid.NewGuid().ToString();
+        var b = Guid.NewGuid().ToString();
+        var now = DateTime.UtcNow;
+
+        await Readings.InsertManyAsync(new[]
+        {
+            Reading(a, "temperature", 20, now.AddMinutes(-9)),
+            Reading(a, "temperature", 22, now.AddMinutes(-6)),
+            Reading(a, "temperature", 24, now.AddMinutes(-3)),
+            Reading(b, "power", 100, now.AddMinutes(-4)),
+            Reading(b, "power", 300, now.AddMinutes(-2)),
+        });
+
+        var avg = await HistoryEndpoints.AggregateBatchAsync(
+            _fx.Db,
+            new[]
+            {
+                new HistoryEndpoints.SeriesSpec(a, "temperature"),
+                new HistoryEndpoints.SeriesSpec(b, "power"),
+                new HistoryEndpoints.SeriesSpec(a, "humidity"), // no samples → empty series
+            },
+            from: null, to: null, bucket: "hour", agg: "avg", maxPoints: null);
+
+        Assert.Equal(3, avg.Count);
+
+        var tempA = avg.Single(s => s.DeviceId == a && s.CapabilityId == "temperature");
+        var lastA = Assert.Single(tempA.Buckets); // three readings, one clock-hour → one bucket
+        Assert.Equal(22, lastA.Avg, 3);
+        Assert.Equal(20, lastA.Min, 3);
+        Assert.Equal(24, lastA.Max, 3);
+        Assert.Equal(22, lastA.Value, 3); // agg=avg
+        Assert.Equal(3, lastA.Count);
+
+        var powerB = avg.Single(s => s.DeviceId == b && s.CapabilityId == "power");
+        Assert.Equal(200, powerB.Buckets.Sum(x => x.Avg) / powerB.Buckets.Count, 3);
+
+        var empty = avg.Single(s => s.DeviceId == a && s.CapabilityId == "humidity");
+        Assert.Empty(empty.Buckets);
+
+        // agg=max returns the bucket max as Value.
+        var max = await HistoryEndpoints.AggregateBatchAsync(
+            _fx.Db, new[] { new HistoryEndpoints.SeriesSpec(a, "temperature") },
+            from: null, to: null, bucket: "hour", agg: "max", maxPoints: null);
+        Assert.Equal(24, max.Single().Buckets.Last().Value, 3);
+    }
+
+    [Fact]
+    public async Task AggregateBatch_RejectsBadBucket_AndEmptySeriesIsEmpty()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => HistoryEndpoints.AggregateBatchAsync(
+            _fx.Db, new[] { new HistoryEndpoints.SeriesSpec("x", "y") },
+            from: null, to: null, bucket: "week", agg: "avg", maxPoints: null));
+
+        var empty = await HistoryEndpoints.AggregateBatchAsync(
+            _fx.Db, Array.Empty<HistoryEndpoints.SeriesSpec>(),
+            from: null, to: null, bucket: "hour", agg: "avg", maxPoints: null);
+        Assert.Empty(empty);
+    }
+
+    [Fact]
+    public async Task LatestByDevice_ReturnsMostRecentEventPerDevice()
+    {
+        var a = Guid.NewGuid().ToString();
+        var b = Guid.NewGuid().ToString();
+        var now = DateTime.UtcNow;
+
+        await Events.InsertManyAsync(new[]
+        {
+            new DeviceEventLog
+            {
+                Timestamp = now.AddMinutes(-10), CapabilityId = "temperature",
+                Meta = new EventMeta { DeviceId = a, ZoneId = "z" },
+                TriggerSource = TriggerSources.Device, NewValue = 21.0,
+            },
+            new DeviceEventLog
+            {
+                Timestamp = now.AddMinutes(-1), CapabilityId = "on_off",
+                Meta = new EventMeta { DeviceId = a, ZoneId = "z" },
+                TriggerSource = TriggerSources.Rule, TriggerId = "rule-1", RuleId = "rule-1", NewValue = true,
+            },
+            new DeviceEventLog
+            {
+                Timestamp = now.AddMinutes(-5), CapabilityId = "power",
+                Meta = new EventMeta { DeviceId = b, ZoneId = "z" },
+                TriggerSource = TriggerSources.Ml, TriggerId = "block-9", NewValue = 42.0,
+            },
+        });
+
+        var rows = await HistoryEndpoints.LatestByDeviceAsync(
+            _fx.Db, new[] { a, b, Guid.NewGuid().ToString() }, from: null, to: null);
+
+        Assert.Equal(2, rows.Count); // the unknown id has no events
+
+        var latestA = rows.Single(r => r.DeviceId == a);
+        Assert.Equal("on_off", latestA.CapabilityId); // newest wins over the -10min temperature row
+        Assert.Equal(TriggerSources.Rule, latestA.TriggerSource);
+        Assert.Equal("rule-1", latestA.RuleId);
+
+        var latestB = rows.Single(r => r.DeviceId == b);
+        Assert.Equal(TriggerSources.Ml, latestB.TriggerSource);
+        Assert.Equal("block-9", latestB.TriggerId);
+    }
+}

@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  deviceCategory, describeDevice, capabilityIcon, capabilityLabel, formatCapabilityValue,
+  deviceCategory, describeDevice, capabilityIcon, capabilityLabel, formatCapabilityValue, trendCapability,
 } from './deviceVisuals';
 import type { CapabilityDevice, Capability } from '../../api/capabilityDevices';
 
@@ -85,5 +85,25 @@ describe('deviceVisuals — system Time & Calendar sensors', () => {
   it('translates the new capability labels (ru default)', () => {
     expect(capabilityLabel('clock')).toBe('Часы');
     expect(capabilityLabel('is_weekend')).toBe('Выходной');
+  });
+});
+
+describe('trendCapability (which capability to sparkline)', () => {
+  const dev = (state: Record<string, unknown>): CapabilityDevice => ({
+    id: 'x', name: 'x', adapterSource: 'test', zoneId: '',
+    capabilities: Object.keys(state).map((id) => ({ id, kind: 'Number', writable: false })),
+    state, isOnline: true, lastUpdated: '',
+  });
+
+  it('picks the measured numeric signal, preferring temperature/power', () => {
+    expect(trendCapability(dev({ temperature: 21.5, humidity: 40 }))).toBe('temperature');
+    expect(trendCapability(dev({ power: 95 }))).toBe('power');
+    expect(trendCapability(dev({ brightness: 80, on_off: true }))).toBe('brightness');
+  });
+
+  it('returns undefined for boolean-only devices (no numeric series)', () => {
+    expect(trendCapability(dev({ on_off: true }))).toBeUndefined();
+    expect(trendCapability(dev({ lock: true }))).toBeUndefined();
+    expect(trendCapability(dev({ contact: false }))).toBeUndefined();
   });
 });

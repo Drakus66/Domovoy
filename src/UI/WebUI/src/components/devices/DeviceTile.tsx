@@ -2,22 +2,29 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { Box, Card, CardActionArea, Stack, Switch, Typography, LinearProgress, Tooltip } from '@mui/material';
+import { Box, Card, CardActionArea, Chip, Stack, Switch, Typography, LinearProgress, Tooltip, useTheme } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import CircleIcon from '@mui/icons-material/Circle';
 import type { CapabilityDevice } from '../../api/capabilityDevices';
 import type { CommandFn } from './CapabilityControls';
-import { asBool, asNum, describeDevice, primaryCapability } from './deviceVisuals';
+import { asBool, asNum, describeDevice, primaryCapability, trendCapability } from './deviceVisuals';
+import { useTelemetryBatch } from '../charts/useTelemetryBatch';
+import Sparkline from '../charts/Sparkline';
+import { useDeviceProvenance } from './useDeviceProvenance';
+import { describeProvenance } from './deviceProvenance';
+import { useInViewport } from '../../hooks/useInViewport';
+import { fmtRelativeShort } from '../../i18n/format';
 
 /**
- * Homey-style device tile: an icon badge that glows when the device is "on",
- * a headline state line, and a quick on/off toggle for switchable devices.
- * Tapping the body opens the full control drawer.
+ * Homey-style device tile: an icon badge that glows when the device is "on", a headline state line, and a
+ * quick on/off toggle for switchable devices. Enriched (roadmap dashboard fill, block C) with a lazy
+ * sparkline of its primary numeric trend and a "last changed by …" chip. Tapping the body opens the drawer.
  */
 export default function DeviceTile({
   device, onOpen, onCommand,
 }: { device: CapabilityDevice; onOpen: (d: CapabilityDevice) => void; onCommand: CommandFn }) {
   const { t } = useTranslation('devices');
+  const theme = useTheme();
   const { accent, Icon, isActive, primary, secondary } = describeDevice(device);
   const offline = !device.isOnline;
 
@@ -27,8 +34,20 @@ export default function DeviceTile({
   const brightness = 'brightness' in (device.state ?? {}) ? asNum(device.state.brightness) : undefined;
   const glow = isActive && !offline;
 
+  // Sparkline: only for a numeric trend, and only fetched once the tile nears the viewport (lazy batch).
+  const [ref, inView] = useInViewport<HTMLDivElement>();
+  const trendCap = trendCapability(device);
+  const { buckets } = useTelemetryBatch(device.id, trendCap, {
+    enabled: inView && !!trendCap, hours: 24, bucket: 'hour', maxPoints: 24,
+  });
+
+  // Provenance chip: who last changed this device (batched across the grid).
+  const lastEvent = useDeviceProvenance(device.id);
+  const prov = lastEvent ? describeProvenance(lastEvent) : null;
+
   return (
     <Card
+      ref={ref}
       sx={{
         height: '100%',
         position: 'relative',
@@ -94,6 +113,28 @@ export default function DeviceTile({
                 '& .MuiLinearProgress-bar': { bgcolor: accent },
               }}
             />
+          )}
+
+          {trendCap && (
+            <Sparkline buckets={buckets} color={glow ? accent : theme.palette.text.disabled} />
+          )}
+
+          {prov && (
+            <Stack direction="row" alignItems="center" spacing={0.75} flexWrap="wrap" useFlexGap>
+              <Chip
+                size="small"
+                label={prov.label}
+                sx={{
+                  height: 20, fontSize: '.66rem', fontWeight: 600,
+                  bgcolor: prov.accented ? 'action.selected' : 'action.hover',
+                  color: prov.accented ? 'primary.main' : 'text.secondary',
+                  '& .MuiChip-label': { px: 0.75 },
+                }}
+              />
+              <Typography variant="caption" color="text.secondary">
+                {fmtRelativeShort(prov.when)}
+              </Typography>
+            </Stack>
           )}
         </Stack>
       </CardActionArea>

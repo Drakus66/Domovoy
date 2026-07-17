@@ -2,13 +2,12 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, Typography, Skeleton, useTheme } from '@mui/material';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts';
-import { historyApi, AggregateBucket } from '../../api/history';
+import { useAggregateSeries } from './useAggregateSeries';
 import { fmtTime, fmtDateTime } from '../../i18n/format';
 
 interface Props {
@@ -31,21 +30,8 @@ export default function TelemetryChart({
 }: Props) {
   const theme = useTheme();
   const { t } = useTranslation('devices');
-  const [data, setData] = useState<AggregateBucket[] | null>(null);
-  const [error, setError] = useState(false);
-
-  const from = useMemo(() => new Date(Date.now() - hours * 3600 * 1000).toISOString(), [hours]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setData(null);
-    setError(false);
-    historyApi
-      .getAggregate({ capabilityId, deviceId, zoneId, from, bucket, agg: 'avg' })
-      .then((rows) => { if (!cancelled) setData(rows); })
-      .catch(() => { if (!cancelled) setError(true); });
-    return () => { cancelled = true; };
-  }, [capabilityId, deviceId, zoneId, from, bucket]);
+  // Device series coalesce through the shared batch loader; zone series fall back to a direct fetch.
+  const { buckets: data, error } = useAggregateSeries({ capabilityId, deviceId, zoneId, hours, bucket });
 
   if (error) return <Typography variant="caption" color="text.secondary">{t('chart.loadError')}</Typography>;
   if (data === null) return <Skeleton variant="rounded" height={height} />;

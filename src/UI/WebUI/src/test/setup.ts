@@ -37,6 +37,15 @@ i18n.use(initReactI18next).init({
   react: { useSuspense: false },
 });
 
+// jsdom has no ResizeObserver; recharts' ResponsiveContainer (sparklines, trend charts) needs it.
+if (!window.ResizeObserver) {
+  window.ResizeObserver = class {
+    observe() { /* no-op */ }
+    unobserve() { /* no-op */ }
+    disconnect() { /* no-op */ }
+  };
+}
+
 // jsdom has no matchMedia; MUI's CssVarsProvider / useMediaQuery need it.
 if (!window.matchMedia) {
   Object.defineProperty(window, 'matchMedia', {

@@ -14,15 +14,20 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
-import ShieldRoundedIcon from '@mui/icons-material/ShieldRounded';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import ScienceRoundedIcon from '@mui/icons-material/ScienceRounded';
+import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
+import HealthAndSafetyRoundedIcon from '@mui/icons-material/HealthAndSafetyRounded';
 import {
   automationsApi, AutomationRule, AutoHistoryEntry, RuleTrigger, RuleCondition, RuleAction, NewRule, RuleStatus,
 } from '../api/automations';
 import { replayApi, ReplayResult } from '../api/replay';
 import { capabilityDevicesApi, CapabilityDevice } from '../api/capabilityDevices';
+import {
+  DraftState, EMPTY_DRAFT, ActionKind, SafetyTemplate, SAFETY_TEMPLATES,
+  recommendedTemplateIds, buildDraftFromTemplate,
+} from '../data/safetyTemplates';
 import { useFocusParam, scrollIntoViewRef } from '../hooks/useFocusParam';
 
 const OPERATORS = ['eq', 'ne', 'gt', 'lt', 'gte', 'lte', 'changed'];
@@ -43,20 +48,10 @@ const parseValue = (raw: string): unknown => {
 
 const fmt = (v: unknown): string => (typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v ?? ''));
 
-interface DraftState {
-  name: string;
-  trigDevice: string; trigCap: string; trigOp: string; trigValue: string;
-  onlyDark: boolean;
-  actDevice: string; actCap: string; actValue: string;
-  autoOffSeconds: number;
-  status: RuleStatus;
-}
-
-const EMPTY_DRAFT: DraftState = {
-  name: '', trigDevice: '', trigCap: '', trigOp: 'eq', trigValue: 'true',
-  onlyDark: false, actDevice: '', actCap: '', actValue: 'true', autoOffSeconds: 0,
-  status: 'Active',
-};
+/** A draft is saveable when named, its trigger is bound, and its action is complete for its kind. */
+const isDraftValid = (d: DraftState): boolean =>
+  !!d.name.trim() && !!d.trigDevice && !!d.trigCap &&
+  (d.actionKind === 'Notify' ? !!d.notifyMessage.trim() : !!d.actDevice && !!d.actCap);
 
 export default function Automations() {
   const { t } = useTranslation('automations');
@@ -68,6 +63,7 @@ export default function Automations() {
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [historyFor, setHistoryFor] = useState<AutomationRule | 'all' | null>(null);
   const [simulateFor, setSimulateFor] = useState<AutomationRule | null>(null);
+  const [templatePicker, setTemplatePicker] = useState(false);
 
   const deviceName = useCallback(
     (id?: string | null) => devices.find((d) => d.id === id)?.name ?? id ?? '—',
@@ -121,18 +117,35 @@ export default function Automations() {
     return i18n.t('automations:action.notify', { message: a.message ?? '' });
   }, [deviceName]);
 
+  // Adopt a safety template (roadmap: safety rules as configurable templates, not a hardcoded floor):
+  // pre-fill the builder from the template, layer localized text on top, then let the user bind it to
+  // their own sensor/actuator before saving. Nothing runs until they hit Create.
+  const adoptTemplate = (tpl: SafetyTemplate) => {
+    const d = buildDraftFromTemplate(tpl, devices);
+    d.name = t(`templates.items.${tpl.id}.title`);
+    if (tpl.actionKind === 'Notify') d.notifyMessage = t(`templates.items.${tpl.id}.message`);
+    setTemplatePicker(false);
+    setDraft(d);
+  };
+
   const save = async () => {
-    if (!draft || !draft.name.trim() || !draft.trigDevice || !draft.trigCap || !draft.actDevice || !draft.actCap) return;
+    if (!draft || !isDraftValid(draft)) return;
 
     const triggers: RuleTrigger[] = [{
       type: 'DeviceState', deviceId: draft.trigDevice, capabilityId: draft.trigCap,
       operator: draft.trigOp, value: draft.trigOp === 'changed' ? null : parseValue(draft.trigValue),
     }];
     const conditions: RuleCondition[] = draft.onlyDark ? [{ type: 'Sun', dark: true }] : [];
-    const actions: RuleAction[] = [{ type: 'Command', deviceId: draft.actDevice, set: { [draft.actCap]: parseValue(draft.actValue) } }];
-    if (draft.autoOffSeconds > 0) {
-      actions.push({ type: 'Delay', delaySeconds: draft.autoOffSeconds });
-      actions.push({ type: 'Command', deviceId: draft.actDevice, set: { [draft.actCap]: false } });
+
+    let actions: RuleAction[];
+    if (draft.actionKind === 'Notify') {
+      actions = [{ type: 'Notify', message: draft.notifyMessage.trim() }];
+    } else {
+      actions = [{ type: 'Command', deviceId: draft.actDevice, set: { [draft.actCap]: parseValue(draft.actValue) } }];
+      if (draft.autoOffSeconds > 0) {
+        actions.push({ type: 'Delay', delaySeconds: draft.autoOffSeconds });
+        actions.push({ type: 'Command', deviceId: draft.actDevice, set: { [draft.actCap]: false } });
+      }
     }
 
     const rule: NewRule = { name: draft.name.trim(), description: null, status: draft.status, triggers, conditions, actions };
@@ -146,7 +159,7 @@ export default function Automations() {
   };
 
   const sorted = useMemo(
-    () => [...rules].sort((a, b) => Number(b.isProtected) - Number(a.isProtected) || a.name.localeCompare(b.name)),
+    () => [...rules].sort((a, b) => a.name.localeCompare(b.name)),
     [rules],
   );
 
@@ -162,6 +175,7 @@ export default function Automations() {
           </Box>
           <Stack direction="row" spacing={1}>
             <Button startIcon={<HistoryRoundedIcon />} onClick={() => setHistoryFor('all')}>{t('actions.history')}</Button>
+            <Button startIcon={<AutoAwesomeRoundedIcon />} onClick={() => setTemplatePicker(true)}>{t('actions.fromTemplate')}</Button>
             <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setDraft({ ...EMPTY_DRAFT })}>
               {t('actions.newRule')}
             </Button>
@@ -188,9 +202,6 @@ export default function Automations() {
                     <Box flex={1} minWidth={0}>
                       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap mb={0.5}>
                         <Typography fontWeight={700}>{rule.name}</Typography>
-                        {rule.isProtected && (
-                          <Chip size="small" icon={<ShieldRoundedIcon />} label={t('chips.protected')} color="warning" variant="outlined" />
-                        )}
                         <Chip size="small" label={t(`status.${rule.status}`)}
                           color={statusColor(rule.status)} variant="outlined" />
                       </Stack>
@@ -213,22 +224,16 @@ export default function Automations() {
                       <Tooltip title={t('actions.runHistory')}>
                         <IconButton onClick={() => setHistoryFor(rule)}><HistoryRoundedIcon /></IconButton>
                       </Tooltip>
-                      {rule.isProtected ? (
-                        <Chip size="small" label={t('chips.alwaysOn')} variant="outlined" />
-                      ) : (
-                        <TextField
-                          select size="small" value={rule.status} sx={{ minWidth: 110 }}
-                          onChange={(e) => changeStatus(rule, e.target.value as RuleStatus)}
-                        >
-                          {STATUS_OPTIONS.map((s) => <MenuItem key={s} value={s}>{t(`status.${s}`)}</MenuItem>)}
-                        </TextField>
-                      )}
-                      <Tooltip title={rule.isProtected ? t('tooltips.cannotDelete') : t('tooltips.delete')}>
-                        <span>
-                          <IconButton onClick={() => remove(rule)} disabled={rule.isProtected}>
-                            <DeleteOutlineRoundedIcon />
-                          </IconButton>
-                        </span>
+                      <TextField
+                        select size="small" value={rule.status} sx={{ minWidth: 110 }}
+                        onChange={(e) => changeStatus(rule, e.target.value as RuleStatus)}
+                      >
+                        {STATUS_OPTIONS.map((s) => <MenuItem key={s} value={s}>{t(`status.${s}`)}</MenuItem>)}
+                      </TextField>
+                      <Tooltip title={t('tooltips.delete')}>
+                        <IconButton onClick={() => remove(rule)}>
+                          <DeleteOutlineRoundedIcon />
+                        </IconButton>
                       </Tooltip>
                     </Stack>
                   </Stack>
@@ -239,6 +244,9 @@ export default function Automations() {
         )}
       </Box>
 
+      <TemplateGallery
+        open={templatePicker} devices={devices} rules={rules}
+        onPick={adoptTemplate} onClose={() => setTemplatePicker(false)} />
       <CreateDialog draft={draft} devices={devices} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} />
       <HistoryDrawer target={historyFor} onClose={() => setHistoryFor(null)} />
       <SimulateDialog rule={simulateFor} onClose={() => setSimulateFor(null)} />
@@ -257,7 +265,7 @@ function CreateDialog({
 }) {
   const { t } = useTranslation('automations');
   const caps = (deviceId: string) => devices.find((d) => d.id === deviceId)?.capabilities ?? [];
-  const valid = draft && draft.name.trim() && draft.trigDevice && draft.trigCap && draft.actDevice && draft.actCap;
+  const valid = draft ? isDraftValid(draft) : false;
 
   return (
     <Dialog open={draft !== null} onClose={onClose} fullWidth maxWidth="sm">
@@ -282,7 +290,11 @@ function CreateDialog({
               <Typography variant="overline" color="text.secondary">{t('dialog.whenTrigger')}</Typography>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mt={0.5}>
                 <TextField select label={t('dialog.device')} value={draft.trigDevice} fullWidth
-                  onChange={(e) => onChange({ ...draft, trigDevice: e.target.value, trigCap: '' })}>
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const keep = caps(id).some((c) => c.id === draft.trigCap);
+                    onChange({ ...draft, trigDevice: id, trigCap: keep ? draft.trigCap : '' });
+                  }}>
                   {devices.map((d) => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
                 </TextField>
                 <TextField select label={t('dialog.capability')} value={draft.trigCap} fullWidth disabled={!draft.trigDevice}
@@ -308,23 +320,41 @@ function CreateDialog({
 
             <Box>
               <Typography variant="overline" color="text.secondary">{t('dialog.thenAction')}</Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mt={0.5}>
-                <TextField select label={t('dialog.device')} value={draft.actDevice} fullWidth
-                  onChange={(e) => onChange({ ...draft, actDevice: e.target.value, actCap: '' })}>
-                  {devices.map((d) => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
-                </TextField>
-                <TextField select label={t('dialog.capability')} value={draft.actCap} fullWidth disabled={!draft.actDevice}
-                  onChange={(e) => onChange({ ...draft, actCap: e.target.value })}>
-                  {caps(draft.actDevice).filter((c) => c.writable).map((c) => <MenuItem key={c.id} value={c.id}>{c.id}</MenuItem>)}
-                </TextField>
-              </Stack>
-              <Stack direction="row" spacing={1.5} mt={1.5}>
-                <TextField label={t('dialog.value')} value={draft.actValue} fullWidth
-                  onChange={(e) => onChange({ ...draft, actValue: e.target.value })} />
-                <TextField type="number" label={t('dialog.autoOff')} value={draft.autoOffSeconds} sx={{ width: 180 }}
-                  helperText={t('dialog.autoOffHelper')}
-                  onChange={(e) => onChange({ ...draft, autoOffSeconds: Number(e.target.value) || 0 })} />
-              </Stack>
+              <TextField select label={t('dialog.actionType')} value={draft.actionKind} sx={{ mt: 0.5, minWidth: 220 }}
+                onChange={(e) => onChange({ ...draft, actionKind: e.target.value as ActionKind })}>
+                <MenuItem value="Command">{t('dialog.actionCommand')}</MenuItem>
+                <MenuItem value="Notify">{t('dialog.actionNotify')}</MenuItem>
+              </TextField>
+
+              {draft.actionKind === 'Notify' ? (
+                <TextField label={t('dialog.notifyMessage')} value={draft.notifyMessage} fullWidth multiline minRows={2}
+                  sx={{ mt: 1.5 }} helperText={t('dialog.notifyMessageHelper')}
+                  onChange={(e) => onChange({ ...draft, notifyMessage: e.target.value })} />
+              ) : (
+                <>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mt={1.5}>
+                    <TextField select label={t('dialog.device')} value={draft.actDevice} fullWidth
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        const keep = caps(id).some((c) => c.id === draft.actCap && c.writable);
+                        onChange({ ...draft, actDevice: id, actCap: keep ? draft.actCap : '' });
+                      }}>
+                      {devices.map((d) => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
+                    </TextField>
+                    <TextField select label={t('dialog.capability')} value={draft.actCap} fullWidth disabled={!draft.actDevice}
+                      onChange={(e) => onChange({ ...draft, actCap: e.target.value })}>
+                      {caps(draft.actDevice).filter((c) => c.writable).map((c) => <MenuItem key={c.id} value={c.id}>{c.id}</MenuItem>)}
+                    </TextField>
+                  </Stack>
+                  <Stack direction="row" spacing={1.5} mt={1.5}>
+                    <TextField label={t('dialog.value')} value={draft.actValue} fullWidth
+                      onChange={(e) => onChange({ ...draft, actValue: e.target.value })} />
+                    <TextField type="number" label={t('dialog.autoOff')} value={draft.autoOffSeconds} sx={{ width: 180 }}
+                      helperText={t('dialog.autoOffHelper')}
+                      onChange={(e) => onChange({ ...draft, autoOffSeconds: Number(e.target.value) || 0 })} />
+                  </Stack>
+                </>
+              )}
             </Box>
           </Stack>
         )}
@@ -332,6 +362,65 @@ function CreateDialog({
       <DialogActions>
         <Button onClick={onClose}>{t('actions.cancel')}</Button>
         <Button variant="contained" onClick={onSave} disabled={!valid}>{t('actions.create')}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+/**
+ * Safety-template gallery: curated protective rules the user can adopt. Templates whose trigger sensor
+ * the home actually has (and which no rule watches yet) are flagged "recommended" and sorted first —
+ * a gentle suggestion, never an auto-created rule. Picking one opens the builder pre-filled.
+ */
+function TemplateGallery({
+  open, devices, rules, onPick, onClose,
+}: {
+  open: boolean;
+  devices: CapabilityDevice[];
+  rules: AutomationRule[];
+  onPick: (tpl: SafetyTemplate) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation('automations');
+  const recommended = useMemo(() => recommendedTemplateIds(SAFETY_TEMPLATES, devices, rules), [devices, rules]);
+  const ordered = useMemo(
+    () => [...SAFETY_TEMPLATES].sort((a, b) => Number(recommended.has(b.id)) - Number(recommended.has(a.id))),
+    [recommended],
+  );
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>{t('templates.galleryTitle')}</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" mb={2}>{t('templates.gallerySubtitle')}</Typography>
+        <Stack spacing={1.25}>
+          {ordered.map((tpl) => (
+            <Card key={tpl.id} variant="outlined">
+              <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                <Stack direction="row" alignItems="center" spacing={1.5}>
+                  <HealthAndSafetyRoundedIcon color="warning" />
+                  <Box flex={1} minWidth={0}>
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap mb={0.25}>
+                      <Typography fontWeight={700}>{t(`templates.items.${tpl.id}.title`)}</Typography>
+                      {recommended.has(tpl.id) && (
+                        <Chip size="small" color="success" variant="outlined" label={t('templates.recommended')} />
+                      )}
+                      <Chip size="small" variant="outlined"
+                        label={tpl.actionKind === 'Notify' ? t('dialog.actionNotify') : t('dialog.actionCommand')} />
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary">
+                      {t(`templates.items.${tpl.id}.desc`)}
+                    </Typography>
+                  </Box>
+                  <Button variant="outlined" size="small" onClick={() => onPick(tpl)}>{t('templates.use')}</Button>
+                </Stack>
+              </CardContent>
+            </Card>
+          ))}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('actions.close')}</Button>
       </DialogActions>
     </Dialog>
   );

@@ -1,8 +1,9 @@
 {
   "title": "Automations",
-  "subtitle": "Deterministic trigger → condition → action rules. Protected safety-floor rules can't be disabled.",
+  "subtitle": "Deterministic trigger → condition → action rules. Start from a safety template or build your own.",
   "actions": {
     "history": "History",
+    "fromTemplate": "From template",
     "newRule": "New rule",
     "simulate": "Dry-run over history",
     "runHistory": "Run history",
@@ -28,12 +29,7 @@
     "Shadow": "Shadow",
     "Disabled": "Disabled"
   },
-  "chips": {
-    "protected": "Protected",
-    "alwaysOn": "Always on"
-  },
   "tooltips": {
-    "cannotDelete": "Protected rules cannot be deleted",
     "delete": "Delete"
   },
   "rule": {
@@ -71,7 +67,55 @@
     "onlyDark": "Only when dark (after sunset)",
     "thenAction": "Then (action)",
     "autoOff": "Auto-off after (s)",
-    "autoOffHelper": "0 = stay on"
+    "autoOffHelper": "0 = stay on",
+    "actionType": "Action type",
+    "actionCommand": "Command a device",
+    "actionNotify": "Send a notification",
+    "notifyMessage": "Message",
+    "notifyMessageHelper": "Shown in Activity and sent to enabled channels"
+  },
+  "templates": {
+    "galleryTitle": "Safety templates",
+    "gallerySubtitle": "Configurable protective rules. Pick one, bind it to your own sensor and save — nothing runs until you do.",
+    "recommended": "Recommended",
+    "use": "Use",
+    "items": {
+      "antiFreezeHeat": {
+        "title": "Anti-freeze — turn on heating",
+        "desc": "When an indoor temperature drops below 5 °C, switch on a heater."
+      },
+      "antiFreezeAlert": {
+        "title": "Anti-freeze — alert",
+        "desc": "When an indoor temperature drops below 5 °C, send a warning.",
+        "message": "Freeze risk: a temperature sensor dropped below 5 °C"
+      },
+      "overheatAlert": {
+        "title": "Overheating — alert",
+        "desc": "When a temperature rises above 30 °C, send a warning.",
+        "message": "Overheating: a temperature sensor rose above 30 °C"
+      },
+      "co2Ventilation": {
+        "title": "High CO₂ — ventilate",
+        "desc": "When CO₂ exceeds 1000 ppm, switch on ventilation."
+      },
+      "co2Alert": {
+        "title": "High CO₂ — alert",
+        "desc": "When CO₂ exceeds 1400 ppm, send a warning.",
+        "message": "Air quality: CO₂ rose above 1400 ppm — ventilate"
+      },
+      "humidityVentilation": {
+        "title": "High humidity — ventilate",
+        "desc": "When humidity exceeds 70%, switch on ventilation."
+      },
+      "smokeUnlock": {
+        "title": "Smoke — unlock doors",
+        "desc": "When smoke is detected, unlock doors for escape."
+      },
+      "leakShutoff": {
+        "title": "Water leak — shut off",
+        "desc": "When a leak is detected, close the water valve."
+      }
+    }
   },
   "simulate": {
     "title": "Simulate · {{name}}",

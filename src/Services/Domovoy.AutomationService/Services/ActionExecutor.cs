@@ -54,9 +54,9 @@ public sealed class ActionExecutor
         var shadow = rule.Status == RuleStatus.Shadow;
 
         // BoundedActive rules (Epic 1F, the stage between Shadow and Active): execute, but no more often than
-        // the cooldown — bounding actuation rate (blast radius) while trust is still building. Protected/Active
-        // safety rules are never throttled.
-        if (conditionsMet && !shadow && rule.Status == RuleStatus.BoundedActive && !rule.IsProtected)
+        // the cooldown — bounding actuation rate (blast radius) while trust is still building. Active rules
+        // are never throttled.
+        if (conditionsMet && !shadow && rule.Status == RuleStatus.BoundedActive)
         {
             var last = _lastFired.TryGetValue(rule.Id, out var t) ? t : DateTimeOffset.MinValue;
             var elapsed = DateTimeOffset.UtcNow - last;

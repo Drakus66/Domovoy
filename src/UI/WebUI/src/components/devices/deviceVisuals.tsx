@@ -127,6 +127,19 @@ export function deviceCategory(device: CapabilityDevice): DeviceCategory {
   return 'other';
 }
 
+/**
+ * The numeric capability worth sparklining on a tile — the one whose trend tells a story (measured
+ * temperature, power draw, CO₂, brightness…). Boolean-only devices (a bare switch, a lock, a contact)
+ * return undefined: they have no numeric series in sensor_readings, so the tile shows no sparkline.
+ */
+const TREND_CAPABILITIES = [
+  'temperature', 'power', 'co2', 'humidity', 'illuminance', 'brightness', 'temperature_setpoint', 'battery',
+];
+export function trendCapability(device: CapabilityDevice): string | undefined {
+  const state = device.state ?? {};
+  return TREND_CAPABILITIES.find((id) => id in state && Number.isFinite(Number(state[id])));
+}
+
 /** The capability the tile should foreground (its quick-control / headline state). */
 export function primaryCapability(device: CapabilityDevice): Capability | undefined {
   const order = [
