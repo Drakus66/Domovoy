@@ -25,9 +25,10 @@ public class AutomationRule
     public RuleStatus Status { get; set; } = RuleStatus.Active;
 
     /// <summary>
-    /// Safety-floor rule (anti-freeze, CO2→ventilation, smoke→unlock). Protected rules are always
-    /// evaluated, cannot be disabled or deleted from the API/UI, and are sourced from local config so
-    /// they run even when the UI/DB is unavailable. See AutomationService safety floor.
+    /// Legacy "protected rule" flag. The hardcoded local safety-floor it once gated was removed — every
+    /// rule is now an ordinary user automation stored in the DB (visible/editable/deletable from the UI),
+    /// so this is always <c>false</c>. Kept only for BSON back-compat with rules already persisted with the
+    /// field; the API forces it false and the engine no longer reads it.
     /// </summary>
     public bool IsProtected { get; set; }
 

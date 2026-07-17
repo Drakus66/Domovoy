@@ -14,9 +14,8 @@ namespace Domovoy.DbGateway.Endpoints;
 /// <summary>
 /// CRUD for user automation rules (roadmap Epic 1A) in the <c>automations</c> collection, plus run
 /// history (<c>auto_history</c>). The AutomationService loads these over HTTP and the WebUI manages
-/// them via the ApiGateway proxy. Safety-floor (protected) rules are NOT stored here — they live in
-/// the AutomationService's local config and cannot be created/edited through this API, so the API
-/// always forces <see cref="AutomationRule.IsProtected"/> to false.
+/// them via the ApiGateway proxy. Every rule the engine runs is one of these — there is no hardcoded
+/// rule floor — so the API always forces the legacy <see cref="AutomationRule.IsProtected"/> flag to false.
 /// </summary>
 public static class AutomationEndpoints
 {
@@ -48,7 +47,7 @@ public static class AutomationEndpoints
 
             NormalizeJsonValues(rule);
             rule.Id = Guid.NewGuid().ToString();
-            rule.IsProtected = false; // safety-floor rules are config-only, never created via API
+            rule.IsProtected = false; // legacy flag: no rule is protected; pin it false regardless of input
             rule.CreatedAt = rule.UpdatedAt = DateTime.UtcNow;
             await Rules(db).InsertOneAsync(rule);
             return Results.Created($"/api/automations/{rule.Id}", rule);

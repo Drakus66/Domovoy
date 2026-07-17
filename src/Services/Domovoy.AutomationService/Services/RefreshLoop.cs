@@ -10,9 +10,9 @@ using Microsoft.Extensions.Options;
 namespace Domovoy.AutomationService.Services;
 
 /// <summary>
-/// Periodically reloads user rules and the device read-model (zone + initial state) from the DbGateway,
-/// and loads the local safety floor once at startup. Keeps the engine's view fresh without each rule
-/// edit needing a bus round-trip (roadmap Epic 1A; a push-invalidation event is a later optimization).
+/// Periodically reloads user rules and the device read-model (zone + initial state) from the DbGateway.
+/// Keeps the engine's view fresh without each rule edit needing a bus round-trip (roadmap Epic 1A; a
+/// push-invalidation event is a later optimization).
 /// </summary>
 public sealed class RefreshLoop : BackgroundService
 {
@@ -46,8 +46,6 @@ public sealed class RefreshLoop : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _store.LoadSafetyRules();
-
         var period = TimeSpan.FromSeconds(Math.Max(5, _options.RefreshSeconds));
         while (!stoppingToken.IsCancellationRequested)
         {

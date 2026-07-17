@@ -237,7 +237,7 @@ export default function Flow() {
             <TextField select size="small" label={tr('open')} value={editingId ?? ''} sx={{ minWidth: 180 }}
               onChange={(e) => { const r = rules.find((x) => x.id === e.target.value); if (r) loadRule(r); }}>
               <MenuItem value=""><em>{tr('selectFlow')}</em></MenuItem>
-              {rules.filter((r) => !r.isProtected).map((r) => <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>)}
+              {rules.map((r) => <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>)}
             </TextField>
             <Button onClick={newRule}>{tr('new')}</Button>
             <Button variant="contained" startIcon={<SaveRoundedIcon />} onClick={save}>{tr('save')}</Button>

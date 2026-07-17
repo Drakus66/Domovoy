@@ -23,9 +23,6 @@ public class AutomationOptions
     /// <summary>How often to reload rules + device read-model from the DbGateway.</summary>
     public int RefreshSeconds { get; set; } = 30;
 
-    /// <summary>Path to the local safety-floor rules file (protected, non-disableable from UI).</summary>
-    public string SafetyRulesPath { get; set; } = "safety-rules.json";
-
     /// <summary>
     /// Minimum seconds between executions of a BoundedActive rule (roadmap Epic 1F staged rollout). A
     /// promoted-but-unproven rule runs, but no more often than this — bounding actuation rate while trust builds.

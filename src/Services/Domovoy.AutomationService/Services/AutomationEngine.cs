@@ -10,7 +10,7 @@ namespace Domovoy.AutomationService.Services;
 
 /// <summary>
 /// Device-state trigger engine (roadmap Epic 1A). Subscribes to <see cref="DeviceStateReportV1"/>,
-/// keeps the <see cref="DeviceRegistry"/> live, and fires any active/protected rule whose device-state
+/// keeps the <see cref="DeviceRegistry"/> live, and fires any active rule whose device-state
 /// trigger matches the change. Rule actions run on background tasks (see <see cref="RuleRunner"/>), so
 /// "on for N minutes" patterns don't block the bus.
 /// </summary>
@@ -75,7 +75,7 @@ public sealed class AutomationEngine : BackgroundService
 
     // Active, BoundedActive and Shadow rules are all evaluated; Shadow only logs, BoundedActive throttles (Epic 1F).
     private IEnumerable<AutomationRule> ActiveRules() =>
-        _store.Rules.Where(r => r.IsProtected || r.Status is RuleStatus.Active or RuleStatus.Shadow or RuleStatus.BoundedActive);
+        _store.Rules.Where(r => r.Status is RuleStatus.Active or RuleStatus.Shadow or RuleStatus.BoundedActive);
 
     private static string Display(object? v) => v switch
     {

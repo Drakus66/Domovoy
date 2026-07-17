@@ -7,7 +7,7 @@ using Domovoy.Contracts.Automations;
 namespace Domovoy.AutomationService.Services;
 
 /// <summary>
-/// Time + sun trigger scheduler (roadmap Epic 1A). Ticks once per minute and fires any active/protected
+/// Time + sun trigger scheduler (roadmap Epic 1A). Ticks once per minute and fires any active
 /// rule whose cron schedule matches the current minute, or whose sunrise/sunset (± offset) falls in it.
 /// Per-minute resolution keeps it dependency-free and is ample for irrigation/outdoor-lighting.
 /// </summary>
@@ -50,7 +50,7 @@ public sealed class AutomationScheduler : BackgroundService
     {
         var nowUtc = now.ToUniversalTime();
 
-        foreach (var rule in _store.Rules.Where(r => r.IsProtected || r.Status is RuleStatus.Active or RuleStatus.Shadow or RuleStatus.BoundedActive))
+        foreach (var rule in _store.Rules.Where(r => r.Status is RuleStatus.Active or RuleStatus.Shadow or RuleStatus.BoundedActive))
         {
             foreach (var trigger in rule.Triggers)
             {
