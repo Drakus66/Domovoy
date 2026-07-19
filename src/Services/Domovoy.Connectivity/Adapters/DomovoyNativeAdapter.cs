@@ -54,13 +54,7 @@ public class DomovoyNativeAdapter : IProtocolAdapter
     {
         _mqttClient = mqttClient;
 
-        var options = new MqttClientSubscribeOptionsBuilder()
-            .WithTopicFilter(NativeProtocol.AnnounceFilter)
-            .WithTopicFilter(NativeProtocol.StateFilter)
-            .WithTopicFilter(NativeProtocol.AvailabilityFilter)
-            .WithTopicFilter(NativeProtocol.HubStatusFilter)
-            .Build();
-        await _mqttClient.SubscribeAsync(options, token);
+        await SubscribeAsync(mqttClient, token);
 
         // Capability-addressed commands from the bus. Filters to devices this adapter owns.
         await _messageBus.SubscribeAsync<Envelope<DeviceCommandV1>>(
@@ -81,6 +75,18 @@ public class DomovoyNativeAdapter : IProtocolAdapter
     }
 
     public Task StopAsync(CancellationToken token) => Task.CompletedTask;
+
+    /// <summary>(Re)subscribes the native MQTT topics; re-run on every reconnect (clean session loses subs).</summary>
+    public async Task SubscribeAsync(IMqttClient mqttClient, CancellationToken token)
+    {
+        var options = new MqttClientSubscribeOptionsBuilder()
+            .WithTopicFilter(NativeProtocol.AnnounceFilter)
+            .WithTopicFilter(NativeProtocol.StateFilter)
+            .WithTopicFilter(NativeProtocol.AvailabilityFilter)
+            .WithTopicFilter(NativeProtocol.HubStatusFilter)
+            .Build();
+        await mqttClient.SubscribeAsync(options, token);
+    }
 
     public bool CanHandleTopic(string topic) =>
         topic.StartsWith(NativeProtocol.Root + "/", StringComparison.Ordinal) ||

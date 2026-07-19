@@ -66,6 +66,11 @@ services:
       - domovoy-network
     ports:
       - "5001:8080"
+    volumes:
+      # Backup bundles (Epic 3A) live on the host so they survive containers and host migration.
+      - ./data/backups:/app/backups
+      # Plugin settings (Epic 1C {plugins-root}/.settings) so bundles include them and restore puts them back.
+      - ./plugins/.settings:/app/plugin-settings
     environment:
       - RABBITMQ__HOSTNAME=rabbitmq
       - RABBITMQ__PORT=5672
@@ -74,8 +79,16 @@ services:
       - MONGODB__CONNECTIONSTRING=mongodb://mongodb:27017
       - MONGODB__DATABASENAME=domovoy
       - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
+      - BACKUP__DIRECTORY=/app/backups
+      - BACKUP__PLUGINSETTINGSDIRECTORY=/app/plugin-settings
+      # Bootstrap password for the initial 'admin' login user, seeded once on an empty users collection
+      # (mobile-app / remote-access track). ⚠️ Set DOMOVOY_ADMIN_PASSWORD in .env; if unset it defaults to
+      # 'admin' and the gateway logs a loud warning to change it before remote exposure.
+      - SECURITY__BOOTSTRAPADMINPASSWORD=${DOMOVOY_ADMIN_PASSWORD:-admin}
+    # Dependency-free liveness: the aspnet runtime image has no `pgrep`/`procps` (the old check failed with
+    # exit 127 → permanently "unhealthy"), but it does have grep. PID 1 is the app, so match its cmdline.
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'dotnet Domovoy.DbGateway.dll' || exit 1"]
+      test: ["CMD-SHELL", "grep -qa Domovoy.DbGateway /proc/1/cmdline || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 3
@@ -104,6 +117,23 @@ services:
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - AUTOMATIONSERVICE__BASEURL=http://automation-service:8080
       - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
+      # Local authentication (mobile-app / remote-access track). ON = the API is gated by login + permissions;
+      # this is the posture required before any external exposure (IPv6-direct / SSH-tunnel). ⚠️ Override the
+      # secret in .env (JWT_SECRET_KEY) with a long random value — e.g. `openssl rand -base64 48` — before
+      # exposing the system; the default below is a public placeholder. Set JWTSETTINGS__ENABLED=false to run
+      # the stack open on a trusted LAN.
+      - JWTSETTINGS__ENABLED=true
+      - JWTSETTINGS__SECRETKEY=${JWT_SECRET_KEY:-YourSuperSecretKeyForDomovoyShouldBeVeryLongAndComplex}
+      # Restrict CORS once exposed (array via indexed env, e.g. CORS__ALLOWEDORIGINS__0=https://home.example).
+      # Same-origin (the UI served by nginx) needs no entry; the app / external hostnames do. Empty = dev-open.
+      # - CORS__ALLOWEDORIGINS__0=https://home.example.com
+      # Restart-from-UI: the safe self-restart path (a service stops itself, this policy brings it back) needs
+      # nothing extra. To ALSO restart infra/hung containers from the UI, uncomment the flag + docker.sock mount
+      # below. ⚠️ Mounting docker.sock grants root-equivalent host access to the gateway — enable ONLY on a
+      # trusted host, ideally not internet-exposed.
+      # - SYSTEMCONTROL__DOCKERENABLED=true
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock:ro   # :ro still allows restart/stop/start
     restart: unless-stopped
 
   # Deterministic automation engine (Epic 1A): subscribes to device state, fires trigger→condition→action
@@ -128,6 +158,34 @@ services:
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - AUTOMATION__DBGATEWAYBASEURL=http://db-gateway:8080
       - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
+      # Notifications. The LAN SignalR banner (2M.2) is ON by default — no env needed. For off-LAN push
+      # (Epic 2O.4) enable ntfy and point it at your self-hosted server (see the 'push' profile below); the
+      # phone's UnifiedPush distributor subscribes to the same TOPIC. Treat TOPIC as a shared secret.
+      # - NOTIFICATIONS__NTFY__ENABLED=true
+      # - NOTIFICATIONS__NTFY__SERVERURL=http://ntfy:80
+      # - NOTIFICATIONS__NTFY__TOPIC=${NTFY_TOPIC:-}
+      # - NOTIFICATIONS__NTFY__TOKEN=${NTFY_TOKEN:-}
+    restart: unless-stopped
+
+  # Self-hosted push server for off-LAN notifications (Epic 2O.4, opt-in profile). Enable with:
+  #   docker compose --profile push up -d ntfy
+  # The AutomationService POSTs to it (ntfy:80) and the phone's UnifiedPush distributor subscribes to the topic.
+  # For delivery outside the LAN it must itself be reachable externally (route it through the Caddy edge or a
+  # subdomain). ntfy runs as its own server; we only make HTTP calls to it. See docs/mobile_app_remote_access_ru.md.
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: ntfy
+    profiles: ["push"]
+    command: serve
+    networks:
+      - domovoy-network
+    ports:
+      - "8090:80"
+    environment:
+      - NTFY_BASE_URL=${NTFY_BASE_URL:-http://localhost:8090}
+      - NTFY_BEHIND_PROXY=true
+    volumes:
+      - ntfy_data:/var/cache/ntfy
     restart: unless-stopped
 
   # Integration SDK supervisor (Epic 1C): discovers plugin manifests under ./plugins, gates each on host
@@ -181,6 +239,62 @@ services:
     # the container never writes here.
     volumes:
       - ./src/UI/WebUI/public/locales:/usr/share/nginx/html/locales:ro
+    restart: unless-stopped
+
+  # ============ Remote access (opt-in profiles) ============
+  # These stay OFF for a plain LAN bring-up. Enable the edge when exposing the home externally:
+  #   docker compose --profile edge up -d                 # Caddy TLS edge (for IPv6-direct)
+  #   docker compose --profile edge --profile tunnel up -d # also the SSH reverse-tunnel fallback to the VPS
+  # See docs/mobile_app_remote_access_ru.md. ⚠️ Only expose with auth ON (JWTSETTINGS__ENABLED=true, above).
+
+  # Public TLS edge (Этап 3a): auto-HTTPS in front of the WebUI, single origin for both remote paths.
+  caddy:
+    image: caddy:2
+    container_name: caddy
+    profiles: ["edge"]
+    depends_on:
+      webui:
+        condition: service_started
+    networks:
+      - domovoy-network
+    ports:
+      - "443:443"
+      - "80:80" # ACME HTTP-01 + HTTP→HTTPS redirect; for DNS-01 you can drop 80 and use a Caddy DNS build.
+    # Required when the 'edge' profile is used; left as empty defaults so a plain (profile-less) `up` still
+    # interpolates. Set them in .env before enabling the edge (Caddy fails fast at runtime without a domain).
+    environment:
+      - DOMOVOY_DOMAIN=${DOMOVOY_DOMAIN:-}
+      - ACME_EMAIL=${ACME_EMAIL:-}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+  # SSH reverse-tunnel to the VPS (Этап 3c): the CGNAT/no-IPv6 fallback. Forwards the Caddy edge to the VPS,
+  # which publishes the public hostname. First run generates a key and prints the restricted authorized_keys
+  # line to install on the VPS (see deploy/vps). Needs the 'edge' profile too (it tunnels Caddy).
+  autossh:
+    build:
+      context: ./deploy/autossh
+    container_name: autossh
+    profiles: ["tunnel"]
+    depends_on:
+      caddy:
+        condition: service_started
+    networks:
+      - domovoy-network
+    # SSH_HOST is required when the 'tunnel' profile is used; empty default keeps a plain `up` interpolating.
+    # The entrypoint fails fast at runtime if it's unset.
+    environment:
+      - SSH_HOST=${TUNNEL_SSH_HOST:-}
+      - SSH_PORT=${TUNNEL_SSH_PORT:-2222}
+      - SSH_USER=${TUNNEL_SSH_USER:-domovoy}
+      - REMOTE_BIND=${TUNNEL_REMOTE_BIND:-127.0.0.1:8443}
+      - LOCAL_TARGET=caddy:443
+    volumes:
+      # Persist the generated key + known_hosts so the tunnel survives restarts without re-keying.
+      - ./data/autossh:/keys
     restart: unless-stopped
 
   # ============ Infrastructure Services ============
@@ -287,3 +401,6 @@ volumes:
   mongodb_data:
   rabbitmq_data:
   prometheus_data:
+  caddy_data:
+  caddy_config:
+  ntfy_data:

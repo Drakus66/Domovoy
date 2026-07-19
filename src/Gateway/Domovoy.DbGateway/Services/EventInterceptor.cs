@@ -60,11 +60,29 @@ public class EventInterceptor : BackgroundService
     private const string ZigbeeAdapterSource = "Zigbee2Mqtt";
 
     /// <summary>
-    /// Last observed Zigbee bridge state. The adapter re-publishes the state every ~15s, so we only act
-    /// on the online→offline transition (or the first offline seen) to avoid rewriting the read-model
-    /// on every heartbeat. <c>null</c> until the first bridge event arrives.
+    /// Last observed Zigbee bridge state (<c>null</c> until the first bridge event). The adapter re-publishes
+    /// the state every ~15s; an explicit offline flips this false at once. But the offline signal is not
+    /// reliable on its own — the connectivity service may restart, or the bridge may have died without a clean
+    /// offline — so <see cref="IsZigbeeBridgeDown"/> also treats "no online heartbeat for a while" as down.
     /// </summary>
     private bool? _zigbeeBridgeOnline;
+
+    /// <summary>
+    /// Ticks (UTC) of the last time the Zigbee bridge was confirmed <b>online</b>. Seeded to startup so a cold
+    /// start gets a grace window before the watchdog can expire anything. Stored as ticks for atomic access
+    /// from the bus handlers and the watchdog loop.
+    /// </summary>
+    private long _lastBridgeOnlineTicks = DateTime.UtcNow.Ticks;
+
+    /// <summary>
+    /// How long the bridge may go without an <b>online</b> confirmation before its devices are treated as
+    /// offline. The adapter re-emits online every ~15s while the bridge is healthy, so this is several missed
+    /// heartbeats — long enough that a brief connectivity restart doesn't false-offline live Zigbee devices.
+    /// </summary>
+    private static readonly TimeSpan BridgeStaleTimeout = TimeSpan.FromSeconds(90);
+
+    /// <summary>How often the Zigbee bridge-liveness watchdog re-checks and reconciles.</summary>
+    private static readonly TimeSpan BridgeWatchdogInterval = TimeSpan.FromSeconds(30);
 
     private sealed record RecentCommand(
         DateTime At, string TriggerSource, string? TriggerId, string? CorrelationId, IReadOnlyDictionary<string, object?> Set);
@@ -112,10 +130,11 @@ public class EventInterceptor : BackgroundService
             BusTopology.DeviceOnlineChangedKey,
             HandleCapabilityOnline);
 
-        // Zigbee bridge state (coordinator/stick up-down). The Zigbee2Mqtt adapter never emits a
-        // per-device DeviceOnlineChangedV1, so a disconnected stick would otherwise leave every paired
-        // device stuck as IsOnline=true in the read-model. When the bridge drops we sweep all Zigbee
-        // devices offline so the dashboard agrees with the (staleness-based) Zigbee page.
+        // Zigbee bridge state (coordinator/stick up-down). Per-device liveness normally arrives via
+        // zigbee2mqtt availability (adapter → DeviceOnlineChangedV1, handled above), but that channel is
+        // silent when the bridge process itself is down — z2m can't report its devices offline if it isn't
+        // running. This bridge-down sweep is the backstop for that whole-bridge-down case: when the bridge
+        // drops we mark every Zigbee device offline so the dashboard agrees with the Zigbee page.
         await _messageBus.SubscribeAsync<ZigbeeBridgeStateEvent>(
             "dbgateway-zigbee-bridge-state",
             MessageBusConfiguration.ZigbeeBridgeExchange,
@@ -150,6 +169,10 @@ public class EventInterceptor : BackgroundService
             BusTopology.HomeModeChangedKey,
             HandleHomeModeChanged);
 
+        // Backstop for Zigbee liveness: expire devices when the bridge stops confirming itself online, without
+        // depending on the offline signal continuing to flow (see ZigbeeBridgeWatchdogAsync).
+        _ = Task.Run(() => ZigbeeBridgeWatchdogAsync(stoppingToken), stoppingToken);
+
         _logger.LogInformation("EventInterceptor subscriptions complete");
     }
 
@@ -173,7 +196,9 @@ public class EventInterceptor : BackgroundService
                 .Set(x => x.AdapterSource, device.Identity.AdapterSource)
                 .Set(x => x.Model, device.Model)
                 .Set(x => x.Capabilities, device.Capabilities.Select(ToCapabilityDocument).ToList())
-                .Set(x => x.IsOnline, true)
+                // While the Zigbee bridge is down, a re-delivered RETAINED discovery must not flip the device
+                // back online (the broker replays z2m's last device list even though z2m can't reach it).
+                .Set(x => x.IsOnline, ResolveOnline(device.Identity.AdapterSource))
                 // Semantic archetype (Epic 2D): recompute the auto value each (re)announce; the manual
                 // override field is left untouched so a re-announce never clobbers the user's choice.
                 .Set(x => x.AutoArchetype, DeviceClassifier.Classify(device.Capabilities, device.Identity.AdapterSource, device.Model))
@@ -208,7 +233,8 @@ public class EventInterceptor : BackgroundService
             await RecordStateDeltas(report, envelope.Source, zoneId, oldState, existing);
 
             var update = Builders<CapabilityDeviceDocument>.Update
-                .Set(x => x.IsOnline, true)
+                // A retained state message during a bridge outage must not re-online a Zigbee device (see discovery).
+                .Set(x => x.IsOnline, ResolveOnline(existing?.AdapterSource))
                 .Set(x => x.LastUpdated, DateTime.UtcNow);
             foreach (var kv in report.State)
                 update = update.Set($"State.{kv.Key}", Normalize(kv.Value));
@@ -243,20 +269,29 @@ public class EventInterceptor : BackgroundService
     }
 
     /// <summary>
-    /// Marks all Zigbee devices offline when the bridge (coordinator/stick) goes down. Acts only on the
-    /// online→offline transition — the adapter re-emits the state on a ~15s heartbeat, so a naive handler
-    /// would rewrite the collection repeatedly. Devices flip back to online on their own as they re-report
-    /// state/discovery once the bridge returns, so the online transition needs no action here.
+    /// Tracks the Zigbee bridge state and, on offline, sweeps its devices unreachable. The adapter re-emits the
+    /// state ~15s; an online event refreshes the liveness stamp (feeding <see cref="IsZigbeeBridgeDown"/>), an
+    /// offline event flips every Zigbee device offline right away. The sweep runs on EVERY offline (not just the
+    /// online→offline edge) so a retained discovery/state the broker replays can't leave a device stuck online.
     /// </summary>
     private async Task HandleZigbeeBridgeState(ZigbeeBridgeStateEvent ev)
     {
-        var wasOnline = _zigbeeBridgeOnline;
         _zigbeeBridgeOnline = ev.IsOnline;
+        if (ev.IsOnline)
+        {
+            Interlocked.Exchange(ref _lastBridgeOnlineTicks, DateTime.UtcNow.Ticks);
+            return; // devices re-online on their own as they re-report once the bridge is back
+        }
 
-        // Only sweep on the first offline we see or a true→false edge. Ignore the online transition
-        // and the repeated offline heartbeats.
-        if (ev.IsOnline || wasOnline == false) return;
+        await SweepZigbeeOffline("bridge reported offline");
+    }
 
+    /// <summary>
+    /// Marks currently-online Zigbee devices offline. Cheap + idempotent — the filter matches only rows that are
+    /// still <c>IsOnline=true</c>, so once the house has settled offline a repeat sweep updates nothing.
+    /// </summary>
+    private async Task SweepZigbeeOffline(string reason)
+    {
         try
         {
             var collection = _database.GetCollection<CapabilityDeviceDocument>(CapabilityCollection);
@@ -269,11 +304,53 @@ public class EventInterceptor : BackgroundService
             var result = await collection.UpdateManyAsync(filter, update);
             if (result.ModifiedCount > 0)
                 _logger.LogInformation(
-                    "Zigbee bridge offline — marked {Count} Zigbee device(s) offline", result.ModifiedCount);
+                    "Zigbee bridge down ({Reason}) — marked {Count} Zigbee device(s) offline", reason, result.ModifiedCount);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error sweeping Zigbee devices offline after bridge drop");
+            _logger.LogError(ex, "Error sweeping Zigbee devices offline");
+        }
+    }
+
+    /// <summary>
+    /// The Zigbee bridge is treated as down when it explicitly reported offline, OR it has not confirmed itself
+    /// online within <see cref="BridgeStaleTimeout"/>. The latter is what makes liveness robust to the offline
+    /// signal drying up (connectivity restarts, an unclean coordinator death, a stale retained state): the bridge
+    /// heartbeats online every ~15s while healthy, so a lapse means it is not actually serving its devices.
+    /// </summary>
+    private bool IsZigbeeBridgeDown() =>
+        _zigbeeBridgeOnline == false
+        || DateTime.UtcNow - new DateTime(Interlocked.Read(ref _lastBridgeOnlineTicks), DateTimeKind.Utc) > BridgeStaleTimeout;
+
+    /// <summary>
+    /// The <c>IsOnline</c> value a discovery/state report should persist. Normally <c>true</c> (a report means
+    /// the device is reachable), but for a <b>Zigbee</b> device while the bridge is down it stays <c>false</c>:
+    /// with the coordinator unreachable z2m can't actually talk to the device, and the only "reports" are stale
+    /// RETAINED messages the broker replays on (re)subscribe. Without this gate such a replay would flip a dead
+    /// device back online right after the bridge-down sweep.
+    /// </summary>
+    private bool ResolveOnline(string? adapterSource) =>
+        !(string.Equals(adapterSource, ZigbeeAdapterSource, StringComparison.OrdinalIgnoreCase) && IsZigbeeBridgeDown());
+
+    /// <summary>
+    /// Backstop watchdog: periodically expires Zigbee devices when the bridge is down. Unlike the event-driven
+    /// sweep it does not need the offline signal to keep flowing — a bridge that stops confirming itself online
+    /// (crash-loop with no coordinator, connectivity down, unclean death) is caught by the staleness in
+    /// <see cref="IsZigbeeBridgeDown"/>. A startup grace window lets a genuinely-live bridge heartbeat first, so
+    /// a cold start doesn't briefly offline healthy Zigbee devices.
+    /// </summary>
+    private async Task ZigbeeBridgeWatchdogAsync(CancellationToken token)
+    {
+        try { await Task.Delay(BridgeStaleTimeout, token); }
+        catch (OperationCanceledException) { return; }
+
+        while (!token.IsCancellationRequested)
+        {
+            if (IsZigbeeBridgeDown())
+                await SweepZigbeeOffline("no online heartbeat");
+
+            try { await Task.Delay(BridgeWatchdogInterval, token); }
+            catch (OperationCanceledException) { break; }
         }
     }
 

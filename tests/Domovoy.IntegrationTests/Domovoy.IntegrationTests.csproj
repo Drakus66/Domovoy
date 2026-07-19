@@ -20,6 +20,7 @@
         <ProjectReference Include="..\..\src\Common\Domovoy.MessageBus\Domovoy.MessageBus.csproj" />
         <ProjectReference Include="..\..\src\Common\Domovoy.Contracts\Domovoy.Contracts.csproj" />
         <ProjectReference Include="..\..\src\Gateway\Domovoy.DbGateway\Domovoy.DbGateway.csproj" />
+        <ProjectReference Include="..\..\src\Gateway\Domovoy.ApiGateway\Domovoy.ApiGateway.csproj" />
         <ProjectReference Include="..\..\src\Services\Domovoy.AutomationService\Domovoy.AutomationService.csproj" />
         <ProjectReference Include="..\..\src\Services\Domovoy.Connectivity\Domovoy.Connectivity.csproj" />
     </ItemGroup>

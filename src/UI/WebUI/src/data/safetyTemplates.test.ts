@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   SAFETY_TEMPLATES, SafetyTemplate, buildDraftFromTemplate, isTemplateRecommended,
-  recommendedTemplateIds,
+  recommendedTemplateIds, isDraftValid, emptyDraft, draftFromRule,
 } from './safetyTemplates';
 import { AutomationRule } from '../api/automations';
 import { CapabilityDevice } from '../api/capabilityDevices';
@@ -52,21 +52,21 @@ describe('safety templates', () => {
 
   it('auto-selects the trigger device only when exactly one matches', () => {
     const one = buildDraftFromTemplate(antiFreeze, [device('d1', ['temperature'])]);
-    expect(one.trigDevice).toBe('d1');
-    expect(one.trigCap).toBe('temperature');
+    expect(one.triggers[0].deviceId).toBe('d1');
+    expect(one.triggers[0].capabilityId).toBe('temperature');
 
     const many = buildDraftFromTemplate(antiFreeze, [device('d1', ['temperature']), device('d2', ['temperature'])]);
-    expect(many.trigDevice).toBe('');
-    expect(many.trigCap).toBe('');
+    expect(many.triggers[0].deviceId).toBeUndefined();
+    expect(many.triggers[0].capabilityId).toBe('');
   });
 
   it('carries the template seed (operator/threshold/action) into the draft', () => {
     const draft = buildDraftFromTemplate(antiFreeze, []);
-    expect(draft.trigOp).toBe('lt');
-    expect(draft.trigValue).toBe('5');
-    expect(draft.actionKind).toBe('Command');
-    expect(draft.actCap).toBe('on_off');
-    expect(draft.actValue).toBe('true');
+    expect(draft.triggers[0].type).toBe('DeviceState');
+    expect(draft.triggers[0].operator).toBe('lt');
+    expect(draft.triggers[0].value).toBe(5);
+    expect(draft.actions[0].type).toBe('Command');
+    expect(draft.actions[0].set).toEqual({ on_off: true });
   });
 
   it('every template has a distinct id and a valid action kind', () => {
@@ -76,5 +76,61 @@ describe('safety templates', () => {
       expect(['Command', 'Notify']).toContain(t.actionKind);
       expect(t.triggerCapability).toBeTruthy();
     }
+  });
+});
+
+describe('rule draft validity', () => {
+  it('a blank draft is not saveable (no name, unbound trigger/action)', () => {
+    expect(isDraftValid(emptyDraft())).toBe(false);
+  });
+
+  it('requires a name, a bound trigger and a complete action', () => {
+    const d = emptyDraft();
+    d.name = 'Test';
+    d.triggers = [{ type: 'DeviceState', deviceId: 'd1', capabilityId: 'motion', operator: 'eq', value: true }];
+    d.actions = [{ type: 'Command', deviceId: 'lamp', set: { on_off: true } }];
+    expect(isDraftValid(d)).toBe(true);
+  });
+
+  it('validates every trigger and action (multi-trigger / multi-action)', () => {
+    const d = emptyDraft();
+    d.name = 'Multi';
+    d.triggers = [
+      { type: 'DeviceState', deviceId: 'd1', capabilityId: 'motion', operator: 'eq', value: true },
+      { type: 'Sun', sun: 'Sunset', offsetMinutes: 0 },
+    ];
+    d.actions = [
+      { type: 'Command', deviceId: 'lamp', set: { on_off: true } },
+      { type: 'Notify', message: '' }, // incomplete → whole draft invalid
+    ];
+    expect(isDraftValid(d)).toBe(false);
+    d.actions[1] = { type: 'Notify', message: 'Motion at dusk' };
+    expect(isDraftValid(d)).toBe(true);
+  });
+
+  it('an unbound device-state trigger blocks saving', () => {
+    const d = emptyDraft();
+    d.name = 'Unbound';
+    d.actions = [{ type: 'Notify', message: 'hi' }];
+    // default trigger has no device/capability
+    expect(isDraftValid(d)).toBe(false);
+  });
+
+  it('draftFromRule round-trips an existing rule and marks it for editing', () => {
+    const rule: AutomationRule = {
+      id: 'r1', name: 'Existing', status: 'Active', isProtected: false,
+      triggers: [{ type: 'DeviceState', deviceId: 'd1', capabilityId: 'motion', operator: 'eq', value: true }],
+      conditions: [{ type: 'Mode', mode: 'Night' }],
+      actions: [{ type: 'Command', deviceId: 'lamp', set: { on_off: true } }],
+      createdAt: '', updatedAt: '',
+    };
+    const d = draftFromRule(rule);
+    expect(d.id).toBe('r1');
+    expect(d.triggers).toHaveLength(1);
+    expect(d.conditions[0]).toMatchObject({ type: 'Mode', mode: 'Night' });
+    expect(isDraftValid(d)).toBe(true);
+    // per-item clone: editing the draft must not mutate the source rule
+    d.triggers[0].capabilityId = 'temperature';
+    expect(rule.triggers[0].capabilityId).toBe('motion');
   });
 });

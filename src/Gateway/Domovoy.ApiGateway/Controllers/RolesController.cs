@@ -2,6 +2,8 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using Domovoy.Contracts.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Domovoy.ApiGateway.Controllers;
@@ -9,10 +11,11 @@ namespace Domovoy.ApiGateway.Controllers;
 /// <summary>
 /// Thin reverse proxy for role management (roadmap Epic 2E). Forwards CRUD and the permission vocabulary to
 /// the DbGateway role endpoints (<c>/api/roles</c>) over the in-cluster <c>db-gateway</c> HttpClient, mirroring
-/// <see cref="ZonesController"/>. Roles are a read-model concern (no bus involvement); no enforcement in Phase 2.
+/// <see cref="ZonesController"/>. Gated on <c>users.manage</c> (roles and users are one admin surface).
 /// </summary>
 [ApiController]
 [Route("api/roles")]
+[Authorize(Policy = WellKnownPermissions.UsersManage)]
 public class RolesController : ControllerBase
 {
     private readonly IHttpClientFactory _httpClientFactory;

@@ -4,6 +4,8 @@
 
 using System.Net.Http.Json;
 
+using Domovoy.Contracts.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Domovoy.ApiGateway.Controllers;
@@ -11,9 +13,11 @@ namespace Domovoy.ApiGateway.Controllers;
 /// <summary>
 /// Thin reverse proxy for the integration-plugin registry + lifecycle (roadmap Epic 1C). Forwards to the
 /// PluginSupervisor, which owns manifest discovery, resource-aware gating and process supervision.
+/// Gated on <c>plugins.manage</c> — installing/starting plugins is a privileged surface.
 /// </summary>
 [ApiController]
 [Route("api/plugins")]
+[Authorize(Policy = WellKnownPermissions.PluginsManage)]
 public class PluginsController : ControllerBase
 {
     private readonly IHttpClientFactory _httpClientFactory;

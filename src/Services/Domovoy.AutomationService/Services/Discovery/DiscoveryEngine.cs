@@ -6,6 +6,7 @@ using Domovoy.AutomationService.Configuration;
 using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Capabilities;
 using Domovoy.Contracts.Devices;
+using Domovoy.Contracts.Ml;
 using Domovoy.Contracts.Proposals;
 
 using Microsoft.Extensions.Options;
@@ -71,8 +72,10 @@ public sealed class DiscoveryEngine : BackgroundService
         if (events is null) return new ScanResult(0, 0, "event-log unavailable");
 
         var patterns = PatternMiner.Mine(events, _options);
-        var preferences = SetpointPreferenceMiner.Mine(events, _options); // Epic 2F type B
-        if (patterns.Count == 0 && preferences.Count == 0) return new ScanResult(0, 0, "no patterns found");
+        var preferences = SetpointPreferenceMiner.Mine(events, _options);              // Epic 2F type B (scheduled)
+        var modelCandidates = SetpointPreferenceMiner.MineModelCandidates(events, _options); // Epic 2F type B (ML)
+        if (patterns.Count == 0 && preferences.Count == 0 && modelCandidates.Count == 0)
+            return new ScanResult(0, 0, "no patterns found");
 
         var rules = await _db.GetUserRulesAsync(ct) ?? new List<AutomationRule>();
         var openProposals = await _db.GetProposalsAsync(ct, nameof(ProposalStatus.Proposed)) ?? new List<Proposal>();
@@ -157,11 +160,61 @@ public sealed class DiscoveryEngine : BackgroundService
             created++;
         }
 
+        // Type-B ML form (Epic 2F): setpoints the user varies with temporal structure → "learn this" ML-task
+        // proposals. Distinct from the scheduled preference above — a model captures what a fixed schedule can't.
+        // Deduped by target capability against existing ml_tasks + open ML-task proposals (as MlTaskSuggester does).
+        if (modelCandidates.Count > 0 && created < _options.DiscoveryMaxProposals)
+        {
+            var tasks = await _db.GetMlTasksAsync(ct) ?? new List<MlTask>();
+            var takenTargets = new HashSet<string>(
+                tasks.Select(t => t.TargetCapability)
+                    .Concat(openProposals.Where(p => p.Kind == ProposalKind.MlTask && p.MlTaskTarget is not null)
+                        .Select(p => p.MlTaskTarget!)),
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (var cand in modelCandidates)
+            {
+                if (created >= _options.DiscoveryMaxProposals) break;
+                if (!takenTargets.Add(cand.CapabilityId)) continue; // one task per capability
+
+                var savedProposal = await _db.CreateProposalAsync(BuildModelProposal(cand, nameById), ct);
+                if (savedProposal is null) continue;
+
+                openProposals.Add(savedProposal);
+                created++;
+            }
+        }
+
         _logger.LogInformation(
-            "Pattern discovery: {Created} new candidate(s) from {Patterns} patterns + {Prefs} setpoint prefs / {Events} events",
-            created, patterns.Count, preferences.Count, events.Count);
-        return new ScanResult(patterns.Count + preferences.Count, created,
+            "Pattern discovery: {Created} new candidate(s) from {Patterns} patterns + {Prefs} setpoint prefs + {Models} ml-setpoints / {Events} events",
+            created, patterns.Count, preferences.Count, modelCandidates.Count, events.Count);
+        return new ScanResult(patterns.Count + preferences.Count + modelCandidates.Count, created,
             created == 0 ? "all patterns already known" : "ok");
+    }
+
+    // A learned-setpoint candidate → an "start learning X" ML-task proposal (Epic 2P approval flow).
+    private Proposal BuildModelProposal(
+        SetpointPreferenceMiner.SetpointModelCandidate cand, IReadOnlyDictionary<string, string> nameById)
+    {
+        var device = nameById.GetValueOrDefault(cand.DeviceId, cand.DeviceId);
+        return new Proposal
+        {
+            Kind = ProposalKind.MlTask,
+            Title = $"Start learning '{cand.CapabilityId}'",
+            Rationale = $"Discovered: a person keeps changing {cand.CapabilityId} on \"{device}\" "
+                + $"({cand.Samples} settings, spread ±{cand.OverallStdDev}) and {cand.ExplainedByTime:P0} of that "
+                + "tracks the time of day — too varied for one schedule, but a model can learn it. "
+                + "Approving creates the training task; tune its window/limits on the ML page.",
+            Source = "discovery",
+            MlTaskTarget = cand.CapabilityId,
+            Evidence = new Dictionary<string, double>
+            {
+                ["samples"] = cand.Samples,
+                ["stdDev"] = cand.OverallStdDev,
+                ["explained"] = cand.ExplainedByTime,
+                ["windowDays"] = _options.DiscoveryWindowDays,
+            },
+        };
     }
 
     // ----- Type-B setpoint-preference proposals (Epic 2F) -----

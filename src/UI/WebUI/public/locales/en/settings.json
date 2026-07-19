@@ -37,6 +37,38 @@
       "mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri", "sat": "Sat", "sun": "Sun"
     }
   },
+  "backups": {
+    "title": "Backups",
+    "caption": "A full home backup in one archive: devices, rules, history, ML models, dashboards and plugin settings. Restoring returns the home to the bundle's state and restarts the services. The Zigbee radio network (coordinator) is backed up separately — see the documentation.",
+    "auto": "Automatic daily backup",
+    "time": "Time",
+    "keep": "Copies to keep",
+    "save": "Save schedule",
+    "saved": "Backup schedule saved.",
+    "lastRun": "Last backup: {{time}} — ok ({{file}}).",
+    "lastRunError": "Last backup at {{time}} failed: {{error}}",
+    "lastRunNever": "No backups yet.",
+    "runNow": "Back up now",
+    "ran": "Backup created: {{file}}",
+    "upload": "Upload a bundle",
+    "uploaded": "Bundle uploaded: {{file}}. You can now restore it from the list.",
+    "list": "Copies",
+    "empty": "No copies yet.",
+    "download": "Download",
+    "restore": "Restore",
+    "delete": "Delete",
+    "restoreConfirm": "Restore the home from {{file}}? Current data will be replaced and all services will restart.",
+    "restored": "Restored {{file}} ({{documents}} records). Services are restarting…",
+    "deleteConfirm": "Delete backup {{file}}?",
+    "invalid": "corrupt bundle",
+    "reason": {
+      "manual": "manual",
+      "scheduled": "scheduled",
+      "upload": "uploaded"
+    },
+    "busy": "A backup or restore is already running — try again shortly.",
+    "error": "The backup operation failed."
+  },
   "appearance": {
     "title": "Appearance",
     "caption": "Language, theme and light/dark mode."

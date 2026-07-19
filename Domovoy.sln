@@ -29,11 +29,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domovoy.Connectivity", "src
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Arduino", "Arduino", "{0A027ED1-C33C-4E0E-A4EB-A2617727265D}"
 	ProjectSection(SolutionItems) = preProject
-		Arduino\libraries\DomovoyClient\DomovoyClient.cpp = Arduino\libraries\DomovoyClient\DomovoyClient.cpp
 		Arduino\libraries\DomovoyClient\DomovoyClient.h = Arduino\libraries\DomovoyClient\DomovoyClient.h
 		Arduino\DomovoyMegaGateway.ino = Arduino\DomovoyMegaGateway.ino
 		Arduino\libraries\DomovoyClient\library.properties = Arduino\libraries\DomovoyClient\library.properties
 		Arduino\examples\SimpleLed\SimpleLed.ino = Arduino\examples\SimpleLed\SimpleLed.ino
+		Arduino\house\README.md = Arduino\house\README.md
+		Arduino\house\HouseMega\HouseMega.ino = Arduino\house\HouseMega\HouseMega.ino
+		Arduino\house\HouseDimmer\HouseDimmer.ino = Arduino\house\HouseDimmer\HouseDimmer.ino
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "UI", "UI", "{9BFBBFD9-BBC9-4B99-A9C1-DB7385258927}"

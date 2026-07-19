@@ -7,7 +7,7 @@ import apiClient from './client';
 export type RuleStatus = 'Proposed' | 'Approved' | 'Active' | 'Disabled' | 'Shadow' | 'BoundedActive';
 export type TriggerType = 'DeviceState' | 'Time' | 'Sun';
 export type ConditionType = 'DeviceState' | 'TimeOfDay' | 'Sun' | 'Mode';
-export type ActionType = 'Command' | 'Delay' | 'Notify';
+export type ActionType = 'Command' | 'Delay' | 'Notify' | 'Scene';
 export type SunEvent = 'Sunrise' | 'Sunset';
 
 export interface RuleTrigger {
@@ -41,6 +41,8 @@ export interface RuleAction {
   set?: Record<string, unknown> | null;
   delaySeconds?: number;
   message?: string | null;
+  /** Scene action (Epic 3B): id of the scene to activate. */
+  sceneId?: string | null;
 }
 
 /** Automation rule (matches Domovoy.Contracts AutomationRule, Epic 1A). */

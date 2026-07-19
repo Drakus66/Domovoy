@@ -16,10 +16,11 @@ import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import BadgeRoundedIcon from '@mui/icons-material/BadgeRounded';
 import LockRoundedIcon from '@mui/icons-material/LockRounded';
+import KeyRoundedIcon from '@mui/icons-material/KeyRounded';
 import { securityApi, Role, RoleInput, User, UserInput } from '../api/security';
 
 const EMPTY_ROLE: RoleInput = { name: '', description: '', permissions: [] };
-const EMPTY_USER: UserInput = { displayName: '', email: '', roleIds: [], enabled: true };
+const EMPTY_USER: UserInput = { displayName: '', email: '', username: '', roleIds: [], enabled: true };
 
 export default function Users() {
   const { t } = useTranslation('users');
@@ -47,6 +48,11 @@ export default function Users() {
   const [roleDraft, setRoleDraft] = useState<RoleInput | null>(null);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
 
+  // Admin set/reset of a user's login password.
+  const [pwUser, setPwUser] = useState<User | null>(null);
+  const [pwValue, setPwValue] = useState('');
+  const [pwError, setPwError] = useState<string | null>(null);
+
   const fetchAll = useCallback(async () => {
     setError(null);
     try {
@@ -73,7 +79,7 @@ export default function Users() {
   const openCreateUser = () => { setEditingUser(null); setUserDraft({ ...EMPTY_USER }); };
   const openEditUser = (u: User) => {
     setEditingUser(u);
-    setUserDraft({ displayName: u.displayName, email: u.email ?? '', roleIds: [...u.roleIds], enabled: u.enabled });
+    setUserDraft({ displayName: u.displayName, email: u.email ?? '', username: u.username ?? '', roleIds: [...u.roleIds], enabled: u.enabled });
   };
   const closeUser = () => { setUserDraft(null); setEditingUser(null); };
   const saveUser = async () => {
@@ -93,6 +99,18 @@ export default function Users() {
     if (!userDraft) return;
     const has = userDraft.roleIds.includes(id);
     setUserDraft({ ...userDraft, roleIds: has ? userDraft.roleIds.filter((x) => x !== id) : [...userDraft.roleIds, id] });
+  };
+
+  // --- set-password dialog ---
+  const openPassword = (u: User) => { setPwUser(u); setPwValue(''); setPwError(null); };
+  const closePassword = () => { setPwUser(null); setPwValue(''); setPwError(null); };
+  const savePassword = async () => {
+    if (!pwUser) return;
+    if (pwValue.length < 8) { setPwError(t('passwordDialog.tooShort')); return; }
+    try {
+      await securityApi.setUserPassword(pwUser.id, pwValue);
+      closePassword();
+    } catch { setPwError(t('passwordDialog.error')); }
   };
 
   // --- role dialog ---
@@ -165,6 +183,9 @@ export default function Users() {
                       <Box flex={1} minWidth={0}>
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                           <Typography fontWeight={700}>{u.displayName}</Typography>
+                          {u.username && (
+                            <Chip size="small" icon={<KeyRoundedIcon sx={{ fontSize: 14 }} />} label={u.username} variant="outlined" />
+                          )}
                           {!u.enabled && <Chip size="small" label={t('disabled')} color="default" variant="outlined" />}
                           {u.roleIds.map((rid) => (
                             <Chip key={rid} size="small" label={roleName.get(rid) ?? rid} variant="outlined" />
@@ -175,6 +196,9 @@ export default function Users() {
                         </Stack>
                         {u.email && <Typography variant="body2" color="text.secondary" noWrap>{u.email}</Typography>}
                       </Box>
+                      <Tooltip title={t('passwordDialog.action')}>
+                        <span><IconButton onClick={() => openPassword(u)} disabled={!u.username}><KeyRoundedIcon /></IconButton></span>
+                      </Tooltip>
                       <Tooltip title={t('actions.edit')}><IconButton onClick={() => openEditUser(u)}><EditRoundedIcon /></IconButton></Tooltip>
                       <Tooltip title={t('actions.delete')}><IconButton onClick={() => removeUser(u)}><DeleteOutlineRoundedIcon /></IconButton></Tooltip>
                     </CardContent>
@@ -235,6 +259,11 @@ export default function Users() {
               <TextField
                 label={t('userDialog.displayName')} value={userDraft.displayName} autoFocus required fullWidth
                 onChange={(e) => setUserDraft({ ...userDraft, displayName: e.target.value })}
+              />
+              <TextField
+                label={t('userDialog.username')} value={userDraft.username ?? ''} fullWidth
+                helperText={t('userDialog.usernameHelp')}
+                onChange={(e) => setUserDraft({ ...userDraft, username: e.target.value })}
               />
               <TextField
                 label={t('userDialog.email')} value={userDraft.email ?? ''} fullWidth
@@ -307,6 +336,24 @@ export default function Users() {
         <DialogActions>
           <Button onClick={closeRole}>{t('actions.cancel')}</Button>
           <Button variant="contained" onClick={saveRole} disabled={!roleDraft?.name.trim()}>{t('actions.save')}</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Set-password dialog (admin reset) */}
+      <Dialog open={pwUser !== null} onClose={closePassword} fullWidth maxWidth="xs">
+        <DialogTitle>{t('passwordDialog.title', { name: pwUser?.displayName ?? '' })}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} mt={1}>
+            {pwError && <Alert severity="error">{pwError}</Alert>}
+            <TextField
+              label={t('passwordDialog.new')} type="password" value={pwValue} autoFocus fullWidth
+              autoComplete="new-password" onChange={(e) => setPwValue(e.target.value)}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closePassword}>{t('actions.cancel')}</Button>
+          <Button variant="contained" onClick={savePassword} disabled={pwValue.length < 8}>{t('passwordDialog.submit')}</Button>
         </DialogActions>
       </Dialog>
     </Container>

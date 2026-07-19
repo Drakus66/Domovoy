@@ -40,6 +40,7 @@ internal static class Program
             // Bus connection for the plugin-settings channel (schema in, effective values out — applied live).
             builder.Services.Configure<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMQ"));
             builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
+            builder.Services.AddSystemControl("plugin-supervisor"); // UI-issued restart (self-stop → restart policy)
             builder.Services.AddSingleton<PluginSettingsRegistry>();
             builder.Services.AddHostedService(sp => sp.GetRequiredService<PluginSettingsRegistry>());
 

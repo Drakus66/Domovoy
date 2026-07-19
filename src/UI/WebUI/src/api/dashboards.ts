@@ -8,14 +8,14 @@ import apiClient from './client';
  * Custom dashboard tabs on the main page (custom dashboards epic). Matches the DbGateway
  * DashboardDocument model. One household — no per-user scoping until auth lands in Phase 3.
  */
-export type DashboardItemType = 'device' | 'capability' | 'chart' | 'modes';
+export type DashboardItemType = 'device' | 'capability' | 'chart' | 'modes' | 'scene';
 
 export interface DashboardItem {
   type: DashboardItemType;
   deviceId?: string | null;
   /** Capability id for `capability`/`chart` items. */
   capabilityId?: string | null;
-  /** Per-type extras (chart: hours, bucket). */
+  /** Per-type extras (chart: hours, bucket; scene: sceneId). */
   params?: Record<string, unknown> | null;
 }
 

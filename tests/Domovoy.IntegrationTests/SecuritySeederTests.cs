@@ -6,6 +6,7 @@ using Domovoy.Contracts.Security;
 using Domovoy.DbGateway.Endpoints;
 using Domovoy.DbGateway.Services;
 
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using MongoDB.Driver;
@@ -34,7 +35,7 @@ public sealed class SecuritySeederTests
     public async Task Seeder_IsIdempotent_AndDoesNotClobberEdits()
     {
         // Isolate from other tests sharing the collection: run the seeder, then narrow assertions to the built-in ids.
-        var seeder = new SecuritySeeder(_fx.Db, NullLogger<SecuritySeeder>.Instance);
+        var seeder = new SecuritySeeder(_fx.Db, NullLogger<SecuritySeeder>.Instance, EmptyConfig());
         await seeder.StartAsync(default);
 
         var builtInIds = SecuritySeeder.BuiltInRoles.Select(r => r.Id).ToList();
@@ -73,4 +74,7 @@ public sealed class SecuritySeederTests
         Assert.Equal(new[] { "resident", "guest" }, stored.RoleIds);
         Assert.False(stored.Enabled);
     }
+
+    private static IConfiguration EmptyConfig() =>
+        new ConfigurationBuilder().AddInMemoryCollection().Build();
 }

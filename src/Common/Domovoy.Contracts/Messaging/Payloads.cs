@@ -40,6 +40,17 @@ public sealed record DeviceOnlineChangedV1(
     bool IsOnline);
 
 /// <summary>
+/// An operator request to restart a service (or all of them) from the UI. Each .NET service listens; when the
+/// target matches its own name (or <c>"all"</c>) it stops gracefully, and the container restart policy
+/// (<c>restart: unless-stopped</c>) brings it back — no privileged Docker access needed. Container-level control
+/// of arbitrary/infra containers is a separate, opt-in path (Docker socket).
+/// </summary>
+/// <remarks>Envelope type: <see cref="MessageTypes.SystemControl"/>.</remarks>
+public sealed record SystemControlV1(
+    string Target,   // a service name (matches the container/compose name) or "all"
+    string Action);  // "restart" (the only action a service can perform on itself)
+
+/// <summary>
 /// An automation rule fired (roadmap Epic 1A). Emitted by the AutomationService after evaluating a
 /// rule so the DbGateway can persist run history (AutoHistory) and the UI can show "why" (Epic 1F).
 /// </summary>
@@ -72,6 +83,22 @@ public sealed record BlockTriggeredV1(
     bool Ok,
     string Summary,
     string? Detail = null);
+
+/// <summary>
+/// A user-facing notification was raised (2M.2 LAN channel + off-LAN push, Epic 2O.4). Published by the
+/// AutomationService's SignalR notification channel; the ApiGateway relays it to connected clients over the
+/// DeviceHub (the in-app banner while the client is in LAN / open), and the ntfy channel forwards it to a
+/// self-hosted push server for delivery when the phone is asleep / off-LAN. <see cref="Severity"/> is
+/// info/warning/critical (drives banner colour + push priority); <see cref="Category"/> is the optional
+/// reactive/proactive/optimization taxonomy that Epic 3F (notification discipline) will route per-type.
+/// </summary>
+/// <remarks>Envelope type: <see cref="MessageTypes.NotificationRaised"/>.</remarks>
+public sealed record NotificationRaisedV1(
+    string Title,
+    string Body,
+    string Severity,
+    DateTimeOffset RaisedAt,
+    string? Category = null);
 
 /// <summary>
 /// The home mode changed (roadmap Epic 1G). Published by the DbGateway (the persistence authority for

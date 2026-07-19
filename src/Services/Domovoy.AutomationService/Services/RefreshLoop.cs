@@ -17,6 +17,7 @@ namespace Domovoy.AutomationService.Services;
 public sealed class RefreshLoop : BackgroundService
 {
     private readonly RuleStore _store;
+    private readonly SceneStore _scenes;
     private readonly BlockStore _blocks;
     private readonly DeviceRegistry _registry;
     private readonly DbGatewayClient _db;
@@ -28,11 +29,12 @@ public sealed class RefreshLoop : BackgroundService
     private readonly ILogger<RefreshLoop> _logger;
 
     public RefreshLoop(
-        RuleStore store, BlockStore blocks, DeviceRegistry registry, DbGatewayClient db, HomeModeState mode,
+        RuleStore store, SceneStore scenes, BlockStore blocks, DeviceRegistry registry, DbGatewayClient db, HomeModeState mode,
         SunCalculator sun, SiteContext site, CalendarContext calendar,
         IOptions<AutomationOptions> options, ILogger<RefreshLoop> logger)
     {
         _store = store;
+        _scenes = scenes;
         _blocks = blocks;
         _registry = registry;
         _db = db;
@@ -50,6 +52,7 @@ public sealed class RefreshLoop : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             await _store.RefreshAsync(stoppingToken);
+            await _scenes.RefreshAsync(stoppingToken);
             await _blocks.RefreshAsync(stoppingToken);
             await RefreshDevices(stoppingToken);
             await RefreshMode(stoppingToken);

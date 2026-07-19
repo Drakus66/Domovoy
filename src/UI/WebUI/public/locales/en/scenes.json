@@ -1,0 +1,52 @@
+{
+  "title": "Scenes",
+  "subtitle": "Named snapshots of device states — activate a whole room with one tap",
+  "deviceCount_one": "{{count}} device",
+  "deviceCount_other": "{{count}} devices",
+  "unknownDevice": "Unknown device",
+  "actions": {
+    "newScene": "New scene",
+    "activate": "Activate",
+    "edit": "Edit",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "create": "Create",
+    "save": "Save",
+    "capture": "Capture devices"
+  },
+  "errors": {
+    "load": "Failed to load scenes",
+    "create": "Failed to create scene",
+    "update": "Failed to save changes",
+    "delete": "Failed to delete scene",
+    "activate": "Failed to activate scene"
+  },
+  "confirm": {
+    "delete": "Delete scene \"{{name}}\"?"
+  },
+  "empty": {
+    "none": "No scenes yet. Capture the current state of a few devices into a scene, then activate it with one tap.",
+    "noTargets": "No devices"
+  },
+  "toast": {
+    "activated": "Scene \"{{name}}\" activated"
+  },
+  "dialog": {
+    "createTitle": "New scene",
+    "editTitle": "Edit scene",
+    "name": "Name",
+    "description": "Description",
+    "targets": "Devices in this scene",
+    "targetsHint": "Editing values here never touches your home — only Activate sends commands.",
+    "noTargets": "No devices yet. Use \"Capture devices\" to snapshot their current state, then fine-tune the values.",
+    "noValues": "No values",
+    "addCapability": "Add a capability"
+  },
+  "capture": {
+    "title": "Capture current state",
+    "subtitle": "Pick devices — their current writable state is snapshotted into the scene. You can edit the values afterwards.",
+    "search": "Search devices…",
+    "none": "No controllable devices found",
+    "add": "Add ({{count}})"
+  }
+}

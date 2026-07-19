@@ -80,9 +80,11 @@ export default function DashboardEditorDialog({
   const itemPrimary = (item: DashboardItem) =>
     item.type === 'modes'
       ? t('widgets.modes')
-      : item.capabilityId
-        ? `${deviceName(item.deviceId)} · ${capabilityLabel(item.capabilityId)}`
-        : deviceName(item.deviceId);
+      : item.type === 'scene'
+        ? t('widgets.scene')
+        : item.capabilityId
+          ? `${deviceName(item.deviceId)} · ${capabilityLabel(item.capabilityId)}`
+          : deviceName(item.deviceId);
 
   const save = async () => {
     setSaving(true);

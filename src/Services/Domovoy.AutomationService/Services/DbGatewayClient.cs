@@ -10,6 +10,7 @@ using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Blocks;
 using Domovoy.Contracts.Ml;
 using Domovoy.Contracts.Proposals;
+using Domovoy.Contracts.Scenes;
 
 namespace Domovoy.AutomationService.Services;
 
@@ -40,6 +41,20 @@ public sealed class DbGatewayClient
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not load user rules from DbGateway");
+            return null;
+        }
+    }
+
+    /// <summary>Stored scenes (Epic 3B) so the <c>scene</c> rule action can resolve targets; null if unreachable.</summary>
+    public async Task<List<Scene>?> GetScenesAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<List<Scene>>("api/scenes", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load scenes from DbGateway");
             return null;
         }
     }

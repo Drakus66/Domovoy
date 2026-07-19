@@ -1,0 +1,34 @@
+# Domovoy edge TLS (mobile-app / remote-access track, Этап 3a).
+# Single public entry on :443 in front of the WebUI nginx. Auto-HTTPS (Let's Encrypt), HSTS, and it is the one
+# TLS endpoint used by BOTH remote paths: the IPv6-direct firewall pinhole points here, and the SSH reverse
+# tunnel forwards to here (see deploy/autossh + docs/mobile_app_remote_access_ru.md).
+#
+# DOMOVOY_DOMAIN is your home's hostname (the AAAA record for IPv6-direct, and the SNI the VPS proxies).
+# ACME_EMAIL is where Let's Encrypt sends expiry notices.
+
+{
+	email {$ACME_EMAIL}
+	# Uncomment to test against the staging CA (higher rate limits) before going live:
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+{$DOMOVOY_DOMAIN} {
+	encode zstd gzip
+
+	# HSTS: once a browser has seen this, it refuses plain HTTP to the host for a year. Only enable when you're
+	# sure the domain is always HTTPS (it is, behind Caddy).
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# The WebUI nginx already proxies /api and /hub to the ApiGateway and serves the SPA; Caddy just fronts it
+	# with TLS. Passing through as one origin keeps the app same-origin (no CORS) end to end.
+	reverse_proxy webui:80 {
+		# Preserve the WebSocket upgrade for SignalR (/hub/*) — Caddy handles this automatically, listed for clarity.
+		header_up X-Forwarded-Proto https
+	}
+}

@@ -2,12 +2,12 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { ReactNode, useCallback, useEffect, useState } from 'react';
+import { ChangeEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Container, Box, Typography, Stack, Button, TextField, Card, CardContent, CardActionArea, Collapse, Alert,
-  LinearProgress, Switch, FormControlLabel, List, ListItemButton, ListItemText, InputAdornment, IconButton,
-  Chip, ToggleButton, ToggleButtonGroup,
+  LinearProgress, Switch, FormControlLabel, List, ListItem, ListItemButton, ListItemText, InputAdornment,
+  IconButton, Chip, ToggleButton, ToggleButtonGroup,
 } from '@mui/material';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
@@ -18,9 +18,16 @@ import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
+import BackupRoundedIcon from '@mui/icons-material/BackupRounded';
+import RestoreRoundedIcon from '@mui/icons-material/RestoreRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
+import TabletMacRoundedIcon from '@mui/icons-material/TabletMacRounded';
 import { settingsApi, GeocodeResult } from '../api/settings';
 import { securityApi, User } from '../api/security';
+import { backupsApi, BackupListItem, BackupSettings } from '../api/backups';
 import { getCurrentUserId, setCurrentUserId } from '../api/currentUser';
+import KioskSettings from '../components/kiosk/KioskSettings';
 
 // A collapsible settings card. Collapsed by default so a long section (e.g. the location
 // map) doesn't dominate the page — the header stays a compact, clickable summary row.
@@ -54,6 +61,13 @@ function Section({
   );
 }
 
+function formatBytes(n: number): string {
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`;
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
+}
+
 // Weekday toggles, ordered Mon→Sun; values are System.DayOfWeek ints (0=Sun…6=Sat), matching the backend.
 const WEEKDAYS: { value: number; key: string }[] = [
   { value: 1, key: 'mon' }, { value: 2, key: 'tue' }, { value: 3, key: 'wed' },
@@ -66,6 +80,7 @@ import LanguagePicker from '../components/i18n/LanguagePicker';
 
 export default function Settings() {
   const { t } = useTranslation('settings');
+  const { t: tk } = useTranslation('kiosk');
 
   const [lat, setLat] = useState(55.7558);
   const [lon, setLon] = useState(37.6173);
@@ -97,10 +112,118 @@ export default function Settings() {
   const [calendarSaved, setCalendarSaved] = useState(false);
   const [importing, setImporting] = useState(false);
 
+  // Backups (Epic 3A): schedule/retention + the bundle list.
+  const [backupEnabled, setBackupEnabled] = useState(true);
+  const [backupTime, setBackupTime] = useState('03:30');
+  const [backupKeep, setBackupKeep] = useState(7);
+  const [backupStatus, setBackupStatus] = useState<BackupSettings | null>(null);
+  const [backups, setBackups] = useState<BackupListItem[]>([]);
+  const [backupSaving, setBackupSaving] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupNotice, setBackupNotice] = useState<string | null>(null);
+
   // Local users (Epic 2E model) for the self-declaration picker.
   useEffect(() => {
     securityApi.getUsers().then(setUsers).catch(() => setUsers([]));
   }, []);
+
+  const loadBackups = useCallback(() => {
+    backupsApi
+      .getSettings()
+      .then((s) => {
+        setBackupEnabled(s.enabled);
+        setBackupTime(s.time);
+        setBackupKeep(s.keepCount);
+        setBackupStatus(s);
+      })
+      .catch(() => { /* section still renders with defaults */ });
+    backupsApi.list().then(setBackups).catch(() => setBackups([]));
+  }, []);
+
+  useEffect(() => { loadBackups(); }, [loadBackups]);
+
+  const backupErrorOf = (e: unknown) =>
+    (e as { response?: { status?: number } })?.response?.status === 409
+      ? t('backups.busy')
+      : t('backups.error');
+
+  const saveBackupSettings = async () => {
+    setBackupSaving(true); setError(null); setBackupNotice(null);
+    try {
+      const s = await backupsApi.saveSettings({ enabled: backupEnabled, time: backupTime, keepCount: backupKeep });
+      setBackupStatus(s);
+      setBackupNotice(t('backups.saved'));
+    } catch {
+      setError(t('errors.save'));
+    } finally {
+      setBackupSaving(false);
+    }
+  };
+
+  const runBackup = async () => {
+    setBackupBusy(true); setError(null); setBackupNotice(null);
+    try {
+      const r = await backupsApi.runNow();
+      setBackupNotice(t('backups.ran', { file: r.file }));
+      loadBackups();
+    } catch (e) {
+      setError(backupErrorOf(e));
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const restoreBackup = async (file: string) => {
+    if (!window.confirm(t('backups.restoreConfirm', { file }))) return;
+    setBackupBusy(true); setError(null); setBackupNotice(null);
+    try {
+      const r = await backupsApi.restore(file);
+      setBackupNotice(t('backups.restored', { file, documents: r.documents }));
+    } catch (e) {
+      setError(backupErrorOf(e));
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const deleteBackup = async (file: string) => {
+    if (!window.confirm(t('backups.deleteConfirm', { file }))) return;
+    setError(null); setBackupNotice(null);
+    try {
+      await backupsApi.remove(file);
+      loadBackups();
+    } catch {
+      setError(t('backups.error'));
+    }
+  };
+
+  const uploadBackup = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBackupBusy(true); setError(null); setBackupNotice(null);
+    try {
+      const r = await backupsApi.upload(file);
+      setBackupNotice(t('backups.uploaded', { file: r.file }));
+      loadBackups();
+    } catch (err) {
+      setError(backupErrorOf(err));
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const backupLastRunText = !backupStatus?.lastRunAt
+    ? t('backups.lastRunNever')
+    : backupStatus.lastResult === 'error'
+      ? t('backups.lastRunError', {
+          time: new Date(backupStatus.lastRunAt).toLocaleString(),
+          error: backupStatus.lastError ?? '',
+        })
+      : t('backups.lastRun', {
+          time: new Date(backupStatus.lastRunAt).toLocaleString(),
+          file: backupStatus.lastFile ?? '',
+        });
 
   const pickUser = (id: string) => {
     setCurrentUser(id);
@@ -421,6 +544,121 @@ export default function Settings() {
             </Box>
         </Section>
 
+        {/* ── Backups (Epic 3A) ────────────────────────────────────── */}
+        <Section icon={<BackupRoundedIcon color="primary" />} title={t('backups.title')} caption={t('backups.caption')}>
+          {backupNotice && (
+            <Alert severity="success" sx={{ mb: 2 }} onClose={() => setBackupNotice(null)}>{backupNotice}</Alert>
+          )}
+
+          {/* Schedule + retention */}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
+            <FormControlLabel
+              control={<Switch checked={backupEnabled} onChange={(e) => setBackupEnabled(e.target.checked)} />}
+              label={t('backups.auto')}
+            />
+            <TextField
+              type="time"
+              size="small"
+              label={t('backups.time')}
+              value={backupTime}
+              onChange={(e) => setBackupTime(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              sx={{ width: 130 }}
+            />
+            <TextField
+              type="number"
+              size="small"
+              label={t('backups.keep')}
+              value={backupKeep}
+              onChange={(e) => setBackupKeep(Number(e.target.value))}
+              inputProps={{ min: 1, max: 365 }}
+              sx={{ width: 130 }}
+            />
+            <Box sx={{ flex: 1 }} />
+            <Button
+              variant="outlined"
+              startIcon={<SaveRoundedIcon />}
+              onClick={saveBackupSettings}
+              disabled={backupSaving || !backupTime || backupKeep < 1}
+            >
+              {t('backups.save')}
+            </Button>
+          </Stack>
+          <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+            {backupLastRunText}
+          </Typography>
+
+          {/* Manual run + host-migration upload */}
+          <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap" useFlexGap>
+            <Button
+              variant="contained"
+              startIcon={<BackupRoundedIcon />}
+              onClick={runBackup}
+              disabled={backupBusy}
+            >
+              {t('backups.runNow')}
+            </Button>
+            <Button variant="outlined" component="label" startIcon={<UploadFileRoundedIcon />} disabled={backupBusy}>
+              {t('backups.upload')}
+              <input type="file" accept=".zip" hidden onChange={uploadBackup} />
+            </Button>
+          </Stack>
+          {backupBusy && <LinearProgress sx={{ mt: 1, borderRadius: 1 }} />}
+
+          {/* Bundle list */}
+          <Typography variant="body2" fontWeight={600} mt={2.5} mb={1}>{t('backups.list')}</Typography>
+          {backups.length === 0 ? (
+            <Typography variant="caption" color="text.secondary" display="block">{t('backups.empty')}</Typography>
+          ) : (
+            <List dense sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+              {backups.map((b) => (
+                <ListItem
+                  key={b.fileName}
+                  secondaryAction={
+                    <Stack direction="row" spacing={0.5}>
+                      <IconButton
+                        component="a"
+                        href={backupsApi.downloadUrl(b.fileName)}
+                        aria-label={t('backups.download')}
+                        size="small"
+                      >
+                        <DownloadRoundedIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        onClick={() => restoreBackup(b.fileName)}
+                        aria-label={t('backups.restore')}
+                        size="small"
+                        disabled={backupBusy || !b.valid}
+                      >
+                        <RestoreRoundedIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        onClick={() => deleteBackup(b.fileName)}
+                        aria-label={t('backups.delete')}
+                        size="small"
+                        disabled={backupBusy}
+                      >
+                        <DeleteOutlineRoundedIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                  }
+                >
+                  <ListItemText
+                    primary={b.fileName}
+                    secondary={[
+                      new Date(b.createdAt).toLocaleString(),
+                      formatBytes(b.sizeBytes),
+                      b.reason ? t(`backups.reason.${b.reason}`, { defaultValue: b.reason }) : null,
+                      b.valid ? null : t('backups.invalid'),
+                    ].filter(Boolean).join(' · ')}
+                    primaryTypographyProps={{ variant: 'body2', sx: { wordBreak: 'break-all', pr: 10 } }}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </Section>
+
         {/* ── Who am I (self-declared attribution, not auth) ────────── */}
         <Section icon={<PersonRoundedIcon color="primary" />} title={t('whoami.title')} caption={t('whoami.caption')}>
           <TextField
@@ -445,6 +683,10 @@ export default function Settings() {
               <ThemePicker />
               <ColorModeToggle />
             </Stack>
+        </Section>
+
+        <Section icon={<TabletMacRoundedIcon color="primary" />} title={tk('title')} caption={tk('caption')}>
+          <KioskSettings />
         </Section>
       </Box>
     </Container>

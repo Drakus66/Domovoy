@@ -9,6 +9,7 @@ import {
   LogLevel,
   RetryContext,
 } from '@microsoft/signalr';
+import { getAccessToken } from './auth';
 
 // Strip a trailing slash so a relative base of '/' yields '/hub/devices', not '//hub/devices'
 // (a '//…' URL is protocol-relative and would resolve the host as 'hub').
@@ -28,7 +29,10 @@ const reconnectPolicy: IRetryPolicy = {
 /** Build the device-hub connection with indefinite, capped-backoff automatic reconnect. */
 export function buildDeviceHubConnection(): HubConnection {
   return new HubConnectionBuilder()
-    .withUrl(HUB_URL)
+    // A WebSocket can't carry an Authorization header, so SignalR sends the token as ?access_token= on /hub/*;
+    // the gateway lifts it back out (JwtBearerEvents.OnMessageReceived). accessTokenFactory is re-invoked on each
+    // (re)connect, so a token refreshed mid-session is picked up automatically. Empty when auth is off.
+    .withUrl(HUB_URL, { accessTokenFactory: () => getAccessToken() ?? '' })
     .withAutomaticReconnect(reconnectPolicy)
     .configureLogging(LogLevel.Warning)
     .build();

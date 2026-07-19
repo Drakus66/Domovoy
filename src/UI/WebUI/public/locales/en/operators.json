@@ -1,0 +1,42 @@
+{
+  "value": {
+    "eq": "equals (=)",
+    "ne": "not equal (≠)",
+    "gt": "greater than (>)",
+    "lt": "less than (<)",
+    "gte": "at least (≥)",
+    "lte": "at most (≤)",
+    "changed": "changed",
+    "and": "AND — all inputs true",
+    "or": "OR — any input true",
+    "xor": "exclusive OR",
+    "nand": "NAND",
+    "nor": "NOR",
+    "min": "minimum",
+    "max": "maximum",
+    "sum": "sum",
+    "avg": "average",
+    "rising": "rising edge (0→1)",
+    "falling": "falling edge (1→0)",
+    "both": "either edge",
+    "set": "set wins",
+    "reset": "reset wins",
+    "manual": "manual (kp/ki/kd)",
+    "gentle": "gentle — smooth, slow",
+    "balanced": "balanced",
+    "responsive": "responsive — fast, may overshoot",
+    "eco": "eco — energy-biased",
+    "autotune": "autotune (relay test)"
+  },
+  "name": {
+    "op": "Operator",
+    "preset": "Tuning profile",
+    "type": "Type",
+    "priority": "Priority",
+    "invert": "Invert result",
+    "script": "Script",
+    "target": "Target capability",
+    "homeMode": "Home mode",
+    "awayMode": "Away mode"
+  }
+}

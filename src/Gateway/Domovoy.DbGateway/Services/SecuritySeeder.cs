@@ -10,21 +10,23 @@ using MongoDB.Driver;
 namespace Domovoy.DbGateway.Services;
 
 /// <summary>
-/// Seeds the three built-in roles (roadmap Epic 2E) so the roles model is usable out of the box. Idempotent:
-/// a built-in role is inserted only when absent, so operator edits to its permissions are never clobbered on
-/// restart (mirrors how <see cref="EventInterceptor"/> leaves an existing zone assignment alone). Runs once on
-/// startup as a hosted service. <b>No enforcement</b> — this only populates the model; gating requests on these
-/// permissions is Phase 3 (local auth).
+/// Seeds the three built-in roles (roadmap Epic 2E) so the roles model is usable out of the box, and — now that
+/// authentication is enforced (mobile-app / remote-access track) — bootstraps an initial <c>admin</c> login user
+/// so the household can actually sign in on first run. Idempotent: a built-in role is inserted only when absent
+/// (operator edits are never clobbered), and the admin user is created only when the collection has no users at
+/// all, so it never resurrects a deleted account or overwrites a changed password.
 /// </summary>
 public sealed class SecuritySeeder : IHostedService
 {
     private readonly IMongoDatabase _db;
     private readonly ILogger<SecuritySeeder> _logger;
+    private readonly IConfiguration _config;
 
-    public SecuritySeeder(IMongoDatabase db, ILogger<SecuritySeeder> logger)
+    public SecuritySeeder(IMongoDatabase db, ILogger<SecuritySeeder> logger, IConfiguration config)
     {
         _db = db;
         _logger = logger;
+        _config = config;
     }
 
     /// <summary>
@@ -68,6 +70,18 @@ public sealed class SecuritySeeder : IHostedService
             IsBuiltIn = true,
             Permissions = new List<string> { WellKnownPermissions.DevicesView },
         },
+        new Role
+        {
+            Id = "kiosk",
+            Name = "Kiosk panel",
+            Description = "A wall panel: view and control devices from its dashboard, nothing else (Epic 2O.2).",
+            IsBuiltIn = true,
+            Permissions = new List<string>
+            {
+                WellKnownPermissions.DevicesView,
+                WellKnownPermissions.DevicesControl,
+            },
+        },
     };
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -87,12 +101,50 @@ public sealed class SecuritySeeder : IHostedService
                 await roles.InsertOneAsync(role, cancellationToken: cancellationToken);
                 _logger.LogInformation("Seeded built-in role {RoleId}", role.Id);
             }
+
+            await SeedAdminUserAsync(cancellationToken);
         }
         catch (Exception ex)
         {
             // Best-effort: a missing Mongo at startup must not crash the gateway (offline-first).
-            _logger.LogWarning(ex, "Could not seed built-in roles");
+            _logger.LogWarning(ex, "Could not seed built-in roles / admin user");
         }
+    }
+
+    /// <summary>
+    /// Create the initial <c>admin</c> login user only when the users collection is empty, so a fresh install can
+    /// sign in. The password comes from <c>Security:BootstrapAdminPassword</c> (env
+    /// <c>SECURITY__BOOTSTRAPADMINPASSWORD</c>); if unset it defaults to <c>admin</c> and we log a loud warning to
+    /// change it before exposing the system. Once any user exists this is a no-op forever.
+    /// </summary>
+    private async Task SeedAdminUserAsync(CancellationToken cancellationToken)
+    {
+        var users = _db.GetCollection<User>(UsersEndpoints.Collection);
+        var anyUser = await users.Find(FilterDefinition<User>.Empty).AnyAsync(cancellationToken);
+        if (anyUser) return;
+
+        var configured = _config["Security:BootstrapAdminPassword"];
+        var password = string.IsNullOrWhiteSpace(configured) ? "admin" : configured;
+
+        var now = DateTime.UtcNow;
+        var admin = new User
+        {
+            Id = Guid.NewGuid().ToString(),
+            Username = "admin",
+            DisplayName = "Administrator",
+            PasswordHash = PasswordHasher.Hash(password),
+            RoleIds = new List<string> { "admin" },
+            Enabled = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        await users.InsertOneAsync(admin, cancellationToken: cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(configured))
+            _logger.LogWarning("Seeded initial admin user with the DEFAULT password 'admin'. " +
+                "Set Security:BootstrapAdminPassword (env SECURITY__BOOTSTRAPADMINPASSWORD) and change it before remote exposure.");
+        else
+            _logger.LogInformation("Seeded initial admin user 'admin' with the configured bootstrap password.");
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

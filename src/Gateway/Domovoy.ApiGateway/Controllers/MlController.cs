@@ -2,6 +2,8 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using Domovoy.Contracts.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Domovoy.ApiGateway.Controllers;
@@ -10,10 +12,11 @@ namespace Domovoy.ApiGateway.Controllers;
 /// Thin reverse proxy for the ML substrate (roadmap Epic 2A; tasks Epic 2P). The model registry and the ML
 /// tasks live in the DbGateway; training, backtest and the data-sufficiency check run on the AutomationService
 /// (which owns the trainer + model loader). The trainer-internal task-status endpoint is deliberately NOT
-/// proxied — only services write training status.
+/// proxied — only services write training status. Gated on <c>models.manage</c>.
 /// </summary>
 [ApiController]
 [Route("api/ml")]
+[Authorize(Policy = WellKnownPermissions.ModelsManage)]
 public class MlController : ControllerBase
 {
     private readonly IHttpClientFactory _httpClientFactory;

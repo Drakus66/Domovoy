@@ -63,11 +63,7 @@ public sealed class EspHomeMqttAdapter : IProtocolAdapter
     {
         _mqttClient = mqttClient;
 
-        var options = new MqttClientSubscribeOptionsBuilder()
-            .WithTopicFilter(DiscoveryPrefix + "#")
-            .WithTopicFilter(StatePrefix + "#")
-            .Build();
-        await _mqttClient.SubscribeAsync(options, token);
+        await SubscribeAsync(mqttClient, token);
 
         // Capability-addressed commands from the bus. Own queue + ignores devices we don't own, like the
         // other adapters, so only the owning adapter acts.
@@ -86,6 +82,16 @@ public sealed class EspHomeMqttAdapter : IProtocolAdapter
     }
 
     public Task StopAsync(CancellationToken token) => Task.CompletedTask;
+
+    /// <summary>(Re)subscribes the ESPHome discovery/state topics; re-run on every reconnect.</summary>
+    public async Task SubscribeAsync(IMqttClient mqttClient, CancellationToken token)
+    {
+        var options = new MqttClientSubscribeOptionsBuilder()
+            .WithTopicFilter(DiscoveryPrefix + "#")
+            .WithTopicFilter(StatePrefix + "#")
+            .Build();
+        await mqttClient.SubscribeAsync(options, token);
+    }
 
     public bool CanHandleTopic(string topic) =>
         topic.StartsWith(DiscoveryPrefix, StringComparison.Ordinal) ||

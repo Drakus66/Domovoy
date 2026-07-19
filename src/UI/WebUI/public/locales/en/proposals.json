@@ -94,6 +94,7 @@
     "coocc": "Over the last {{windowDays}} days this happened {{support}} times: in {{confidence}}% of cases the trigger was followed by this action.",
     "stats": "That is {{lift}}× the base rate (significance p = {{p}}).",
     "setpoint": "You set ≈{{value}} at this time {{support}} times (spread ±{{stdDev}}).",
+    "mlSetpoint": "You changed this setpoint often ({{samples}} times, spread ±{{stdDev}}), and {{explained}}% of those changes track the time of day — too varied for one schedule, but a model can learn it.",
     "mlTask": "{{samples}} records accumulated over {{windowDays}} days (≥ {{required}} needed) — enough history, and a block exists that can consume the model."
   },
   "mlTaskTitle": "Start learning: {{target}}",

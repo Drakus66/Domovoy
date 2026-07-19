@@ -19,7 +19,24 @@ public sealed record CompositeDefinition(
     string Description,
     IReadOnlyList<CompositeInput> Inputs,
     IReadOnlyList<CompositeOutput> Outputs,
-    IReadOnlyList<CompositeNode> Nodes);
+    IReadOnlyList<CompositeNode> Nodes,
+    IReadOnlyList<CompositeParam>? Params = null);
+
+/// <summary>
+/// A composite-level tunable param (roadmap Epic 2Q — <b>parameter passthrough</b>) that surfaces a specific
+/// internal node param on the composite instance, so a ready-made composite can be tuned without editing the
+/// definition. The composite type exposes it as an ordinary <see cref="Domovoy.AutomationService.Blocks.BlockParamSpec"/>;
+/// at tick time the instance's value wins, falling back to <see cref="Default"/> — which the DSL defaults to the
+/// node's authored value, so exposing a param never changes out-of-the-box behaviour. DSL:
+/// <c>param setpoint = h.high default 21.5</c>.
+/// </summary>
+/// <param name="Name">Exposed param name on the composite instance (e.g. <c>setpoint</c>).</param>
+/// <param name="Default">Default value — pre-fills the authoring form and is the tick-time fallback.</param>
+/// <param name="Description">Human description for the authoring form.</param>
+/// <param name="TargetNode">Internal node id whose param this drives.</param>
+/// <param name="TargetParam">The internal node param key this overrides.</param>
+public sealed record CompositeParam(
+    string Name, double Default, string Description, string TargetNode, string TargetParam);
 
 /// <summary>An internal node: an instance of a built-in (primitive) type with fixed params and wired inputs.</summary>
 /// <param name="Id">Node id, unique within the composite (the DSL assigns n0, n1, …).</param>

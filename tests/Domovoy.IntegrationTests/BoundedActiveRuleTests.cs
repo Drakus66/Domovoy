@@ -67,7 +67,11 @@ public sealed class BoundedActiveRuleTests
         var dispatcher = new NotificationDispatcher(
             Array.Empty<INotificationChannel>(), NullLogger<NotificationDispatcher>.Instance);
         var options = Options.Create(new AutomationOptions { BoundedActiveCooldownSeconds = cooldownSeconds });
-        return new ActionExecutor(bus, dispatcher, options, NullLogger<ActionExecutor>.Instance);
+        // Empty scene store (never refreshed) — these tests use Command actions, not scenes.
+        var scenes = new SceneStore(
+            new DbGatewayClient(new HttpClient(), NullLogger<DbGatewayClient>.Instance),
+            NullLogger<SceneStore>.Instance);
+        return new ActionExecutor(bus, dispatcher, scenes, options, NullLogger<ActionExecutor>.Instance);
     }
 
     private static AutomationRule CommandRule(RuleStatus status) => new()

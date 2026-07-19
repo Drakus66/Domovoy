@@ -1,0 +1,105 @@
+/*
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ * Copyright (C) 2025-2026 Ilya Dryagin
+ * Domovoy Android shell launcher styles. Minimal, dark, matches the WebUI brand accent.
+ */
+:root {
+  --bg: #0b0f1a;
+  --card: #141a29;
+  --text: #e7ecf5;
+  --muted: #93a0b8;
+  --accent: #4f46e5;
+  --accent2: #f0a92b;
+  --error: #ef5350;
+  --border: #253049;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, Roboto, "Segoe UI", sans-serif;
+  display: flex;
+}
+
+.wrap {
+  margin: auto;
+  width: 100%;
+  max-width: 420px;
+  padding: 24px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+.brand h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+.logo {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+}
+.card.hidden, .hidden { display: none; }
+
+h2 { margin: 0 0 4px; font-size: 18px; }
+.hint { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 12px 14px;
+  background: #0e1422;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 15px;
+}
+input:focus { outline: none; border-color: var(--accent); }
+
+button {
+  width: 100%;
+  padding: 13px;
+  margin-top: 8px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+button:active { filter: brightness(0.92); }
+
+.error { color: var(--error); font-size: 13px; margin: 4px 0 12px; }
+
+.spinner {
+  width: 34px; height: 34px;
+  margin: 4px auto 16px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+#connecting { text-align: center; }
+#connecting p { color: var(--muted); margin: 0; }
+
+@keyframes spin { to { transform: rotate(360deg); } }

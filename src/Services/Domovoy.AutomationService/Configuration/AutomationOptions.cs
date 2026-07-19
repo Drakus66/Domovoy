@@ -148,6 +148,19 @@ public class AutomationOptions
     /// <summary>Max standard deviation (in the setpoint's unit) for a bucket's settings to count as a stable preference.</summary>
     public double SetpointMaxStdDev { get; set; } = 1.0;
 
+    /// <summary>
+    /// Minimum user-set samples of a setpoint before the ML form of type B (a "learn this setpoint" proposal,
+    /// not a fixed schedule) is considered — a model needs more history than a single scheduled value.
+    /// </summary>
+    public int SetpointModelMinSupport { get; set; } = 12;
+
+    /// <summary>
+    /// Minimum fraction of a setpoint's variance that time-of-day must explain (η², 0–1) for the ML form to fire:
+    /// the settings vary too much for one scheduled value, yet there is genuine temporal structure worth learning
+    /// (not noise). Below this the spread is treated as noise and no ML task is proposed.
+    /// </summary>
+    public double SetpointModelMinExplained { get; set; } = 0.3;
+
     // --- Composite control blocks (roadmap Epic 1H E2) ---
 
     /// <summary>

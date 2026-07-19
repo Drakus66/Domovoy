@@ -25,6 +25,7 @@ public sealed class ActionExecutor
 {
     private readonly IMessageBus _bus;
     private readonly NotificationDispatcher _notifications;
+    private readonly SceneStore _scenes;
     private readonly TimeSpan _boundedCooldown;
     private readonly ILogger<ActionExecutor> _logger;
 
@@ -34,11 +35,12 @@ public sealed class ActionExecutor
     private readonly ConcurrentDictionary<string, DateTimeOffset> _lastFired = new();
 
     public ActionExecutor(
-        IMessageBus bus, NotificationDispatcher notifications,
+        IMessageBus bus, NotificationDispatcher notifications, SceneStore scenes,
         IOptions<AutomationOptions> options, ILogger<ActionExecutor> logger)
     {
         _bus = bus;
         _notifications = notifications;
+        _scenes = scenes;
         _boundedCooldown = TimeSpan.FromSeconds(Math.Max(0, options.Value.BoundedActiveCooldownSeconds));
         _logger = logger;
     }
@@ -100,6 +102,42 @@ public sealed class ActionExecutor
                                     await _bus.PublishAsync(BusTopology.CommandsExchange, BusTopology.DeviceCommandKey, envelope, ct);
                                     executed++;
                                 }
+                            }
+                            break;
+
+                        case ActionType.Scene:
+                            // Activate a stored scene (Epic 3B): fan its per-device targets out as commands,
+                            // exactly like ActionType.Command does per device. Attribution stays with the rule
+                            // (source automation:{ruleId}), so the event-log reads triggerSource=rule.
+                            if (!string.IsNullOrEmpty(action.SceneId) && _scenes.Get(action.SceneId) is { } scene)
+                            {
+                                foreach (var target in scene.Targets)
+                                {
+                                    if (!Guid.TryParse(target.DeviceId, out var sceneDeviceId) || target.Set is not { Count: > 0 })
+                                        continue;
+
+                                    if (shadow)
+                                    {
+                                        _logger.LogInformation("[{Rule}] SHADOW would activate scene '{Scene}' → {Device} ← {Set}",
+                                            rule.Name, scene.Name, target.DeviceId, string.Join(", ", target.Set.Keys));
+                                        wouldRun++;
+                                    }
+                                    else
+                                    {
+                                        var envelope = Envelope<DeviceCommandV1>.Create(
+                                            MessageTypes.DeviceCommand,
+                                            source: $"automation:{rule.Id}",
+                                            data: new DeviceCommandV1(sceneDeviceId, target.Set),
+                                            subject: target.DeviceId,
+                                            correlationId: rule.Id);
+                                        await _bus.PublishAsync(BusTopology.CommandsExchange, BusTopology.DeviceCommandKey, envelope, ct);
+                                        executed++;
+                                    }
+                                }
+                            }
+                            else if (!string.IsNullOrEmpty(action.SceneId))
+                            {
+                                _logger.LogWarning("[{Rule}] scene action references unknown scene {SceneId}", rule.Name, action.SceneId);
                             }
                             break;
 

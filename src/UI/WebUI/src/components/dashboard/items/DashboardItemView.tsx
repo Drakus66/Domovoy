@@ -13,6 +13,7 @@ import DeviceTile from '../../devices/DeviceTile';
 import CapabilityTile from './CapabilityTile';
 import ChartTile from './ChartTile';
 import ModesTile from './ModesTile';
+import SceneTile from './SceneTile';
 
 const asChartHours = (v: unknown): number => {
   const n = typeof v === 'number' ? v : Number(v);
@@ -38,6 +39,7 @@ export default function DashboardItemView({
   const { t } = useTranslation('dashboards');
 
   if (item.type === 'modes') return <ModesTile />;
+  if (item.type === 'scene') return <SceneTile sceneId={(item.params?.sceneId as string) ?? ''} />;
 
   const device = item.deviceId ? deviceById.get(item.deviceId) : undefined;
   if (!device) return <PlaceholderCard text={t('placeholder.deviceGone')} moved />;

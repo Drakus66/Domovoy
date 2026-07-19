@@ -23,6 +23,9 @@ public sealed class CompositeBlockType : IBlockType
         _resolve = resolveType;
         Inputs = def.Inputs.Select(i => new BlockPortSpec(i.Name, i.Kind, i.Description)).ToList();
         Outputs = def.Outputs.Select(o => o.Capability).ToList();
+        Params = (def.Params ?? Array.Empty<CompositeParam>())
+            .Select(p => new BlockParamSpec(p.Name, p.Default, null, null, null, p.Description))
+            .ToList();
     }
 
     public string TypeId => _def.TypeId;
@@ -32,7 +35,11 @@ public sealed class CompositeBlockType : IBlockType
     public string Description => _def.Description;
     public IReadOnlyList<BlockPortSpec> Inputs { get; }
     public IReadOnlyList<Capability> Outputs { get; }
-    public IReadOnlyList<BlockParamSpec> Params { get; } = Array.Empty<BlockParamSpec>(); // params live on the nodes (v1)
+
+    // Epic 2Q parameter passthrough: exposed composite params surface as ordinary tunable params, so the
+    // authoring form (which renders IBlockType.Params generically) lets an instance override an internal
+    // node param — no UI change. Composites without exposed params keep an empty list (params baked on nodes).
+    public IReadOnlyList<BlockParamSpec> Params { get; }
 
     public IBlock Create() => new CompositeBlock(_def, _resolve);
 }
@@ -50,6 +57,12 @@ public sealed class CompositeBlock : IBlock
     private readonly CompositeDefinition _def;
     private readonly List<(CompositeNode Node, IBlock Block)> _children = new();
 
+    /// <summary>
+    /// Passthrough overrides (Epic 2Q), keyed "nodeId#paramKey" → the exposed composite param name. When an
+    /// internal node reads that param, the composite instance's value wins over the node's authored value.
+    /// </summary>
+    private readonly IReadOnlyDictionary<string, string> _paramOverrides;
+
     public CompositeBlock(CompositeDefinition def, Func<string, IBlockType?> resolveType)
     {
         _def = def;
@@ -59,6 +72,9 @@ public sealed class CompositeBlock : IBlock
                 ?? throw new InvalidOperationException($"composite '{def.TypeId}' references unknown type '{node.TypeId}'");
             _children.Add((node, type.Create()));
         }
+
+        _paramOverrides = (def.Params ?? Array.Empty<CompositeParam>())
+            .ToDictionary(p => $"{p.TargetNode}#{p.TargetParam}", p => p.Name, StringComparer.OrdinalIgnoreCase);
     }
 
     public void Tick(IBlockContext ctx)
@@ -67,7 +83,7 @@ public sealed class CompositeBlock : IBlock
         var signals = ctx.GetState<Dictionary<string, object?>>("__signals") ?? new Dictionary<string, object?>();
 
         foreach (var (node, block) in _children)
-            block.Tick(new InternalContext(node, ctx, signals));
+            block.Tick(new InternalContext(node, ctx, signals, _paramOverrides));
 
         // Map the composite's outputs from the internal signals onto the parent context.
         foreach (var output in _def.Outputs)
@@ -83,12 +99,16 @@ public sealed class CompositeBlock : IBlock
         private readonly CompositeNode _node;
         private readonly IBlockContext _parent;
         private readonly Dictionary<string, object?> _signals;
+        private readonly IReadOnlyDictionary<string, string> _paramOverrides;
 
-        public InternalContext(CompositeNode node, IBlockContext parent, Dictionary<string, object?> signals)
+        public InternalContext(
+            CompositeNode node, IBlockContext parent, Dictionary<string, object?> signals,
+            IReadOnlyDictionary<string, string> paramOverrides)
         {
             _node = node;
             _parent = parent;
             _signals = signals;
+            _paramOverrides = paramOverrides;
         }
 
         public DateTimeOffset Now => _parent.Now;
@@ -112,7 +132,16 @@ public sealed class CompositeBlock : IBlock
             _ => null,
         };
 
-        public double Param(string key, double fallback) => _node.Params.TryGetValue(key, out var v) ? v : fallback;
+        public double Param(string key, double fallback)
+        {
+            // The node's authored value is the baseline (and the fallback for an exposed param the instance
+            // hasn't overridden). Epic 2Q passthrough: if this param is exposed on the composite, the instance's
+            // value (read from the parent context's params) wins over the authored one.
+            var authored = _node.Params.TryGetValue(key, out var v) ? v : fallback;
+            return _paramOverrides.TryGetValue($"{_node.Id}#{key}", out var external)
+                ? _parent.Param(external, authored)
+                : authored;
+        }
 
         // Epic 2Q: node string options (enum/bool/text), so option-driven primitives work inside composites.
         public string? Option(string key) => _node.Options is not null && _node.Options.TryGetValue(key, out var v) ? v : null;

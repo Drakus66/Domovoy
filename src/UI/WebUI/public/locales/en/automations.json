@@ -5,17 +5,20 @@
     "history": "History",
     "fromTemplate": "From template",
     "newRule": "New rule",
+    "edit": "Edit",
     "simulate": "Dry-run over history",
     "runHistory": "Run history",
     "cancel": "Cancel",
     "create": "Create",
+    "save": "Save",
     "close": "Close"
   },
   "errors": {
     "load": "Failed to load automations. Check ApiGateway / DbGateway connection.",
     "changeStatus": "Failed to change status",
     "delete": "Failed to delete",
-    "create": "Failed to create rule"
+    "create": "Failed to create rule",
+    "update": "Failed to save changes"
   },
   "confirm": {
     "delete": "Delete automation \"{{name}}\"?"
@@ -50,29 +53,74 @@
   "action": {
     "set": "set {{assignments}}",
     "wait": "wait {{seconds}}s",
-    "notify": "notify \"{{message}}\""
+    "notify": "notify \"{{message}}\"",
+    "scene": "activate scene \"{{name}}\""
   },
   "dialog": {
     "createTitle": "New automation",
+    "editTitle": "Edit automation",
     "name": "Name",
     "status": "Status",
     "shadowHelper": "logs, never acts",
-    "boundedHelper": "acts, but rate-limited",
-    "whenTrigger": "When (trigger)",
-    "device": "Device",
-    "capability": "Capability",
-    "operator": "Operator",
-    "value": "Value",
+    "boundedHelper": "acts, but rate-limited"
+  },
+  "sections": {
+    "when": "When (triggers)",
+    "whenHint": "Any trigger starts the rule (OR).",
+    "if": "If (conditions)",
+    "ifHint": "All conditions must hold (AND). No conditions = always.",
+    "then": "Then (actions)",
+    "thenHint": "Actions run in order.",
+    "addTrigger": "Add trigger",
+    "addCondition": "Add condition",
+    "addAction": "Add action",
+    "noConditions": "No conditions — the rule fires whenever a trigger matches.",
+    "or": "or",
+    "and": "and",
+    "andThen": "then"
+  },
+  "editor": {
     "valueHelper": "true / false / number / text",
-    "onlyDark": "Only when dark (after sunset)",
-    "thenAction": "Then (action)",
-    "autoOff": "Auto-off after (s)",
-    "autoOffHelper": "0 = stay on",
-    "actionType": "Action type",
-    "actionCommand": "Command a device",
-    "actionNotify": "Send a notification",
-    "notifyMessage": "Message",
-    "notifyMessageHelper": "Shown in Activity and sent to enabled channels"
+    "trigger": {
+      "type": "Trigger type",
+      "types": { "DeviceState": "Device state", "Time": "Schedule", "Sun": "Sun" },
+      "device": "Device",
+      "capability": "Capability",
+      "op": "Operator",
+      "value": "Value",
+      "cron": "Cron (m h dom mon dow)",
+      "event": "Event",
+      "offsetMin": "Offset min"
+    },
+    "sun": { "Sunrise": "Sunrise", "Sunset": "Sunset" },
+    "condition": {
+      "type": "Condition type",
+      "types": { "DeviceState": "Device state", "TimeOfDay": "Time of day", "Sun": "Daylight", "Mode": "Home mode" },
+      "device": "Device",
+      "capability": "Capability",
+      "op": "Operator",
+      "value": "Value",
+      "fromTime": "From (HH:mm)",
+      "toTime": "To (HH:mm)",
+      "daylight": "Daylight",
+      "whileDark": "while dark",
+      "whileLight": "while light",
+      "mode": "Mode",
+      "modes": { "Home": "Home", "Away": "Away", "Night": "Night", "Vacation": "Vacation" }
+    },
+    "action": {
+      "type": "Action type",
+      "types": { "Command": "Command a device", "Delay": "Delay", "Notify": "Notification", "Scene": "Activate a scene" },
+      "device": "Device",
+      "capability": "Capability",
+      "value": "Value",
+      "seconds": "Seconds",
+      "message": "Message",
+      "messageHelper": "Shown in Activity and sent to enabled channels",
+      "scene": "Scene",
+      "sceneHelper": "The scene to activate when this rule runs",
+      "noScenes": "No scenes yet — create one on the Scenes page first"
+    }
   },
   "templates": {
     "galleryTitle": "Safety templates",

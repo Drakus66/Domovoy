@@ -117,6 +117,14 @@ export const evidenceText = (p: Proposal): string | null => {
   const e = p.evidence;
   if (!e) return p.rationale ?? null;
 
+  // Type-B ML discovery (Epic 2F): a setpoint the user varies with temporal structure → "learn it".
+  if (p.kind === 'MlTask' && e.explained !== undefined)
+    return t('evidence.mlSetpoint', {
+      samples: e.samples ?? 0,
+      stdDev: e.stdDev ?? 0,
+      explained: Math.round((e.explained ?? 0) * 100),
+    });
+
   if (p.kind === 'MlTask' && e.samples !== undefined)
     return t('evidence.mlTask', { samples: e.samples, required: e.required ?? 0, windowDays: e.windowDays ?? 0 });
 

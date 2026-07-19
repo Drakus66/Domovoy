@@ -139,11 +139,16 @@ public sealed class BlockCatalog
                 TypeId = "smart_thermostat",
                 Title = "Thermostat (from primitives)",
                 Description = "The classic thermostat rebuilt from primitives: EWMA smoothing → hysteresis relay. Bind heat to a boiler/valve.",
+                // Epic 2Q parameter passthrough: expose the two hysteresis thresholds and the smoothing time
+                // constant on the instance, so this ready-made thermostat is tunable without editing the recipe.
                 Dsl = """
                     in temperature
                     f = ewma_filter(tau=300) <- temperature
                     h = hysteresis(high=21.5, low=20.5) <- f.value
                     out heat = h.state
+                    param high = h.high default 21.5
+                    param low = h.low default 20.5
+                    param smoothing = f.tau default 300
                     """,
             },
         };

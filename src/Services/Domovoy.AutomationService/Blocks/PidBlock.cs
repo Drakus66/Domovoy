@@ -54,13 +54,14 @@ public sealed class PidType : IBlockType
         new BlockParamSpec("ffGain", 0, null, null, null, "Feedforward coefficient (0 = feedforward off)"),
         new BlockParamSpec("outMin", 0, "%", null, null, "Minimum output"),
         new BlockParamSpec("outMax", 100, "%", null, null, "Maximum output"),
+        new BlockParamSpec("tuneBand", 0.5, null, 0, null, "Autotune noise band around the setpoint (pv units)"),
     };
 
     public IReadOnlyList<BlockOptionSpec> Options { get; } = new[]
     {
         new BlockOptionSpec("preset", BlockOptionKind.Enum, "balanced",
-            "Tuning profile — gentle (smooth, slow), balanced, responsive (fast, may overshoot), eco (energy-biased), or manual (use kp/ki/kd)",
-            new[] { "manual", "gentle", "balanced", "responsive", "eco" }),
+            "Tuning profile — gentle (smooth, slow), balanced, responsive (fast, may overshoot), eco (energy-biased), manual (use kp/ki/kd), or autotune (run a relay experiment once, then track with the found gains)",
+            new[] { "manual", "gentle", "balanced", "responsive", "eco", "autotune" }),
     };
 
     public IBlock Create() => new PidBlock();
@@ -78,6 +79,13 @@ public sealed class PidBlock : IBlock
         _ => null, // manual / unknown → use params
     };
 
+    /// <summary>
+    /// The in-progress relay-feedback experiment (Epic 2Q autotune). Held on the instance (reused across ticks,
+    /// reset on rebuild/restart); the resulting gains are persisted to durable block state so a completed tune
+    /// survives restarts and the loop never re-tunes on its own.
+    /// </summary>
+    private PidAutotune? _autotune;
+
     public void Tick(IBlockContext ctx)
     {
         var pv = ctx.ReadNumber("pv");
@@ -85,13 +93,43 @@ public sealed class PidBlock : IBlock
 
         var sp = ctx.ReadNumber("sp") ?? ctx.Param("setpoint", 21);
 
-        var preset = (ctx.Option("preset") ?? "balanced").ToLowerInvariant();
-        var (kp, ki, kd) = Preset(preset)
-            ?? (ctx.Param("kp", 5), ctx.Param("ki", 0.1), ctx.Param("kd", 1));
-
         var outMin = ctx.Param("outMin", 0);
         var outMax = ctx.Param("outMax", 100);
         if (outMin > outMax) (outMin, outMax) = (outMax, outMin);
+
+        var preset = (ctx.Option("preset") ?? "balanced").ToLowerInvariant();
+
+        double kp, ki, kd;
+        if (preset == "autotune")
+        {
+            // Run the relay experiment once; thereafter track with the found gains (stored durably).
+            if (!ctx.GetState<bool>("tuned"))
+            {
+                _autotune ??= new PidAutotune(outMin, outMax, ctx.Param("tuneBand", 0.5));
+                var relay = _autotune.Step(ctx.Now, pv.Value, sp);
+                if (!_autotune.Done)
+                {
+                    ctx.Emit("value", Math.Round(relay, 2)); // still oscillating — command the relay, no PID yet
+                    return;
+                }
+
+                var g = _autotune.Result;
+                ctx.SetState("tuned", true);
+                ctx.SetState("tuned_kp", g.Kp);
+                ctx.SetState("tuned_ki", g.Ki);
+                ctx.SetState("tuned_kd", g.Kd);
+                ctx.Log($"PID autotune complete: kp={g.Kp:F3}, ki={g.Ki:F4}, kd={g.Kd:F3} " +
+                        $"(Ku={g.Ku:F3}, Tu={g.Tu:F1}s). Set preset=manual with these to keep them.");
+                _autotune = null;
+                (kp, ki, kd) = (g.Kp, g.Ki, g.Kd);
+            }
+            else
+                (kp, ki, kd) = (ctx.GetState<double>("tuned_kp"), ctx.GetState<double>("tuned_ki"), ctx.GetState<double>("tuned_kd"));
+        }
+        else
+        {
+            (kp, ki, kd) = Preset(preset) ?? (ctx.Param("kp", 5), ctx.Param("ki", 0.1), ctx.Param("kd", 1));
+        }
 
         var ffGain = ctx.Param("ffGain", 0);
         var ffTerm = ffGain != 0 ? ffGain * (ctx.ReadNumber("ff") ?? 0) : 0;

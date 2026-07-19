@@ -1,6 +1,6 @@
 {
   "tabs": {
-    "all": "All"
+    "overview": "Home"
   },
   "spheres": {
     "light": "Light",
@@ -48,16 +48,20 @@
       "device": "Device",
       "capability": "Single value",
       "chart": "Chart",
-      "modes": "Home modes"
+      "modes": "Home modes",
+      "scene": "Scene"
     },
     "typeHints": {
       "device": "A full device tile with its quick control.",
       "capability": "One value of a device — e.g. just the humidity of a multi-sensor.",
       "chart": "A telemetry trend for a numeric value.",
-      "modes": "A switcher for Home / Away / Night / Vacation."
+      "modes": "A switcher for Home / Away / Night / Vacation.",
+      "scene": "A one-tap button that activates a scene."
     },
     "pickDevices": "Pick devices",
     "pickDevice": "Pick a device",
+    "pickScene": "Pick a scene",
+    "noScenes": "No scenes yet — create one on the Scenes page first.",
     "pickCapability": "Value",
     "searchDevices": "Search…",
     "chartWindow": "Window",
@@ -81,7 +85,8 @@
     "delete": "I couldn't delete that — please try again."
   },
   "widgets": {
-    "modes": "Home mode"
+    "modes": "Home mode",
+    "scene": "Scene"
   },
   "band": {
     "mode": "Mode",

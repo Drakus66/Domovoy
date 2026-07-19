@@ -18,10 +18,16 @@ public static class MessageTypes
     public const string BlockTriggered = "domovoy.block.triggered.v1";
     public const string HomeModeChanged = "domovoy.home.mode.v1";
 
+    /// <summary>A user-facing notification was raised (2M.2 LAN channel + off-LAN push, Epic 2O.4).</summary>
+    public const string NotificationRaised = "domovoy.notification.raised.v1";
+
     // Plugin settings channel (Epic 2M tail): the plugin announces its settings schema, the supervisor
     // replies/broadcasts the effective values which the plugin applies live.
     public const string PluginSettingsSchema = "domovoy.plugin.settings.schema.v1";
     public const string PluginSettingsApplied = "domovoy.plugin.settings.applied.v1";
+
+    /// <summary>Operator request to restart a service (or all) from the UI.</summary>
+    public const string SystemControl = "domovoy.system.control.v1";
 }
 
 /// <summary>
@@ -46,6 +52,7 @@ public static class BusTopology
     public const string AutomationTriggeredKey = "automation.triggered";
     public const string BlockTriggeredKey = "block.triggered";
     public const string HomeModeChangedKey = "home.mode.changed";
+    public const string NotificationRaisedKey = "notification.raised";
 
     // Plugin settings: schema is announced on one shared key (the supervisor binds it); effective values are
     // routed per-plugin so a plugin only receives its own settings (key = "plugin.settings.applied.{id}").
@@ -54,4 +61,7 @@ public static class BusTopology
 
     /// <summary>Per-plugin routing key for the effective-values message, e.g. <c>plugin.settings.applied.commute-planner</c>.</summary>
     public static string PluginSettingsAppliedKey(string pluginId) => $"{PluginSettingsAppliedKeyPrefix}.{pluginId}";
+
+    /// <summary>System-control broadcast (service restart). Every service binds its own queue to receive it.</summary>
+    public const string SystemControlKey = "system.control";
 }
