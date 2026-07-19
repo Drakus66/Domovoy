@@ -8,6 +8,9 @@ Domovoy обнаруживает и управляет платами ESP32/ESP8
 
 > Альтернатива: прошить плату нативным `DomovoyClient` (ESP32 Arduino-совместим) — тогда работает
 > путь `DomovoyNativeAdapter` **без изменений на сервере**. См. `docs/architecture/roadmap.md`.
+>
+> Какую плату и датчики покупать — см. [рекомендуемые устройства](recommended_devices_ru.md)
+> (платы ESP32 с Ethernet+PoE, датчики CO₂).
 
 ## Что нужно
 

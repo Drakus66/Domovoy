@@ -52,16 +52,7 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
     {
         _mqttClient = mqttClient;
 
-        var options = new MqttClientSubscribeOptionsBuilder()
-            .WithTopicFilter("zigbee2mqtt/bridge/state")
-            .WithTopicFilter("zigbee2mqtt/bridge/info")
-            .WithTopicFilter("zigbee2mqtt/bridge/devices")
-            .WithTopicFilter("zigbee2mqtt/bridge/event")
-            .WithTopicFilter("zigbee2mqtt/bridge/response/#")
-            .WithTopicFilter("zigbee2mqtt/+")
-            .Build();
-
-        await _mqttClient.SubscribeAsync(options, token);
+        await SubscribeAsync(mqttClient, token);
 
         await _messageBus.SubscribeAsync<ZigbeeBridgeCommand>(
             MessageBusConfiguration.ZigbeeBridgeCommandsQueue,
@@ -90,6 +81,26 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
 
     public Task StopAsync(CancellationToken token) => Task.CompletedTask;
 
+    /// <summary>(Re)subscribes the z2m MQTT topics; re-run on every reconnect (clean session loses subs).</summary>
+    public async Task SubscribeAsync(IMqttClient mqttClient, CancellationToken token)
+    {
+        var options = new MqttClientSubscribeOptionsBuilder()
+            .WithTopicFilter("zigbee2mqtt/bridge/state")
+            .WithTopicFilter("zigbee2mqtt/bridge/info")
+            .WithTopicFilter("zigbee2mqtt/bridge/devices")
+            .WithTopicFilter("zigbee2mqtt/bridge/event")
+            .WithTopicFilter("zigbee2mqtt/bridge/response/#")
+            .WithTopicFilter("zigbee2mqtt/+")
+            // Per-device availability (z2m 'availability:' feature). This is the canonical per-device
+            // liveness signal — z2m marks an individual device offline when it stops responding (coordinator
+            // lost, device unplugged) even while the bridge itself stays online, which the bridge-down sweep
+            // alone would miss. Retained, so a (re)subscribe re-delivers the last known state.
+            .WithTopicFilter("zigbee2mqtt/+/availability")
+            .Build();
+
+        await mqttClient.SubscribeAsync(options, token);
+    }
+
     public bool CanHandleTopic(string topic) => topic.StartsWith("zigbee2mqtt/");
 
     public async Task HandleMessageAsync(string topic, string payload)
@@ -113,7 +124,10 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
                 default:
                     if (topic.StartsWith("zigbee2mqtt/bridge/response/"))
                         break;
-                    await HandleDeviceState(topic, payload);
+                    if (FriendlyNameFromAvailabilityTopic(topic) is { } availabilityFriendly)
+                        await HandleDeviceAvailability(availabilityFriendly, payload);
+                    else
+                        await HandleDeviceState(topic, payload);
                     break;
             }
         }
@@ -331,6 +345,81 @@ public class Zigbee2MqttAdapter : IProtocolAdapter
 
         await PublishNormalizedStateAsync(friendlyName, payload);
     }
+
+    /// <summary>
+    /// Handles a per-device availability message (<c>zigbee2mqtt/&lt;friendly&gt;/availability</c>, z2m
+    /// 'availability:' feature). Emits <see cref="DeviceOnlineChangedV1"/> on the canonical bus topology —
+    /// exactly like the ESPHome/Native adapters — so a device that stops responding while the bridge stays
+    /// up (coordinator lost, device unplugged/out of range) is marked offline in the read-model, not left
+    /// stuck online. The device flips back online on the next <c>online</c> availability or state report.
+    /// Ignores devices not yet discovered (no capability binding → no deterministic id to address).
+    /// </summary>
+    private async Task HandleDeviceAvailability(string friendlyName, string payload)
+    {
+        var isOnline = ParseAvailability(payload);
+        if (isOnline is null) return; // unrecognized payload
+
+        if (!_bindingsByFriendly.TryGetValue(friendlyName, out var binding)) return; // not discovered yet
+
+        var envelope = Envelope<DeviceOnlineChangedV1>.Create(
+            MessageTypes.DeviceOnlineChanged,
+            source: $"connectivity/{Name}",
+            data: new DeviceOnlineChangedV1(binding.DeviceId, isOnline.Value),
+            subject: binding.DeviceId.ToString());
+
+        await _messageBus.PublishAsync(BusTopology.EventsExchange, BusTopology.DeviceOnlineChangedKey, envelope);
+
+        _logger.LogInformation(
+            "Zigbee device '{Friendly}' is {State}", friendlyName, isOnline.Value ? "ONLINE" : "OFFLINE");
+    }
+
+    /// <summary>
+    /// Extracts the friendly name from an availability topic <c>zigbee2mqtt/&lt;friendly&gt;/availability</c>,
+    /// or <c>null</c> if the topic is not a (single-level) availability topic. Mirrors the adapter's existing
+    /// single-level friendly-name assumption (<c>zigbee2mqtt/+</c> for state).
+    /// </summary>
+    public static string? FriendlyNameFromAvailabilityTopic(string topic)
+    {
+        const string prefix = "zigbee2mqtt/";
+        const string suffix = "/availability";
+        if (topic.Length <= prefix.Length + suffix.Length) return null;
+        if (!topic.StartsWith(prefix, StringComparison.Ordinal) ||
+            !topic.EndsWith(suffix, StringComparison.Ordinal)) return null;
+        var friendly = topic[prefix.Length..^suffix.Length];
+        return string.IsNullOrEmpty(friendly) ? null : friendly;
+    }
+
+    /// <summary>
+    /// Parses a z2m availability payload to online/offline, or <c>null</c> if unrecognized. Handles both the
+    /// modern JSON form (<c>{"state":"online"}</c>) and the legacy bare string (<c>online</c>/<c>offline</c>).
+    /// </summary>
+    public static bool? ParseAvailability(string payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload)) return null;
+        var trimmed = payload.Trim();
+
+        if (trimmed.StartsWith("{", StringComparison.Ordinal))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(trimmed);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                    doc.RootElement.TryGetProperty("state", out var s) && s.ValueKind == JsonValueKind.String)
+                    return ToOnline(s.GetString());
+            }
+            catch (JsonException) { return null; }
+            return null;
+        }
+
+        return ToOnline(trimmed.Trim('"'));
+    }
+
+    private static bool? ToOnline(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "online" => true,
+        "offline" => false,
+        _ => null,
+    };
 
     /// <summary>
     /// Builds the capability descriptor from <c>definition.exposes</c> and publishes

@@ -21,6 +21,8 @@ import { blocksApi, BlockCatalogEntry, BlockStatus, ControlBlock, NewBlock, Port
 import { capabilityDevicesApi, CapabilityDevice } from '../api/capabilityDevices';
 import { proposalsApi } from '../api/proposals';
 import { fmtDateTime } from '../i18n/format';
+import { optionNameLabel, optionValueLabel } from '../i18n/optionLabels';
+import { blockInputDesc, blockOptionDesc, blockTypeDesc, blockTypeTitle, paramDesc, paramLabel } from '../i18n/blockLabels';
 import BlockGraph from '../components/blocks/BlockGraph';
 import AddBlockPicker from '../components/blocks/AddBlockPicker';
 import { toNewBlock } from '../components/blocks/blockGraphModel';
@@ -28,21 +30,6 @@ import { useFocusParam, scrollIntoViewRef } from '../hooks/useFocusParam';
 
 const stageName = (s: number) =>
   i18n.t(s >= 2 ? 'blocks:stageName.full' : s === 1 ? 'blocks:stageName.bounded' : 'blocks:stageName.shadow');
-
-// Human-readable parameter label/description: prefer a per-type i18n string (blocks:param.<type>.<name>),
-// fall back to a shared governor entry (param._common), then to the catalog's raw name/English description.
-// This is what turns the bare "coolSetpoint / hysteresis" keys into localized fields (issue #2).
-const paramLabel = (typeId: string, p: { name: string; unit?: string | null }): string => {
-  const specific = `blocks:param.${typeId}.${p.name}.label`;
-  const common = `blocks:param._common.${p.name}.label`;
-  const base = i18n.exists(specific) ? i18n.t(specific) : i18n.exists(common) ? i18n.t(common) : p.name;
-  return p.unit ? `${base} (${p.unit})` : base;
-};
-const paramDesc = (typeId: string, p: { name: string; description: string }): string => {
-  const specific = `blocks:param.${typeId}.${p.name}.desc`;
-  const common = `blocks:param._common.${p.name}.desc`;
-  return i18n.exists(specific) ? i18n.t(specific) : i18n.exists(common) ? i18n.t(common) : p.description;
-};
 
 // Live health of a block, folded into a single chip (issue #3): is it actually ticking, idle, or errored?
 type BlockHealth = { label: string; color: 'success' | 'warning' | 'error' | 'default'; hint: string };
@@ -271,7 +258,7 @@ export default function Blocks() {
                       <Box flex={1} minWidth={0}>
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap mb={0.5}>
                           <Typography fontWeight={700}>{b.name}</Typography>
-                          <Chip size="small" variant="outlined" label={type?.title ?? b.typeId} />
+                          <Chip size="small" variant="outlined" label={type ? blockTypeTitle(type.typeId, type.title) : b.typeId} />
                           <Tooltip title={health.hint}>
                             <Chip size="small" variant="outlined" color={health.color}
                               icon={<CircleIcon sx={{ fontSize: '0.7rem !important' }} />} label={health.label} />
@@ -363,12 +350,12 @@ function CreateDialog({
   return (
     <Dialog open={draft !== null} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>
-        {t(isEdit ? 'dialog.editTitle' : 'dialog.title', { type: type?.title ?? t('dialog.blockFallback') })}
+        {t(isEdit ? 'dialog.editTitle' : 'dialog.title', { type: type ? blockTypeTitle(type.typeId, type.title) : t('dialog.blockFallback') })}
       </DialogTitle>
       <DialogContent>
         {draft && type && (
           <Stack spacing={2.5} mt={1}>
-            <Typography variant="caption" color="text.secondary">{type.description}</Typography>
+            <Typography variant="caption" color="text.secondary">{blockTypeDesc(type.typeId, type.description)}</Typography>
             <TextField label={t('dialog.name')} value={draft.name} autoFocus required fullWidth
               onChange={(e) => onChange({ ...draft, name: e.target.value })} />
 
@@ -380,7 +367,7 @@ function CreateDialog({
                   return (
                     <Stack key={port.name} direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mt={1}>
                       <TextField select label={t('dialog.deviceSuffix', { port: port.name })} value={bind.deviceId} fullWidth
-                        helperText={port.description}
+                        helperText={blockInputDesc(draft.typeId, port.name, port.description)}
                         onChange={(e) => onChange({
                           ...draft,
                           inputs: { ...draft.inputs, [port.name]: { deviceId: e.target.value, capabilityId: '' } },
@@ -489,15 +476,17 @@ function CreateDialog({
                     const set = (v: string) => onChange({ ...draft, options: { ...draft.options, [op.name]: v } });
                     if (op.kind === 'Enum') {
                       return (
-                        <TextField key={op.name} select label={op.name} value={value} helperText={op.description}
+                        <TextField key={op.name} select label={optionNameLabel(t, op.name)} value={value}
+                          helperText={blockOptionDesc(draft.typeId, op.name, op.description)}
                           onChange={(e) => set(e.target.value)}>
-                          {(op.values ?? []).map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
+                          {(op.values ?? []).map((v) => <MenuItem key={v} value={v}>{optionValueLabel(t, v)}</MenuItem>)}
                         </TextField>
                       );
                     }
                     if (op.kind === 'Bool') {
                       return (
-                        <TextField key={op.name} select label={op.name} value={value} helperText={op.description}
+                        <TextField key={op.name} select label={optionNameLabel(t, op.name)} value={value}
+                          helperText={blockOptionDesc(draft.typeId, op.name, op.description)}
                           onChange={(e) => set(e.target.value)}>
                           <MenuItem value="true">{t('dialog.yes')}</MenuItem>
                           <MenuItem value="false">{t('dialog.no')}</MenuItem>
@@ -507,7 +496,8 @@ function CreateDialog({
                     // Text — a script (multiline monospace) or a free string.
                     const isScript = op.name === 'script';
                     return (
-                      <TextField key={op.name} label={op.name} value={value} helperText={op.description} fullWidth
+                      <TextField key={op.name} label={optionNameLabel(t, op.name)} value={value} fullWidth
+                        helperText={blockOptionDesc(draft.typeId, op.name, op.description)}
                         multiline={isScript} minRows={isScript ? 4 : undefined}
                         InputProps={isScript ? { sx: { fontFamily: 'monospace', fontSize: 13 } } : undefined}
                         onChange={(e) => set(e.target.value)} />

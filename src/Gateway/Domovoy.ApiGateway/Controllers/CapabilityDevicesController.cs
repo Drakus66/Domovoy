@@ -46,6 +46,11 @@ public class CapabilityDevicesController : ControllerBase
     public Task<IActionResult> SetArchetype(string id, CancellationToken ct)
         => Forward(HttpMethod.Put, $"api/capability-devices/{Uri.EscapeDataString(id)}/archetype", ct);
 
+    /// <summary>Delete an offline device from the registry (409 while online). A re-announce recreates it.</summary>
+    [HttpDelete("{id}")]
+    public Task<IActionResult> Delete(string id, CancellationToken ct)
+        => Forward(HttpMethod.Delete, $"api/capability-devices/{Uri.EscapeDataString(id)}", ct);
+
     private async Task<IActionResult> Forward(HttpMethod method, string relativePath, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient("db-gateway");

@@ -1,0 +1,50 @@
+<!doctype html>
+<!--
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Copyright (C) 2025-2026 Ilya Dryagin
+  Domovoy Android shell launcher (Epic 2O.3). Bundled entry that onboards the server address and picks a
+  transport, then hands the WebView to the home's own UI. Not the app itself — the app is the live home UI.
+-->
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#4f46e5" />
+    <title>Domovoy</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <div class="brand">
+        <div class="logo"></div>
+        <h1>Domovoy</h1>
+      </div>
+
+      <!-- Connecting state: shown while probing LAN → IPv6 → SSH. -->
+      <section id="connecting" class="card hidden">
+        <div class="spinner"></div>
+        <p id="connecting-label">Подключение к дому…</p>
+      </section>
+
+      <!-- Onboarding / settings: server addresses. -->
+      <section id="setup" class="card hidden">
+        <h2>Адрес дома</h2>
+        <p class="hint">Оболочка сама выберет доступный путь: сначала домашняя сеть, затем IPv6, затем запасной SSH.</p>
+
+        <label>Локальный адрес (LAN)
+          <input id="lan" type="url" inputmode="url" placeholder="http://192.168.1.10" autocomplete="off" />
+        </label>
+        <label>IPv6 / внешний адрес (необязательно)
+          <input id="ipv6" type="url" inputmode="url" placeholder="https://home.example.com" autocomplete="off" />
+        </label>
+        <label>Запасной SSH-адрес (необязательно)
+          <input id="ssh" type="url" inputmode="url" placeholder="https://home.example.com" autocomplete="off" />
+        </label>
+
+        <p id="setup-error" class="error hidden"></p>
+        <button id="connect" type="button">Подключиться</button>
+      </section>
+    </main>
+    <script src="connection.js"></script>
+  </body>
+</html>

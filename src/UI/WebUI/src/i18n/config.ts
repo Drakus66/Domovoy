@@ -17,12 +17,13 @@ import { DEFAULT_LANGUAGE, supportedLngs } from './languages';
 export const namespaces = [
   'common',
   'nav',
+  'auth',
   'devices',
   'dashboards',
   'zones',
   'modes',
   'automations',
-  'flow',
+  'scenes',
   'blocks',
   'models',
   'proposals',
@@ -32,11 +33,16 @@ export const namespaces = [
   'diary',
   'status',
   'zigbee',
+  'kiosk',
+  // Shared vocabulary of operator/choice codes (eq/gt, and/or, min/max, PID presets, …) rendered as
+  // human labels. Cross-cutting (automations and blocks both use it), so preloaded rather than page-scoped.
+  'operators',
 ] as const;
 
 export const defaultNS = 'common';
 
-export const preloadNS = ['common', 'nav'];
+// `auth` is preloaded because the login screen renders before any page-scoped namespace loads.
+export const preloadNS = ['common', 'nav', 'operators', 'auth'];
 
 export const baseOptions: InitOptions = {
   fallbackLng: DEFAULT_LANGUAGE,

@@ -32,6 +32,7 @@ import SpeedIcon from '@mui/icons-material/Speed';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import { metricsApi, ServiceStatus, SystemSummary } from '../api/metrics';
 import { assistantApi, AssistantStatus } from '../api/assistant';
+import SystemControlCard from '../components/system/SystemControlCard';
 
 const REFRESH_INTERVAL_MS = 30_000;
 
@@ -261,6 +262,9 @@ function SystemStatus() {
             </CardContent>
           </Card>
         )}
+
+        {/* System control (restart services / containers) */}
+        <SystemControlCard />
 
         {/* Services list */}
         <Card variant="outlined">

@@ -41,10 +41,14 @@ internal static class Program
                 builder.Configuration.GetSection(NotificationOptions.SectionName)); // 2G: delivery channels
             builder.Services.Configure<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMQ"));
             builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
+            builder.Services.AddSystemControl("automation-service"); // UI-issued restart (self-stop → restart policy)
 
             // 2G: provider-agnostic notification delivery channels (env-gated, off by default). Notify
             // actions (1A) and future anomaly alerts (2B) fan out through the dispatcher.
             builder.Services.AddHttpClient();
+            // LAN SignalR banner (2M.2, on by default) + off-LAN ntfy/UnifiedPush push (Epic 2O.4, off by default).
+            builder.Services.AddSingleton<Services.Notifications.INotificationChannel, Services.Notifications.SignalRChannel>();
+            builder.Services.AddSingleton<Services.Notifications.INotificationChannel, Services.Notifications.NtfyChannel>();
             builder.Services.AddSingleton<Services.Notifications.INotificationChannel, Services.Notifications.TelegramChannel>();
             builder.Services.AddSingleton<Services.Notifications.INotificationChannel, Services.Notifications.WebhookChannel>();
             builder.Services.AddSingleton<Services.Notifications.NotificationDispatcher>();
@@ -66,6 +70,7 @@ internal static class Program
             builder.Services.AddSingleton<SiteContext>();     // 2L: site timezone for the Sun/Time sensors' local times
             builder.Services.AddSingleton<CalendarContext>(); // 2L: weekend/holiday config for the Calendar sensor
             builder.Services.AddSingleton<RuleStore>();
+            builder.Services.AddSingleton<SceneStore>();      // 3B: scenes the `scene` action activates
             builder.Services.AddSingleton<RuleEvaluator>();
             builder.Services.AddSingleton<ActionExecutor>();
             builder.Services.AddSingleton<RuleRunner>();

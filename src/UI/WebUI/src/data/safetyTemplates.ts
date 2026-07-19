@@ -2,8 +2,79 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { AutomationRule, RuleStatus } from '../api/automations';
+import { AutomationRule, RuleStatus, RuleTrigger, RuleCondition, RuleAction } from '../api/automations';
 import { CapabilityDevice } from '../api/capabilityDevices';
+
+/**
+ * The rule-builder draft — the editable shape behind the Automations create/edit dialog. It mirrors the
+ * server rule model (Domovoy.Contracts AutomationRule): a rule fires when ANY trigger matches (OR), runs
+ * only while ALL conditions hold (AND, empty = always), and executes its actions in order. Holding the
+ * same arrays the API expects means the dialog can author several triggers, conditions and actions without
+ * a lossy flat intermediate. `id` is set only when editing an existing rule.
+ */
+export interface RuleDraft {
+  id?: string;
+  name: string;
+  status: RuleStatus;
+  triggers: RuleTrigger[];
+  conditions: RuleCondition[];
+  actions: RuleAction[];
+}
+
+/** A fresh, unbound device-state trigger (the default row when adding a trigger). */
+export const newTrigger = (): RuleTrigger => ({ type: 'DeviceState', operator: 'eq', value: true });
+/** A fresh mode condition (a safe, always-complete default when adding a condition). */
+export const newCondition = (): RuleCondition => ({ type: 'Mode', mode: 'Home' });
+/** A fresh, unbound command action (the default row when adding an action). */
+export const newAction = (): RuleAction => ({ type: 'Command', set: {} });
+
+/** A blank draft: one trigger and one action to fill in, no conditions. Fresh arrays every call. */
+export const emptyDraft = (): RuleDraft => ({
+  name: '', status: 'Active', triggers: [newTrigger()], conditions: [], actions: [newAction()],
+});
+
+/** Editable copy of an existing rule for the edit path — per-item clones so page state is never mutated. */
+export const draftFromRule = (rule: AutomationRule): RuleDraft => ({
+  id: rule.id,
+  name: rule.name,
+  status: rule.status,
+  triggers: rule.triggers.length ? rule.triggers.map((t) => ({ ...t })) : [newTrigger()],
+  conditions: (rule.conditions ?? []).map((c) => ({ ...c })),
+  actions: rule.actions.length ? rule.actions.map((a) => ({ ...a })) : [newAction()],
+});
+
+/** A trigger is bound when it can actually fire: DeviceState needs a device+capability, Time a cron; Sun always can. */
+const triggerBound = (t: RuleTrigger): boolean => {
+  if (t.type === 'DeviceState') return !!t.deviceId && !!t.capabilityId;
+  if (t.type === 'Time') return !!t.cron?.trim();
+  return true; // Sun
+};
+
+/** An action is complete when runnable: Command needs a device + one set assignment, Notify a message, Delay a positive wait, Scene a scene id. */
+const actionComplete = (a: RuleAction): boolean => {
+  if (a.type === 'Command') {
+    const keys = Object.keys(a.set ?? {});
+    return !!a.deviceId && keys.length > 0 && keys[0] !== '';
+  }
+  if (a.type === 'Notify') return !!a.message?.trim();
+  if (a.type === 'Delay') return (a.delaySeconds ?? 0) > 0;
+  if (a.type === 'Scene') return !!a.sceneId;
+  return false;
+};
+
+/** A condition is complete when it can be evaluated: DeviceState needs device+capability, TimeOfDay a window; Sun/Mode always. */
+const conditionComplete = (c: RuleCondition): boolean => {
+  if (c.type === 'DeviceState') return !!c.deviceId && !!c.capabilityId;
+  if (c.type === 'TimeOfDay') return !!c.fromTime && !!c.toTime;
+  return true; // Sun, Mode
+};
+
+/** A draft is saveable when named, every trigger is bound, every action complete, and any conditions complete. */
+export const isDraftValid = (d: RuleDraft): boolean =>
+  !!d.name.trim() &&
+  d.triggers.length > 0 && d.triggers.every(triggerBound) &&
+  d.actions.length > 0 && d.actions.every(actionComplete) &&
+  d.conditions.every(conditionComplete);
 
 /**
  * Safety-rule templates (replacing the removed hardcoded "safety floor"): curated, *inert* starting
@@ -12,27 +83,7 @@ import { CapabilityDevice } from '../api/capabilityDevices';
  * binds it to their own sensor/actuator in the rule builder and saves it as an ordinary automation. So
  * the household decides *what* is watched and *what* happens — the opposite of a rule wired into the code.
  */
-
 export type ActionKind = 'Command' | 'Notify';
-
-/** The rule-builder draft (shared with the Automations page's create dialog). */
-export interface DraftState {
-  name: string;
-  trigDevice: string; trigCap: string; trigOp: string; trigValue: string;
-  onlyDark: boolean;
-  actionKind: ActionKind;
-  actDevice: string; actCap: string; actValue: string;
-  autoOffSeconds: number;
-  notifyMessage: string;
-  status: RuleStatus;
-}
-
-export const EMPTY_DRAFT: DraftState = {
-  name: '', trigDevice: '', trigCap: '', trigOp: 'eq', trigValue: 'true',
-  onlyDark: false, actionKind: 'Command',
-  actDevice: '', actCap: '', actValue: 'true', autoOffSeconds: 0,
-  notifyMessage: '', status: 'Active',
-};
 
 /**
  * A safety template = the structural seed of a rule. Text (title/description/notify message) is NOT held
@@ -44,10 +95,14 @@ export interface SafetyTemplate {
   id: string;
   /** Sensor capability the rule watches — drives the "recommended" match and pre-fills the trigger. */
   triggerCapability: string;
+  /** Comparison + threshold the trigger fires on (e.g. lt 5, gt 1000). */
+  triggerOperator: string;
+  triggerValue: unknown;
   /** Command (act on a device) or Notify (just alert). */
   actionKind: ActionKind;
-  /** Structural draft fields the template pre-fills (device left blank for the user to bind). */
-  seed: Partial<DraftState>;
+  /** For Command templates: the writable capability to set and the value to set it to. */
+  actionCapability?: string;
+  actionValue?: unknown;
 }
 
 /**
@@ -56,52 +111,36 @@ export interface SafetyTemplate {
  */
 export const SAFETY_TEMPLATES: SafetyTemplate[] = [
   {
-    id: 'antiFreezeHeat',
-    triggerCapability: 'temperature',
-    actionKind: 'Command',
-    seed: { trigOp: 'lt', trigValue: '5', actCap: 'on_off', actValue: 'true' },
+    id: 'antiFreezeHeat', triggerCapability: 'temperature', triggerOperator: 'lt', triggerValue: 5,
+    actionKind: 'Command', actionCapability: 'on_off', actionValue: true,
   },
   {
-    id: 'antiFreezeAlert',
-    triggerCapability: 'temperature',
+    id: 'antiFreezeAlert', triggerCapability: 'temperature', triggerOperator: 'lt', triggerValue: 5,
     actionKind: 'Notify',
-    seed: { trigOp: 'lt', trigValue: '5' },
   },
   {
-    id: 'overheatAlert',
-    triggerCapability: 'temperature',
+    id: 'overheatAlert', triggerCapability: 'temperature', triggerOperator: 'gt', triggerValue: 30,
     actionKind: 'Notify',
-    seed: { trigOp: 'gt', trigValue: '30' },
   },
   {
-    id: 'co2Ventilation',
-    triggerCapability: 'co2',
-    actionKind: 'Command',
-    seed: { trigOp: 'gt', trigValue: '1000', actCap: 'on_off', actValue: 'true' },
+    id: 'co2Ventilation', triggerCapability: 'co2', triggerOperator: 'gt', triggerValue: 1000,
+    actionKind: 'Command', actionCapability: 'on_off', actionValue: true,
   },
   {
-    id: 'co2Alert',
-    triggerCapability: 'co2',
+    id: 'co2Alert', triggerCapability: 'co2', triggerOperator: 'gt', triggerValue: 1400,
     actionKind: 'Notify',
-    seed: { trigOp: 'gt', trigValue: '1400' },
   },
   {
-    id: 'humidityVentilation',
-    triggerCapability: 'humidity',
-    actionKind: 'Command',
-    seed: { trigOp: 'gt', trigValue: '70', actCap: 'on_off', actValue: 'true' },
+    id: 'humidityVentilation', triggerCapability: 'humidity', triggerOperator: 'gt', triggerValue: 70,
+    actionKind: 'Command', actionCapability: 'on_off', actionValue: true,
   },
   {
-    id: 'smokeUnlock',
-    triggerCapability: 'smoke',
-    actionKind: 'Command',
-    seed: { trigOp: 'eq', trigValue: 'true', actCap: 'lock', actValue: 'false' },
+    id: 'smokeUnlock', triggerCapability: 'smoke', triggerOperator: 'eq', triggerValue: true,
+    actionKind: 'Command', actionCapability: 'lock', actionValue: false,
   },
   {
-    id: 'leakShutoff',
-    triggerCapability: 'water_leak',
-    actionKind: 'Command',
-    seed: { trigOp: 'eq', trigValue: 'true', actCap: 'on_off', actValue: 'false' },
+    id: 'leakShutoff', triggerCapability: 'water_leak', triggerOperator: 'eq', triggerValue: true,
+    actionKind: 'Command', actionCapability: 'on_off', actionValue: false,
   },
 ];
 
@@ -134,19 +173,23 @@ export const recommendedTemplateIds = (
 
 /**
  * Build a pre-filled builder draft from a template. The trigger device is auto-selected only when exactly
- * one device matches (unambiguous); otherwise the user picks it. Localized text (name/notify message) is
- * layered on by the caller after this returns.
+ * one device matches (unambiguous); otherwise the user picks it (and the capability with it). Localized
+ * text (name/notify message) is layered on by the caller after this returns.
  */
 export const buildDraftFromTemplate = (
   template: SafetyTemplate, devices: CapabilityDevice[],
-): DraftState => {
+): RuleDraft => {
   const matches = devicesWithCapability(devices, template.triggerCapability);
-  const trigDevice = matches.length === 1 ? matches[0].id : '';
-  return {
-    ...EMPTY_DRAFT,
-    ...template.seed,
-    actionKind: template.actionKind,
-    trigDevice,
-    trigCap: trigDevice ? template.triggerCapability : '',
+  const trigDevice = matches.length === 1 ? matches[0].id : undefined;
+  const trigger: RuleTrigger = {
+    type: 'DeviceState',
+    deviceId: trigDevice,
+    capabilityId: trigDevice ? template.triggerCapability : '',
+    operator: template.triggerOperator,
+    value: template.triggerValue,
   };
+  const action: RuleAction = template.actionKind === 'Notify'
+    ? { type: 'Notify', message: '' }
+    : { type: 'Command', deviceId: '', set: { [template.actionCapability as string]: template.actionValue } };
+  return { name: '', status: 'Active', triggers: [trigger], conditions: [], actions: [action] };
 };

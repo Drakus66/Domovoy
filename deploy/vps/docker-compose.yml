@@ -1,0 +1,53 @@
+# Domovoy VPS receiver for the SSH reverse-tunnel fallback (Этап 3c). Runs on YOUR VPS (public IP), not at home.
+# Two pieces, mirroring the HA addon's recommended setup:
+#   1. an isolated openssh-server that accepts ONLY the home's restricted tunnel key (no shell, forwarding only);
+#   2. Caddy, which publishes https://<domain> and reverse-proxies to the tunnel's forwarded port (127.0.0.1:8443).
+#
+# The home stack's autossh (deploy/autossh) connects in and binds 127.0.0.1:8443 on this host; Caddy terminates
+# TLS for the public and forwards there. Set the env in a .env next to this file.
+name: domovoy-vps
+
+services:
+  sshd:
+    image: linuxserver/openssh-server:latest
+    container_name: domovoy-sshd
+    restart: unless-stopped
+    ports:
+      # Expose the SSH port publicly so the home can dial in. Use a non-22 port to cut background scan noise.
+      - "${TUNNEL_SSH_PORT:-2222}:2222"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - USER_NAME=${TUNNEL_USER:-domovoy}
+      - PASSWORD_ACCESS=false           # key-only
+      - SUDO_ACCESS=false
+      - PUBLIC_KEY_FILE=/authorized_keys
+    volumes:
+      # Paste the restricted public key printed by deploy/autossh on its first run into ./authorized_keys.
+      - ./authorized_keys:/authorized_keys:ro
+      # Persist host keys + enable GatewayPorts/AllowTcpForwarding in ./sshd_config after first start.
+      - ./sshd:/config
+    networks: [edge]
+
+  caddy:
+    image: caddy:2
+    container_name: domovoy-vps-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMOVOY_DOMAIN=${DOMOVOY_DOMAIN:?set your public hostname}
+      - ACME_EMAIL=${ACME_EMAIL:?set an email for Let's Encrypt}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+
+networks:
+  edge:
+
+volumes:
+  caddy_data:
+  caddy_config:

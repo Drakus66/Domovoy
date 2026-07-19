@@ -27,6 +27,7 @@ internal static class Program
             // Configure Message Bus (RabbitMQ)
             builder.Services.Configure<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMq"));
             builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
+            builder.Services.AddSystemControl("connectivity-service"); // UI-issued restart (self-stop → restart policy)
 
             // Zigbee bridge state cache (shared between adapter and HTTP endpoint)
             builder.Services.AddSingleton<ZigbeeBridgeCache>();

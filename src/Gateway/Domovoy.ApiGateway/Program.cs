@@ -7,6 +7,7 @@ namespace Domovoy.ApiGateway;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Domovoy.ApiGateway.Services;
 using Prometheus;
 using System.Text;
 using Serilog;
@@ -36,12 +37,14 @@ internal static class Program
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
 
-            // Authorization is deliberately deferred to Phase 2 (local auth "on top" of gateways/UI,
-            // before locks & cameras). During development JWT is OFF by default so it doesn't get in
-            // the way of testing — it stays wired behind a flag (JwtSettings:Enabled) rather than being
-            // ripped out, so it can be switched back on without re-plumbing. See roadmap P0-6.
+            // Local auth (mobile-app / remote-access track). JWT is gated behind JwtSettings:Enabled: OFF in dev /
+            // integration tests (the API stays open, exactly as before), ON in the compose/production posture that
+            // gets exposed externally. AuthController mints the tokens; the DbGateway verifies credentials.
             var jwtSettings = builder.Configuration.GetSection("JwtSettings");
             var jwtEnabled = jwtSettings.GetValue<bool>("Enabled");
+            builder.Services.AddSingleton(new Services.AuthEnforcementOptions { Enabled = jwtEnabled });
+            builder.Services.AddSingleton<Services.JwtTokenService>();
+            builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, Services.PermissionAuthorizationHandler>();
 
             // Configure Swagger
             builder.Services.AddSwaggerGen(c =>
@@ -89,6 +92,8 @@ internal static class Program
                 })
                 .AddJwtBearer(options =>
                 {
+                    // Short claim names are used verbatim (JwtTokenService writes sub/uname/role/perm).
+                    options.MapInboundClaims = false;
                     options.TokenValidationParameters = new TokenValidationParameters
                     {
                         ValidateIssuer = true,
@@ -97,10 +102,41 @@ internal static class Program
                         ValidateIssuerSigningKey = true,
                         ValidIssuer = issuer,
                         ValidAudience = audience,
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+                        NameClaimType = Services.JwtTokenService.NameClaim,
+                        RoleClaimType = Services.JwtTokenService.RoleClaim,
+                        ClockSkew = TimeSpan.FromSeconds(30),
+                    };
+
+                    // SignalR can't set an Authorization header on the WebSocket; the JS client passes the token as
+                    // the access_token query arg on /hub/*. Lift it into the request for those paths only, and never
+                    // let it reach the request log (RequestLoggingMiddleware) beyond the query string it already is.
+                    options.Events = new JwtBearerEvents
+                    {
+                        OnMessageReceived = context =>
+                        {
+                            var accessToken = context.Request.Query["access_token"];
+                            var path = context.HttpContext.Request.Path;
+                            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hub"))
+                                context.Token = accessToken;
+                            return Task.CompletedTask;
+                        }
                     };
                 });
             }
+
+            builder.Services.AddAuthorization(options =>
+            {
+                // One policy per permission (named as the permission string) for [Authorize(Policy = ...)].
+                options.AddPermissionPolicies();
+
+                // When enforcement is on, every endpoint requires an authenticated user unless it opts out with
+                // [AllowAnonymous] (login/refresh) — that's the blanket gate that closes the whole API. Off in dev.
+                if (jwtEnabled)
+                    options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+                        .RequireAuthenticatedUser()
+                        .Build();
+            });
 
             // Capability device read-model lives in DbGateway; the gateway forwards reads to it
             // via CapabilityDevicesController (replaces the former Ocelot proxy route).
@@ -132,18 +168,39 @@ internal static class Program
 
             builder.Services.AddSignalR();
             builder.Services.AddSingleton<MessageBus.IMessageBus, MessageBus.RabbitMqConnection>();
+            MessageBus.SystemControlExtensions.AddSystemControl(builder.Services, "api-gateway"); // UI-issued restart
+
+            // System control (restart via UI). Self-restart over the bus is always available; the opt-in Docker
+            // path (SystemControl:DockerEnabled + a mounted docker.sock) can also reach infra/hung containers.
+            builder.Services.Configure<Services.SystemControlOptions>(
+                builder.Configuration.GetSection(Services.SystemControlOptions.Section));
+            var systemOptions = builder.Configuration.GetSection(Services.SystemControlOptions.Section)
+                .Get<Services.SystemControlOptions>() ?? new Services.SystemControlOptions();
+            if (systemOptions.DockerEnabled)
+                builder.Services.AddSingleton<Services.IContainerControl>(sp =>
+                    new Services.DockerContainerControl(systemOptions, sp.GetRequiredService<ILogger<Services.DockerContainerControl>>()));
+            else
+                builder.Services.AddSingleton<Services.IContainerControl, Services.DisabledContainerControl>();
             builder.Services.AddHostedService<Services.EventRelayService>();
+            builder.Services.AddHostedService<Services.NotificationRelayService>(); // 2M.2 LAN notification banner
             builder.Services.AddSingleton<Services.ZigbeeBridgeStateCache>();
             builder.Services.AddHostedService<Services.ZigbeeBridgeCacheUpdater>();
 
+            // CORS: when Cors:AllowedOrigins is configured (the exposed compose/production posture), restrict to
+            // that allowlist so a hostile page can't ride a logged-in session's credentials. With no list (dev),
+            // fall back to reflecting any origin — the previous permissive behaviour, but only in dev.
+            var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+                              ?? Array.Empty<string>();
             builder.Services.AddCors(options =>
             {
-                options.AddPolicy("CorsPolicy",
-                    policy => policy
-                        .SetIsOriginAllowed(_ => true)
-                        .AllowAnyMethod()
-                        .AllowAnyHeader()
-                        .AllowCredentials());
+                options.AddPolicy("CorsPolicy", policy =>
+                {
+                    if (corsOrigins.Length > 0)
+                        policy.WithOrigins(corsOrigins);
+                    else
+                        policy.SetIsOriginAllowed(_ => true);
+                    policy.AllowAnyMethod().AllowAnyHeader().AllowCredentials();
+                });
             });
 
             builder.Services.AddHealthChecks();
@@ -194,7 +251,9 @@ internal static class Program
             // Uniform endpoint routing — every gateway responsibility is an in-process endpoint:
             // controllers (device-control, zigbee, metrics, status, capability-devices proxy),
             // the SignalR hub, and health checks.
-            app.MapHealthChecks("/health");
+            // Health must stay reachable without a token — container probes and the app's connection-manager
+            // (LAN→IPv6→SSH) hit it to pick a transport before there is any session.
+            app.MapHealthChecks("/health").AllowAnonymous();
             app.MapControllers();
             app.MapHub<Hubs.DeviceHub>("/hub/devices");
 

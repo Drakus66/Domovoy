@@ -1,0 +1,23 @@
+{
+  "name": "domovoy-app",
+  "version": "1.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "author": "Ilya Dryagin",
+  "description": "Domovoy Android shell — a thin native WebView over the home's own UI, with LAN→IPv6→SSH transport selection.",
+  "scripts": {
+    "sync": "cap sync",
+    "add:android": "cap add android",
+    "open:android": "cap open android",
+    "build:apk": "cd android && ./gradlew assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.0",
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/core": "^6.1.0",
+    "@capacitor/preferences": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.0"
+  }
+}

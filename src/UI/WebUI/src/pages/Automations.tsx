@@ -2,20 +2,21 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from 'i18next';
 import { fmtDateTime } from '../i18n/format';
 import {
   Container, Box, Typography, Stack, Button, IconButton, LinearProgress, Alert,
   Card, CardContent, Tooltip, Chip, Dialog, DialogTitle, DialogContent,
-  DialogActions, TextField, MenuItem, FormControlLabel, Checkbox, Divider, Drawer,
+  DialogActions, TextField, MenuItem, Divider, Drawer, Paper,
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import ScienceRoundedIcon from '@mui/icons-material/ScienceRounded';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import HealthAndSafetyRoundedIcon from '@mui/icons-material/HealthAndSafetyRounded';
@@ -23,44 +24,36 @@ import {
   automationsApi, AutomationRule, AutoHistoryEntry, RuleTrigger, RuleCondition, RuleAction, NewRule, RuleStatus,
 } from '../api/automations';
 import { replayApi, ReplayResult } from '../api/replay';
+import { operatorSummary } from '../i18n/optionLabels';
 import { capabilityDevicesApi, CapabilityDevice } from '../api/capabilityDevices';
+import { scenesApi, Scene } from '../api/scenes';
 import {
-  DraftState, EMPTY_DRAFT, ActionKind, SafetyTemplate, SAFETY_TEMPLATES,
-  recommendedTemplateIds, buildDraftFromTemplate,
+  RuleDraft, emptyDraft, draftFromRule, isDraftValid, newTrigger, newCondition, newAction,
+  SafetyTemplate, SAFETY_TEMPLATES, recommendedTemplateIds, buildDraftFromTemplate,
 } from '../data/safetyTemplates';
+import { TriggerEditor, ConditionEditor, ActionEditor } from '../components/automations/RuleEditors';
+import { fmt } from '../components/automations/ruleValues';
 import { useFocusParam, scrollIntoViewRef } from '../hooks/useFocusParam';
 
-const OPERATORS = ['eq', 'ne', 'gt', 'lt', 'gte', 'lte', 'changed'];
 // User-selectable lifecycle (Proposed/Approved are reserved for ML proposals, Epic 1F/Phase 2).
 // BoundedActive (Epic 1F) = active but rate-limited — the stage between Shadow and full Active.
 const STATUS_OPTIONS: RuleStatus[] = ['Active', 'BoundedActive', 'Shadow', 'Disabled'];
 const statusColor = (s: RuleStatus): 'success' | 'info' | 'warning' | 'default' =>
   s === 'Active' ? 'success' : s === 'BoundedActive' ? 'warning' : s === 'Shadow' ? 'info' : 'default';
 
-const parseValue = (raw: string): unknown => {
-  const s = raw.trim();
-  if (s === '') return true;
-  if (s.toLowerCase() === 'true') return true;
-  if (s.toLowerCase() === 'false') return false;
-  const n = Number(s);
-  return Number.isNaN(n) ? s : n;
-};
-
-const fmt = (v: unknown): string => (typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v ?? ''));
-
-/** A draft is saveable when named, its trigger is bound, and its action is complete for its kind. */
-const isDraftValid = (d: DraftState): boolean =>
-  !!d.name.trim() && !!d.trigDevice && !!d.trigCap &&
-  (d.actionKind === 'Notify' ? !!d.notifyMessage.trim() : !!d.actDevice && !!d.actCap);
+/** A rule with the operator "changed" carries no comparison value — normalize it away before sending. */
+const normalizeTrigger = (t: RuleTrigger): RuleTrigger =>
+  t.type === 'DeviceState' && t.operator === 'changed' ? { ...t, value: null } : t;
 
 export default function Automations() {
   const { t } = useTranslation('automations');
   const focusId = useFocusParam();
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [devices, setDevices] = useState<CapabilityDevice[]>([]);
+  const [scenes, setScenes] = useState<Scene[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState<DraftState | null>(null);
+  const [draft, setDraft] = useState<RuleDraft | null>(null);
   const [historyFor, setHistoryFor] = useState<AutomationRule | 'all' | null>(null);
   const [simulateFor, setSimulateFor] = useState<AutomationRule | null>(null);
   const [templatePicker, setTemplatePicker] = useState(false);
@@ -73,9 +66,14 @@ export default function Automations() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [r, d] = await Promise.all([automationsApi.getRules(), capabilityDevicesApi.getDevices()]);
+      const [r, d, s] = await Promise.all([
+        automationsApi.getRules(),
+        capabilityDevicesApi.getDevices(),
+        scenesApi.getScenes().catch(() => [] as Scene[]),
+      ]);
       setRules(r);
       setDevices(d);
+      setScenes(s);
     } catch {
       setError(t('errors.load'));
     } finally {
@@ -99,7 +97,7 @@ export default function Automations() {
   };
 
   const triggerText = useCallback((t: RuleTrigger): string => {
-    if (t.type === 'DeviceState') return `${t.capabilityId ?? i18n.t('automations:trigger.any')} ${t.operator ?? 'eq'} ${fmt(t.value)} · ${deviceName(t.deviceId)}`;
+    if (t.type === 'DeviceState') return `${t.capabilityId ?? i18n.t('automations:trigger.any')} ${operatorSummary(i18n.t, t.operator)} ${fmt(t.value)} · ${deviceName(t.deviceId)}`;
     if (t.type === 'Time') return i18n.t('automations:trigger.schedule', { cron: t.cron ?? '' });
     return `${t.sun ?? i18n.t('automations:trigger.sun')}${t.offsetMinutes ? ` ${t.offsetMinutes > 0 ? '+' : ''}${t.offsetMinutes}m` : ''}`;
   }, [deviceName]);
@@ -108,14 +106,15 @@ export default function Automations() {
     if (c.type === 'Sun') return c.dark === false ? i18n.t('automations:condition.whileLight') : i18n.t('automations:condition.whileDark');
     if (c.type === 'TimeOfDay') return `${c.fromTime}–${c.toTime}`;
     if (c.type === 'Mode') return i18n.t('automations:condition.mode', { mode: c.mode });
-    return `${c.capabilityId} ${c.operator ?? 'eq'} ${fmt(c.value)}`;
+    return `${c.capabilityId} ${operatorSummary(i18n.t, c.operator)} ${fmt(c.value)}`;
   };
 
   const actionText = useCallback((a: RuleAction): string => {
     if (a.type === 'Command') return `${i18n.t('automations:action.set', { assignments: Object.entries(a.set ?? {}).map(([k, v]) => `${k}=${fmt(v)}`).join(', ') })} · ${deviceName(a.deviceId)}`;
     if (a.type === 'Delay') return i18n.t('automations:action.wait', { seconds: a.delaySeconds });
+    if (a.type === 'Scene') return i18n.t('automations:action.scene', { name: scenes.find((s) => s.id === a.sceneId)?.name ?? a.sceneId ?? '—' });
     return i18n.t('automations:action.notify', { message: a.message ?? '' });
-  }, [deviceName]);
+  }, [deviceName, scenes]);
 
   // Adopt a safety template (roadmap: safety rules as configurable templates, not a hardcoded floor):
   // pre-fill the builder from the template, layer localized text on top, then let the user bind it to
@@ -123,7 +122,9 @@ export default function Automations() {
   const adoptTemplate = (tpl: SafetyTemplate) => {
     const d = buildDraftFromTemplate(tpl, devices);
     d.name = t(`templates.items.${tpl.id}.title`);
-    if (tpl.actionKind === 'Notify') d.notifyMessage = t(`templates.items.${tpl.id}.message`);
+    if (tpl.actionKind === 'Notify' && d.actions[0]?.type === 'Notify') {
+      d.actions[0] = { ...d.actions[0], message: t(`templates.items.${tpl.id}.message`) };
+    }
     setTemplatePicker(false);
     setDraft(d);
   };
@@ -131,30 +132,23 @@ export default function Automations() {
   const save = async () => {
     if (!draft || !isDraftValid(draft)) return;
 
-    const triggers: RuleTrigger[] = [{
-      type: 'DeviceState', deviceId: draft.trigDevice, capabilityId: draft.trigCap,
-      operator: draft.trigOp, value: draft.trigOp === 'changed' ? null : parseValue(draft.trigValue),
-    }];
-    const conditions: RuleCondition[] = draft.onlyDark ? [{ type: 'Sun', dark: true }] : [];
-
-    let actions: RuleAction[];
-    if (draft.actionKind === 'Notify') {
-      actions = [{ type: 'Notify', message: draft.notifyMessage.trim() }];
-    } else {
-      actions = [{ type: 'Command', deviceId: draft.actDevice, set: { [draft.actCap]: parseValue(draft.actValue) } }];
-      if (draft.autoOffSeconds > 0) {
-        actions.push({ type: 'Delay', delaySeconds: draft.autoOffSeconds });
-        actions.push({ type: 'Command', deviceId: draft.actDevice, set: { [draft.actCap]: false } });
-      }
-    }
-
-    const rule: NewRule = { name: draft.name.trim(), description: null, status: draft.status, triggers, conditions, actions };
+    const payload: NewRule = {
+      name: draft.name.trim(), description: null, status: draft.status,
+      triggers: draft.triggers.map(normalizeTrigger),
+      conditions: draft.conditions,
+      actions: draft.actions,
+    };
     try {
-      await automationsApi.createRule(rule);
+      if (draft.id) {
+        const existing = rules.find((r) => r.id === draft.id);
+        if (existing) await automationsApi.updateRule(draft.id, { ...existing, ...payload });
+      } else {
+        await automationsApi.createRule(payload);
+      }
       setDraft(null);
       await load();
     } catch {
-      setError(t('errors.create'));
+      setError(draft.id ? t('errors.update') : t('errors.create'));
     }
   };
 
@@ -176,7 +170,7 @@ export default function Automations() {
           <Stack direction="row" spacing={1}>
             <Button startIcon={<HistoryRoundedIcon />} onClick={() => setHistoryFor('all')}>{t('actions.history')}</Button>
             <Button startIcon={<AutoAwesomeRoundedIcon />} onClick={() => setTemplatePicker(true)}>{t('actions.fromTemplate')}</Button>
-            <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setDraft({ ...EMPTY_DRAFT })}>
+            <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setDraft(emptyDraft())}>
               {t('actions.newRule')}
             </Button>
           </Stack>
@@ -218,6 +212,9 @@ export default function Automations() {
                       </Typography>
                     </Box>
                     <Stack direction="row" alignItems="center" spacing={0.5}>
+                      <Tooltip title={t('actions.edit')}>
+                        <IconButton onClick={() => setDraft(draftFromRule(rule))}><EditRoundedIcon /></IconButton>
+                      </Tooltip>
                       <Tooltip title={t('actions.simulate')}>
                         <IconButton onClick={() => setSimulateFor(rule)}><ScienceRoundedIcon /></IconButton>
                       </Tooltip>
@@ -247,123 +244,160 @@ export default function Automations() {
       <TemplateGallery
         open={templatePicker} devices={devices} rules={rules}
         onPick={adoptTemplate} onClose={() => setTemplatePicker(false)} />
-      <CreateDialog draft={draft} devices={devices} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} />
+      <RuleDialog draft={draft} devices={devices} scenes={scenes} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} />
       <HistoryDrawer target={historyFor} onClose={() => setHistoryFor(null)} />
       <SimulateDialog rule={simulateFor} onClose={() => setSimulateFor(null)} />
     </Container>
   );
 }
 
-function CreateDialog({
-  draft, devices, onChange, onClose, onSave,
+/**
+ * Rule builder — create or edit an automation. Three list sections mirror the rule model: triggers (any
+ * fires — OR), conditions (all must hold — AND, optional) and actions (run in order). Each row is an
+ * independent editor with add/remove, so a rule can watch several triggers and do several things.
+ */
+function RuleDialog({
+  draft, devices, scenes, onChange, onClose, onSave,
 }: {
-  draft: DraftState | null;
+  draft: RuleDraft | null;
   devices: CapabilityDevice[];
-  onChange: (d: DraftState) => void;
+  scenes: Scene[];
+  onChange: (d: RuleDraft) => void;
   onClose: () => void;
   onSave: () => void;
 }) {
   const { t } = useTranslation('automations');
-  const caps = (deviceId: string) => devices.find((d) => d.id === deviceId)?.capabilities ?? [];
   const valid = draft ? isDraftValid(draft) : false;
+  const editing = !!draft?.id;
 
   return (
     <Dialog open={draft !== null} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{t('dialog.createTitle')}</DialogTitle>
+      <DialogTitle>{editing ? t('dialog.editTitle') : t('dialog.createTitle')}</DialogTitle>
       <DialogContent>
-        {draft && (
-          <Stack spacing={2.5} mt={1}>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-              <TextField label={t('dialog.name')} value={draft.name} autoFocus required fullWidth
-                onChange={(e) => onChange({ ...draft, name: e.target.value })} />
-              <TextField select label={t('dialog.status')} value={draft.status} sx={{ minWidth: 140 }}
-                helperText={draft.status === 'Shadow' ? t('dialog.shadowHelper')
-                  : draft.status === 'BoundedActive' ? t('dialog.boundedHelper') : ' '}
-                onChange={(e) => onChange({ ...draft, status: e.target.value as RuleStatus })}>
-                <MenuItem value="Active">{t('status.Active')}</MenuItem>
-                <MenuItem value="BoundedActive">{t('status.BoundedActive')}</MenuItem>
-                <MenuItem value="Shadow">{t('status.Shadow')}</MenuItem>
-              </TextField>
-            </Stack>
-
-            <Box>
-              <Typography variant="overline" color="text.secondary">{t('dialog.whenTrigger')}</Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mt={0.5}>
-                <TextField select label={t('dialog.device')} value={draft.trigDevice} fullWidth
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    const keep = caps(id).some((c) => c.id === draft.trigCap);
-                    onChange({ ...draft, trigDevice: id, trigCap: keep ? draft.trigCap : '' });
-                  }}>
-                  {devices.map((d) => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
-                </TextField>
-                <TextField select label={t('dialog.capability')} value={draft.trigCap} fullWidth disabled={!draft.trigDevice}
-                  onChange={(e) => onChange({ ...draft, trigCap: e.target.value })}>
-                  {caps(draft.trigDevice).map((c) => <MenuItem key={c.id} value={c.id}>{c.id}</MenuItem>)}
-                </TextField>
-              </Stack>
-              <Stack direction="row" spacing={1.5} mt={1.5}>
-                <TextField select label={t('dialog.operator')} value={draft.trigOp} sx={{ width: 140 }}
-                  onChange={(e) => onChange({ ...draft, trigOp: e.target.value })}>
-                  {OPERATORS.map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}
-                </TextField>
-                <TextField label={t('dialog.value')} value={draft.trigValue} fullWidth disabled={draft.trigOp === 'changed'}
-                  helperText={t('dialog.valueHelper')}
-                  onChange={(e) => onChange({ ...draft, trigValue: e.target.value })} />
-              </Stack>
-              <FormControlLabel sx={{ mt: 0.5 }}
-                control={<Checkbox checked={draft.onlyDark} onChange={(e) => onChange({ ...draft, onlyDark: e.target.checked })} />}
-                label={t('dialog.onlyDark')} />
-            </Box>
-
-            <Divider />
-
-            <Box>
-              <Typography variant="overline" color="text.secondary">{t('dialog.thenAction')}</Typography>
-              <TextField select label={t('dialog.actionType')} value={draft.actionKind} sx={{ mt: 0.5, minWidth: 220 }}
-                onChange={(e) => onChange({ ...draft, actionKind: e.target.value as ActionKind })}>
-                <MenuItem value="Command">{t('dialog.actionCommand')}</MenuItem>
-                <MenuItem value="Notify">{t('dialog.actionNotify')}</MenuItem>
-              </TextField>
-
-              {draft.actionKind === 'Notify' ? (
-                <TextField label={t('dialog.notifyMessage')} value={draft.notifyMessage} fullWidth multiline minRows={2}
-                  sx={{ mt: 1.5 }} helperText={t('dialog.notifyMessageHelper')}
-                  onChange={(e) => onChange({ ...draft, notifyMessage: e.target.value })} />
-              ) : (
-                <>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mt={1.5}>
-                    <TextField select label={t('dialog.device')} value={draft.actDevice} fullWidth
-                      onChange={(e) => {
-                        const id = e.target.value;
-                        const keep = caps(id).some((c) => c.id === draft.actCap && c.writable);
-                        onChange({ ...draft, actDevice: id, actCap: keep ? draft.actCap : '' });
-                      }}>
-                      {devices.map((d) => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
-                    </TextField>
-                    <TextField select label={t('dialog.capability')} value={draft.actCap} fullWidth disabled={!draft.actDevice}
-                      onChange={(e) => onChange({ ...draft, actCap: e.target.value })}>
-                      {caps(draft.actDevice).filter((c) => c.writable).map((c) => <MenuItem key={c.id} value={c.id}>{c.id}</MenuItem>)}
-                    </TextField>
-                  </Stack>
-                  <Stack direction="row" spacing={1.5} mt={1.5}>
-                    <TextField label={t('dialog.value')} value={draft.actValue} fullWidth
-                      onChange={(e) => onChange({ ...draft, actValue: e.target.value })} />
-                    <TextField type="number" label={t('dialog.autoOff')} value={draft.autoOffSeconds} sx={{ width: 180 }}
-                      helperText={t('dialog.autoOffHelper')}
-                      onChange={(e) => onChange({ ...draft, autoOffSeconds: Number(e.target.value) || 0 })} />
-                  </Stack>
-                </>
-              )}
-            </Box>
-          </Stack>
-        )}
+        {draft && <RuleDialogBody draft={draft} devices={devices} scenes={scenes} onChange={onChange} />}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t('actions.cancel')}</Button>
-        <Button variant="contained" onClick={onSave} disabled={!valid}>{t('actions.create')}</Button>
+        <Button variant="contained" onClick={onSave} disabled={!valid}>
+          {editing ? t('actions.save') : t('actions.create')}
+        </Button>
       </DialogActions>
     </Dialog>
+  );
+}
+
+function RuleDialogBody({
+  draft, devices, scenes, onChange,
+}: {
+  draft: RuleDraft;
+  devices: CapabilityDevice[];
+  scenes: Scene[];
+  onChange: (d: RuleDraft) => void;
+}) {
+  const { t } = useTranslation('automations');
+  const caps = (id?: string | null) => devices.find((d) => d.id === id)?.capabilities ?? [];
+  const setTriggers = (triggers: RuleTrigger[]) => onChange({ ...draft, triggers });
+  const setConditions = (conditions: RuleCondition[]) => onChange({ ...draft, conditions });
+  const setActions = (actions: RuleAction[]) => onChange({ ...draft, actions });
+
+  return (
+    <Stack spacing={2.5} mt={1}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+        <TextField label={t('dialog.name')} value={draft.name} autoFocus required fullWidth
+          onChange={(e) => onChange({ ...draft, name: e.target.value })} />
+        <TextField select label={t('dialog.status')} value={draft.status} sx={{ minWidth: 150 }}
+          helperText={draft.status === 'Shadow' ? t('dialog.shadowHelper')
+            : draft.status === 'BoundedActive' ? t('dialog.boundedHelper') : ' '}
+          onChange={(e) => onChange({ ...draft, status: e.target.value as RuleStatus })}>
+          <MenuItem value="Active">{t('status.Active')}</MenuItem>
+          <MenuItem value="BoundedActive">{t('status.BoundedActive')}</MenuItem>
+          <MenuItem value="Shadow">{t('status.Shadow')}</MenuItem>
+        </TextField>
+      </Stack>
+
+      <Divider />
+
+      <EditorSection title={t('sections.when')} hint={t('sections.whenHint')}
+        addLabel={t('sections.addTrigger')} onAdd={() => setTriggers([...draft.triggers, newTrigger()])}>
+        {draft.triggers.map((tr, i) => (
+          <RuleRow key={i} connector={i > 0 ? t('sections.or') : undefined} deletable={draft.triggers.length > 1}
+            onDelete={() => setTriggers(draft.triggers.filter((_, x) => x !== i))}>
+            <TriggerEditor devices={devices} caps={caps} value={tr}
+              onChange={(v) => setTriggers(draft.triggers.map((x, xi) => (xi === i ? v : x)))} />
+          </RuleRow>
+        ))}
+      </EditorSection>
+
+      <Divider />
+
+      <EditorSection title={t('sections.if')} hint={t('sections.ifHint')}
+        addLabel={t('sections.addCondition')} onAdd={() => setConditions([...draft.conditions, newCondition()])}>
+        {draft.conditions.length === 0 && (
+          <Typography variant="body2" color="text.secondary">{t('sections.noConditions')}</Typography>
+        )}
+        {draft.conditions.map((c, i) => (
+          <RuleRow key={i} connector={i > 0 ? t('sections.and') : undefined} deletable
+            onDelete={() => setConditions(draft.conditions.filter((_, x) => x !== i))}>
+            <ConditionEditor devices={devices} caps={caps} value={c}
+              onChange={(v) => setConditions(draft.conditions.map((x, xi) => (xi === i ? v : x)))} />
+          </RuleRow>
+        ))}
+      </EditorSection>
+
+      <Divider />
+
+      <EditorSection title={t('sections.then')} hint={t('sections.thenHint')}
+        addLabel={t('sections.addAction')} onAdd={() => setActions([...draft.actions, newAction()])}>
+        {draft.actions.map((a, i) => (
+          <RuleRow key={i} connector={i > 0 ? t('sections.andThen') : undefined} deletable={draft.actions.length > 1}
+            onDelete={() => setActions(draft.actions.filter((_, x) => x !== i))}>
+            <ActionEditor devices={devices} caps={caps} scenes={scenes} value={a}
+              onChange={(v) => setActions(draft.actions.map((x, xi) => (xi === i ? v : x)))} />
+          </RuleRow>
+        ))}
+      </EditorSection>
+    </Stack>
+  );
+}
+
+/** A titled builder section (When / If / Then) with a hint and an "add row" button. */
+function EditorSection({
+  title, hint, addLabel, onAdd, children,
+}: {
+  title: string; hint: string; addLabel: string; onAdd: () => void; children: ReactNode;
+}) {
+  return (
+    <Box>
+      <Typography variant="overline" color="text.secondary" display="block">{title}</Typography>
+      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>{hint}</Typography>
+      <Stack spacing={1}>{children}</Stack>
+      <Button size="small" startIcon={<AddRoundedIcon />} onClick={onAdd} sx={{ mt: 1 }}>{addLabel}</Button>
+    </Box>
+  );
+}
+
+/** One editor row inside a section — a bordered card with an optional or/and/then connector and a delete button. */
+function RuleRow({
+  connector, deletable, onDelete, children,
+}: {
+  connector?: string; deletable: boolean; onDelete: () => void; children: ReactNode;
+}) {
+  return (
+    <>
+      {connector && (
+        <Typography variant="overline" color="text.secondary" sx={{ display: 'block', textAlign: 'center', my: -0.5 }}>
+          {connector}
+        </Typography>
+      )}
+      <Paper variant="outlined" sx={{ p: 1.5, pr: 5, position: 'relative', borderRadius: 2 }}>
+        {deletable && (
+          <IconButton size="small" onClick={onDelete} sx={{ position: 'absolute', top: 6, right: 6 }}>
+            <DeleteOutlineRoundedIcon fontSize="small" />
+          </IconButton>
+        )}
+        {children}
+      </Paper>
+    </>
   );
 }
 

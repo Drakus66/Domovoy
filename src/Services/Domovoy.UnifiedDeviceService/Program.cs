@@ -28,6 +28,7 @@ internal static class Program
 
                 // Register message bus
                 services.AddSingleton<IMessageBus, RabbitMqConnection>();
+                services.AddSystemControl("unified-device-service"); // UI-issued restart (self-stop → restart policy)
 
                 // Capability-contract consumer — sole device-management path after roadmap Step 5.
                 services.AddHostedService<CapabilityDeviceManager>();

@@ -15,12 +15,13 @@ import SpaceDashboardRoundedIcon from '@mui/icons-material/SpaceDashboardRounded
 import ArticleRoundedIcon from '@mui/icons-material/ArticleRounded';
 import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
 import BluetoothSearchingRoundedIcon from '@mui/icons-material/BluetoothSearchingRounded';
+import DevicesRoundedIcon from '@mui/icons-material/DevicesRounded';
 import RoomRoundedIcon from '@mui/icons-material/RoomRounded';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
+import MovieFilterRoundedIcon from '@mui/icons-material/MovieFilterRounded';
 import HomeWorkRoundedIcon from '@mui/icons-material/HomeWorkRounded';
 import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
 import ExtensionRoundedIcon from '@mui/icons-material/ExtensionRounded';
-import AccountTreeRoundedIcon2 from '@mui/icons-material/SchemaRounded';
 import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
 import RuleRoundedIcon from '@mui/icons-material/RuleRounded';
 import GroupRoundedIcon from '@mui/icons-material/GroupRounded';
@@ -28,6 +29,7 @@ import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import ColorModeToggle from '../theme/ColorModeToggle';
 import ThemePicker from '../theme/ThemePicker';
 import LanguagePicker from '../i18n/LanguagePicker';
+import AccountMenu from '../auth/AccountMenu';
 import HearthIndicator from './HearthIndicator';
 
 const DRAWER_WIDTH = 248;
@@ -48,7 +50,7 @@ const navGroups = [
     key: 'automation',
     items: [
       { key: 'automations', path: '/automations', icon: <BoltRoundedIcon /> },
-      { key: 'flow', path: '/flow', icon: <AccountTreeRoundedIcon2 /> },
+      { key: 'scenes', path: '/scenes', icon: <MovieFilterRoundedIcon /> },
       { key: 'blocks', path: '/blocks', icon: <AccountTreeRoundedIcon /> },
       { key: 'models', path: '/models', icon: <PsychologyRoundedIcon /> },
       { key: 'proposals', path: '/proposals', icon: <RuleRoundedIcon /> },
@@ -57,6 +59,7 @@ const navGroups = [
   {
     key: 'devices',
     items: [
+      { key: 'registry', path: '/devices', icon: <DevicesRoundedIcon /> },
       { key: 'plugins', path: '/plugins', icon: <ExtensionRoundedIcon /> },
       { key: 'zigbee', path: '/zigbee', icon: <BluetoothSearchingRoundedIcon /> },
     ],
@@ -168,6 +171,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <LanguagePicker />
           <ThemePicker />
           <ColorModeToggle />
+          <AccountMenu />
         </Box>
       </Box>
     </Box>
@@ -192,6 +196,7 @@ function Navigation() {
             <LanguagePicker />
             <ThemePicker />
             <ColorModeToggle />
+            <AccountMenu />
           </Toolbar>
         </AppBar>
         <Drawer

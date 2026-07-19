@@ -9,14 +9,17 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { getTheme } from './theme';
 import { useThemeStore } from './store/themeStore';
 import { Loading } from './components/common';
+import AuthGate from './components/auth/AuthGate';
+import NotificationHubListener from './components/notifications/NotificationHubListener';
 import Layout from './components/layout/Layout';
 import Devices from './pages/Devices';
+import DeviceRegistry from './pages/DeviceRegistry';
 import Zones from './pages/Zones';
 import Modes from './pages/Modes';
 import Automations from './pages/Automations';
+import Scenes from './pages/Scenes';
 import Blocks from './pages/Blocks';
 import Plugins from './pages/Plugins';
-import Flow from './pages/Flow';
 import Models from './pages/Models';
 import Proposals from './pages/Proposals';
 import Users from './pages/Users';
@@ -34,16 +37,22 @@ function App() {
       <CssBaseline enableColorScheme />
       {/* Suspense catches the async load of translation namespaces (http-backend). */}
       <Suspense fallback={<Loading />}>
+        {/* AuthGate resolves the session before the routes mount; shows the login screen when auth is required. */}
+        <AuthGate>
+        {/* One persistent hub connection for LAN notification banners (2M.2), on any page. */}
+        <NotificationHubListener />
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Layout />}>
               <Route index element={<Devices />} />
-              {/* Deep link to a dashboard tab: all / sphere:<category> / dashboard id. */}
+              {/* Deep link to a dashboard tab: sphere:<category> / dashboard id. */}
               <Route path="t/:tabId" element={<Devices />} />
+              {/* The full inventory (registry) — the admin counterpart of the home screen. */}
+              <Route path="devices" element={<DeviceRegistry />} />
               <Route path="zones" element={<Zones />} />
               <Route path="modes" element={<Modes />} />
               <Route path="automations" element={<Automations />} />
-              <Route path="flow" element={<Flow />} />
+              <Route path="scenes" element={<Scenes />} />
               <Route path="blocks" element={<Blocks />} />
               <Route path="models" element={<Models />} />
               <Route path="proposals" element={<Proposals />} />
@@ -57,6 +66,7 @@ function App() {
             </Route>
           </Routes>
         </BrowserRouter>
+        </AuthGate>
       </Suspense>
       <NotificationContainer />
     </CssVarsProvider>

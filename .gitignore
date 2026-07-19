@@ -23,3 +23,8 @@
 data/zigbee2mqtt/state.json
 data/zigbee2mqtt/coordinator_backup.json
 data/zigbee2mqtt/database.db
+
+# Backup bundles (Epic 3A) — runtime host data written into the bind mount, not source.
+/data/backups/
+# SSH reverse-tunnel key material (Этап 3c autossh) — private keys, never commit.
+/data/autossh/

@@ -205,6 +205,80 @@ public sealed class CompositeBlockTests
         Assert.Equal(true, ctx.Get(CapabilityIds.OnOff));
     }
 
+    // A composite exposing an internal thermostat's setpoint as a tunable instance param (Epic 2Q passthrough).
+    private const string TunableThermostat = """
+        in temperature
+        heat = thermostat(setpoint=21, hysteresis=0.5) <- temperature
+        out demand = heat.on_off
+        param sp = heat.setpoint default 21
+        """;
+
+    [Fact]
+    public void Passthrough_Dsl_ParsesParamStatements()
+    {
+        var def = BlockDsl.Parse("tunable", "Tunable", "desc", TunableThermostat, ResolveGraph);
+
+        var p = Assert.Single(def.Params!);
+        Assert.Equal("sp", p.Name);
+        Assert.Equal("heat", p.TargetNode);
+        Assert.Equal("setpoint", p.TargetParam);
+        Assert.Equal(21, p.Default); // explicit "default 21"
+    }
+
+    [Fact]
+    public void Passthrough_DefaultFallsBackToNodeAuthoredValue_WhenOmitted()
+    {
+        // No "default" clause → the exposed param defaults to the node's authored setpoint (21), so behaviour
+        // is unchanged until the instance overrides it.
+        const string noDefault = """
+            in temperature
+            heat = thermostat(setpoint=21, hysteresis=0.5) <- temperature
+            out demand = heat.on_off
+            param sp = heat.setpoint
+            """;
+        var def = BlockDsl.Parse("t", "t", "d", noDefault, ResolveGraph);
+        Assert.Equal(21, Assert.Single(def.Params!).Default);
+    }
+
+    [Fact]
+    public void Passthrough_ExposesParamOnCompositeType()
+    {
+        var def = BlockDsl.Parse("tunable", "Tunable", "desc", TunableThermostat, ResolveGraph);
+        var type = new CompositeBlockType(def, ResolveGraph);
+
+        // The composite type surfaces the exposed param as an ordinary tunable param → the authoring form renders it.
+        var spec = Assert.Single(type.Params);
+        Assert.Equal("sp", spec.Name);
+        Assert.Equal(21, spec.Default);
+    }
+
+    [Fact]
+    public void Passthrough_InstanceParam_OverridesInternalNodeParam()
+    {
+        var def = BlockDsl.Parse("tunable", "Tunable", "desc", TunableThermostat, ResolveGraph);
+        var block = new CompositeBlock(def, ResolveGraph);
+
+        // Default setpoint 21: 22° is above → no heat demand.
+        var baseline = new FakeCompositeContext { Inputs = { ["temperature"] = 22.0 } };
+        block.Tick(baseline);
+        Assert.Equal(false, baseline.Get("demand"));
+
+        // Instance raises the setpoint to 30 via the exposed param → the same 22° now demands heat.
+        var raised = new FakeCompositeContext { Inputs = { ["temperature"] = 22.0 }, Params = { ["sp"] = 30.0 } };
+        block.Tick(raised);
+        Assert.Equal(true, raised.Get("demand"));
+    }
+
+    [Fact]
+    public void Passthrough_RoundTripsThroughGraphDsl()
+    {
+        var def = BlockDsl.Parse("tunable", "Tunable", "desc", TunableThermostat, ResolveGraph);
+        var text = BlockDsl.SerializeGraph(def);
+        var reparsed = BlockDsl.Parse("tunable", "Tunable", "desc", text, ResolveGraph);
+        Assert.Equal(BlockDsl.SerializeGraph(def), BlockDsl.SerializeGraph(reparsed));
+        Assert.Contains("param sp = heat.setpoint", text);
+    }
+
     [Fact]
     public void Parse_UnknownReferencedType_ThrowsUnknownBlockType()
     {
@@ -241,12 +315,14 @@ public sealed class CompositeBlockTests
         public Dictionary<string, object?> Commands { get; } = new();
         public Dictionary<string, object?> State { get; } = new();
         public Dictionary<string, object?> Emitted { get; } = new();
+        // Instance params (Epic 2Q passthrough) — a real context reads these from ControlBlock.Params.
+        public Dictionary<string, double> Params { get; } = new();
 
         public object? Get(string cap) => Emitted.TryGetValue(cap, out var v) ? v : null;
 
         public object? Read(string inputPort) => Inputs.TryGetValue(inputPort, out var v) ? v : null;
         public double? ReadNumber(string inputPort) => Read(inputPort) is double d ? d : null;
-        public double Param(string key, double fallback) => fallback;
+        public double Param(string key, double fallback) => Params.TryGetValue(key, out var v) ? v : fallback;
         public object? Commanded(string capabilityId) => Commands.TryGetValue(capabilityId, out var v) ? v : null;
         public void Emit(string capabilityId, object? value) => Emitted[capabilityId] = value;
         public T? GetState<T>(string key) => State.TryGetValue(key, out var v) && v is T t ? t : default;

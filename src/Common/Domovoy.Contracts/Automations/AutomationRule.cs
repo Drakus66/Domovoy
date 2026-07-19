@@ -67,7 +67,7 @@ public enum SunEvent { Sunrise, Sunset }
 public enum ConditionType { DeviceState, TimeOfDay, Sun, Mode }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
-public enum ActionType { Command, Delay, Notify }
+public enum ActionType { Command, Delay, Notify, Scene }
 
 /// <summary>
 /// What starts a rule. <see cref="TriggerType.DeviceState"/>: a capability of a device (or any device
@@ -124,6 +124,7 @@ public class RuleCondition
 /// What the rule does. <see cref="ActionType.Command"/>: set capabilities on a device.
 /// <see cref="ActionType.Delay"/>: wait before the next action (enables "on for 5 min" = command,
 /// delay, command). <see cref="ActionType.Notify"/>: emit a notification message.
+/// <see cref="ActionType.Scene"/>: activate a stored scene (Epic 3B) — fans its targets out as commands.
 /// </summary>
 public class RuleAction
 {
@@ -138,4 +139,7 @@ public class RuleAction
 
     // Notify
     public string? Message { get; set; }
+
+    // Scene (Epic 3B): id of the scene to activate; resolved to its device targets at run time.
+    public string? SceneId { get; set; }
 }

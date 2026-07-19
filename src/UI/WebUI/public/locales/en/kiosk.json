@@ -1,0 +1,18 @@
+{
+  "title": "Kiosk mode (panel)",
+  "caption": "Turn this device into a wall panel: one dashboard, no navigation, auto-return and screen-dim on idle.",
+  "screen": "Panel screen",
+  "home": "Home",
+  "idleReturn": "Auto-return, sec",
+  "idleReturnHelp": "Seconds of inactivity before returning to the pinned screen (0 = never).",
+  "dim": "Dim after, sec",
+  "dimHelp": "Seconds of inactivity before dimming the screen (0 = never). A tap wakes it.",
+  "exitHint": "Exit kiosk with a long-press (2s) in the top-left corner.",
+  "enter": "Enter kiosk mode",
+  "exitConfirm": {
+    "title": "Exit kiosk mode?",
+    "body": "The panel returns to the normal UI with navigation.",
+    "cancel": "Cancel",
+    "confirm": "Exit"
+  }
+}

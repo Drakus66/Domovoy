@@ -73,7 +73,26 @@ export const capabilityDevicesApi = {
     apiClient
       .put(`/api/capability-devices/${encodeURIComponent(deviceId)}/archetype`, { archetype })
       .then(() => undefined),
+
+  /**
+   * Remove an offline device from the registry (409 while online). Reversible by design: if the
+   * device powers back up it re-announces and goes through discovery again as a fresh arrival.
+   */
+  deleteDevice: (deviceId: string): Promise<void> =>
+    apiClient
+      .delete(`/api/capability-devices/${encodeURIComponent(deviceId)}`)
+      .then(() => undefined),
 };
+
+/**
+ * Infrastructure devices: platform virtual sensors (sun/time/calendar/home) and control-block
+ * projections. They stay first-class everywhere a device can be referenced (rule editors,
+ * dashboard pickers, the registry's "service" toggle) but are kept off the home-screen tabs.
+ */
+export const SERVICE_ADAPTER_SOURCES = ['System', 'ControlBlock'] as const;
+
+export const isServiceDevice = (d: CapabilityDevice): boolean =>
+  (SERVICE_ADAPTER_SOURCES as readonly string[]).includes(d.adapterSource);
 
 /** Guid.Empty / blank zone ids both mean "unassigned". */
 export const isUnassignedZone = (zoneId?: string | null): boolean =>

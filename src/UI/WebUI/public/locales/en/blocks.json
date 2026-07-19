@@ -16,6 +16,11 @@
     "search": "Search by name or description…",
     "noMatch": "Nothing matches the search."
   },
+  "gallery": {
+    "tunable": "Tunable",
+    "needs": "Inputs",
+    "drives": "Drives"
+  },
   "category": {
     "template": "Ready-made loops",
     "control": "Control",
@@ -25,6 +30,49 @@
     "math": "Math & expressions",
     "ml": "Machine learning",
     "other": "Other"
+  },
+  "type": {
+    "ewma_filter": { "title": "EWMA filter", "desc": "Exponentially-weighted moving average — smooths a noisy numeric signal." },
+    "thermostat": { "title": "Thermostat (hysteresis)", "desc": "Bang-bang heating/cooling demand from a temperature input and a setpoint, with hysteresis." },
+    "co2_ventilation": { "title": "CO₂ ventilation", "desc": "Demands ventilation when CO₂ rises above a threshold (with hysteresis)." },
+    "irrigation_sequencer": { "title": "Irrigation cycle", "desc": "Opens a valve for a run time on a fixed interval; an inhibit input (rain) skips a cycle." },
+    "sun_gate": { "title": "Sun gate (outdoor lighting)", "desc": "On while it is dark at the site (dusk-to-dawn), with a lead/trail offset — for outdoor lights." },
+    "ml_setpoint": { "title": "ML setpoint (learned schedule)", "desc": "Emits a temperature setpoint predicted by the learned schedule model." },
+    "ml_predictor": { "title": "ML predictor (source)", "desc": "Emits a trained model's prediction for a target as a numeric signal for other blocks." },
+    "ml_thermostat": { "title": "ML thermostat (setpoint governor)", "desc": "Proposes a learned temperature setpoint to a deterministic thermostat loop, staged Shadow → Bounded → Full under the safety floor." },
+    "ml_switch": { "title": "ML switch (on/off governor)", "desc": "Proposes a learned on/off schedule to a deterministic switch, staged Shadow → Bounded → Full with a probability threshold + anti-chatter dwell. Use when the trained target is a boolean capability." },
+    "ml_selector": { "title": "ML mode selector", "desc": "Proposes a learned enum schedule (e.g. an HVAC mode) to a deterministic loop, staged Shadow → Bounded → Full, Bounded limited to adjacent values. Use when the trained target is an enum capability." },
+    "comparator": { "title": "Comparator", "desc": "Emits true when the input satisfies an operator against a threshold." },
+    "hysteresis": { "title": "Hysteresis (relay)", "desc": "Two-threshold on/off with a dead-band — the generic bang-bang controller." },
+    "window": { "title": "Window (in-range)", "desc": "True while the input is between low and high (or outside, when inverted)." },
+    "logic": { "title": "Logic gate", "desc": "Combines boolean inputs with and/or/xor/nand/nor (+ optional invert)." },
+    "select": { "title": "Select (2:1)", "desc": "Outputs a when sel is true, otherwise b." },
+    "linear_map": { "title": "Linear map (gain/offset)", "desc": "y = in × gain + offset." },
+    "clamp": { "title": "Clamp (limiter)", "desc": "Constrains the input to a [min, max] range." },
+    "deadband": { "title": "Deadband", "desc": "Holds the output until the input changes by at least epsilon." },
+    "rate_limiter": { "title": "Rate limiter (slew)", "desc": "Caps the output's rate of change toward the input." },
+    "aggregate": { "title": "Aggregate", "desc": "Combines several numeric inputs with min/max/sum/avg." },
+    "min_dwell": { "title": "Minimum dwell (anti-chatter)", "desc": "Holds a boolean for a minimum time before it may change again." },
+    "pid": { "title": "PID controller", "desc": "Continuous 0–100 % control of a device by power/position, with optional feedforward." },
+    "on_delay": { "title": "On-delay (TON)", "desc": "Passes true only after the input has been true continuously for a delay." },
+    "off_delay": { "title": "Off-delay (TOFF)", "desc": "Holds the output true for a delay after the input goes false." },
+    "pulse": { "title": "Pulse (one-shot)", "desc": "Emits a fixed-width true pulse on each rising edge of the trigger." },
+    "interval": { "title": "Interval timer", "desc": "True for a run-window at the start of every period (optionally gated by enable)." },
+    "edge": { "title": "Edge detector", "desc": "Momentary true when the input changes (rising/falling/both)." },
+    "latch": { "title": "Latch (SR)", "desc": "Holds true after set, false after reset; priority breaks a tie." },
+    "counter": { "title": "Counter", "desc": "Counts rising edges of the increment input; reset zeroes the count." },
+    "sample_hold": { "title": "Sample & hold", "desc": "Captures the input value on a trigger edge and holds it until the next." },
+    "debounce": { "title": "Debounce", "desc": "Ignores changes shorter than a stability window." },
+    "moving_average": { "title": "Moving average", "desc": "Average of the last N samples of a numeric signal." },
+    "median_filter": { "title": "Median filter", "desc": "Median of the last N samples — robust to outliers/spikes." },
+    "ramp": { "title": "Ramp", "desc": "Moves from a start value toward a target at a fixed rate per second." },
+    "expression": { "title": "Expression (custom script)", "desc": "Compute outputs from inputs with a few lines of arithmetic — OUT1 = (IN1 + IN2) * IN3." },
+    "presence_mode": { "title": "Presence → home mode", "desc": "Switches the home mode by presence: any sensor true → home, all silent for a delay → away. Bind the output to the Home device; never overrides manual modes (Night/Vacation)." },
+    "climate_loop": { "title": "Climate loop (EWMA → thermostat)", "desc": "Smooths a temperature with an EWMA filter, then drives a hysteresis thermostat — the canonical filter→controller composite." },
+    "irrigation_multizone": { "title": "Multi-zone irrigation", "desc": "Runs several irrigation zones on independent schedules from one shared rain/soil inhibit." },
+    "smoothed_sensor": { "title": "Smoothed sensor", "desc": "Rejects spikes with a median filter, then smooths with an EWMA — a clean signal from a noisy sensor." },
+    "cooling_relay": { "title": "Cooling relay (hysteresis)", "desc": "Generic cooling demand: turns on above the high threshold and off below the low, using the inverted hysteresis primitive." },
+    "smart_thermostat": { "title": "Thermostat (from primitives)", "desc": "The classic thermostat rebuilt from primitives: EWMA smoothing → hysteresis relay. Bind heat to a boiler/valve." }
   },
   "chip": {
     "disabled": "disabled",
@@ -85,6 +133,7 @@
   },
   "param": {
     "_common": {
+      "stage": { "label": "Authority stage", "desc": "0 = Shadow (watching), 1 = Bounded, 2 = Full" },
       "baseline": { "label": "Baseline setpoint", "desc": "Reference the model is nudged around (tracks the loop's live setpoint)" },
       "band": { "label": "Band (±)", "desc": "How far the proposal may move from the baseline (Bounded stage)" },
       "driftThreshold": { "label": "Drift threshold", "desc": "Auto-demote to Shadow when the mean error exceeds this" },
@@ -114,6 +163,172 @@
     },
     "sun_gate": {
       "offsetMinutes": { "label": "Offset (min)", "desc": "Turn on this many minutes before sunset and off after sunrise" }
+    },
+    "comparator": {
+      "threshold": { "label": "Threshold", "desc": "Used when the threshold input is unbound" }
+    },
+    "hysteresis": {
+      "high": { "label": "High threshold", "desc": "Turn ON above this (turn OFF above this when inverted)" },
+      "low": { "label": "Low threshold", "desc": "Turn OFF below this (turn ON below this when inverted)" }
+    },
+    "window": {
+      "low": { "label": "Lower bound", "desc": "Inclusive" },
+      "high": { "label": "Upper bound", "desc": "Inclusive" }
+    },
+    "linear_map": {
+      "gain": { "label": "Gain", "desc": "Input multiplier" },
+      "offset": { "label": "Offset", "desc": "Added after scaling" }
+    },
+    "clamp": {
+      "min": { "label": "Minimum", "desc": "Lower bound of the range" },
+      "max": { "label": "Maximum", "desc": "Upper bound of the range" }
+    },
+    "deadband": {
+      "epsilon": { "label": "Change threshold (epsilon)", "desc": "Minimum input change that passes through" }
+    },
+    "rate_limiter": {
+      "maxRatePerSec": { "label": "Max rate", "desc": "Maximum output change per second" }
+    },
+    "min_dwell": {
+      "dwellSec": { "label": "Minimum dwell", "desc": "Minimum time between changes" }
+    },
+    "pid": {
+      "setpoint": { "label": "Setpoint", "desc": "Target (used when the sp input is unbound)" },
+      "kp": { "label": "Kp (proportional)", "desc": "Proportional gain (manual preset)" },
+      "ki": { "label": "Ki (integral)", "desc": "Integral gain (manual preset)" },
+      "kd": { "label": "Kd (derivative)", "desc": "Derivative gain (manual preset)" },
+      "ffGain": { "label": "Feedforward gain", "desc": "Weight of the ff disturbance input (0 = feedforward off)" },
+      "outMin": { "label": "Min output", "desc": "Lower limit of the output power" },
+      "outMax": { "label": "Max output", "desc": "Upper limit of the output power" },
+      "tuneBand": { "label": "Autotune noise band", "desc": "Band around the setpoint for the relay test (in process-value units)" }
+    },
+    "on_delay": {
+      "delaySec": { "label": "Delay", "desc": "How long the input must stay true before the output turns on" }
+    },
+    "off_delay": {
+      "delaySec": { "label": "Delay", "desc": "How long the output stays on after the input drops" }
+    },
+    "pulse": {
+      "widthSec": { "label": "Pulse width", "desc": "Width of the pulse" }
+    },
+    "interval": {
+      "periodSec": { "label": "Period", "desc": "Cycle length" },
+      "widthSec": { "label": "Run window", "desc": "How long the output is on at the start of each cycle" }
+    },
+    "debounce": {
+      "stableSec": { "label": "Stability window", "desc": "How long a new value must hold before it passes" }
+    },
+    "moving_average": {
+      "window": { "label": "Window (samples)", "desc": "Number of recent samples to average" }
+    },
+    "median_filter": {
+      "window": { "label": "Window (samples)", "desc": "Number of recent samples in the median window" }
+    },
+    "ramp": {
+      "ratePerSec": { "label": "Rate", "desc": "Change per second toward the target" },
+      "start": { "label": "Start value", "desc": "Initial output value" }
+    },
+    "presence_mode": {
+      "awayDelayMin": { "label": "Away delay", "desc": "Silence across all sensors before switching to the away mode" }
+    },
+    "smart_thermostat": {
+      "high": { "label": "High threshold", "desc": "Upper hysteresis threshold (°C)" },
+      "low": { "label": "Low threshold", "desc": "Lower hysteresis threshold (°C)" },
+      "smoothing": { "label": "Smoothing", "desc": "EWMA filter time constant (s)" }
+    }
+  },
+  "input": {
+    "_common": {
+      "in": "Input signal",
+      "a": "First input",
+      "b": "Second input",
+      "c": "Third input",
+      "d": "Fourth input",
+      "in1": "First input",
+      "in2": "Second input",
+      "in3": "Third input",
+      "in4": "Fourth input",
+      "IN1": "Input 1",
+      "IN2": "Input 2",
+      "IN3": "Input 3",
+      "IN4": "Input 4",
+      "trigger": "Trigger",
+      "temperature": "Measured temperature"
+    },
+    "ewma_filter": { "in": "Raw numeric signal to smooth" },
+    "thermostat": { "temperature": "Measured (ideally filtered) temperature" },
+    "co2_ventilation": { "co2": "Measured CO₂ (ppm)" },
+    "irrigation_sequencer": { "inhibit": "Optional: non-zero skips watering (e.g. rain)" },
+    "comparator": {
+      "in": "Value to test",
+      "threshold": "Optional live threshold (overrides the param)"
+    },
+    "hysteresis": {
+      "in": "Measured value",
+      "high": "Optional live upper threshold (overrides the param)",
+      "low": "Optional live lower threshold (overrides the param)"
+    },
+    "window": { "in": "Value to test" },
+    "select": {
+      "sel": "Selector",
+      "a": "Value when sel is true",
+      "b": "Value when sel is false"
+    },
+    "rate_limiter": { "in": "Target value" },
+    "min_dwell": { "in": "Desired state" },
+    "pid": {
+      "pv": "Process value (measured, e.g. temperature)",
+      "sp": "Setpoint (overrides the param when bound)",
+      "ff": "Optional feedforward / disturbance (e.g. outdoor temp)"
+    },
+    "interval": { "enable": "Optional gate — false suppresses the pulse" },
+    "latch": {
+      "set": "Set (→ true)",
+      "reset": "Reset (→ false)"
+    },
+    "counter": {
+      "inc": "Increment on rising edge",
+      "reset": "Reset to zero while true"
+    },
+    "sample_hold": {
+      "in": "Value to sample",
+      "trigger": "Sample on rising edge"
+    },
+    "moving_average": { "in": "Signal" },
+    "median_filter": { "in": "Signal" },
+    "ramp": { "target": "Target value" },
+    "presence_mode": {
+      "presence_a": "Presence/occupancy sensor",
+      "presence_b": "Presence/occupancy sensor",
+      "presence_c": "Presence/occupancy sensor",
+      "presence_d": "Presence/occupancy sensor",
+      "current_mode": "Current home mode (bind to the Home device) — the manual-mode guard"
+    },
+    "ml_thermostat": { "temperature": "Measured (ideally filtered) signal — for the drift monitor" },
+    "ml_switch": { "on_off": "Measured on/off state — for the drift monitor" },
+    "ml_selector": { "hvac_mode": "Measured current value — for the drift monitor" },
+    "climate_loop": { "temperature": "Temperature to smooth and control" },
+    "irrigation_multizone": { "inhibit": "Shared inhibit (rain / wet soil)" },
+    "smoothed_sensor": { "value": "Noisy sensor signal" },
+    "cooling_relay": { "temperature": "Measured temperature" }
+  },
+  "option": {
+    "comparator": { "op": { "desc": "Comparison operator" } },
+    "logic": {
+      "op": { "desc": "Boolean operator" },
+      "invert": { "desc": "Invert the result" }
+    },
+    "aggregate": { "op": { "desc": "Aggregation" } },
+    "hysteresis": { "invert": { "desc": "Invert (on below low, off above high) — cooling-style" } },
+    "window": { "invert": { "desc": "Emit true when OUT of range instead" } },
+    "edge": { "type": { "desc": "Which edge to detect" } },
+    "latch": { "priority": { "desc": "Winner when set and reset are both true" } },
+    "pid": { "preset": { "desc": "Tuning profile — gentle (smooth, slow), balanced, responsive (fast, may overshoot), eco (energy-biased), manual (use kp/ki/kd), or autotune (run a relay experiment once, then track with the found gains)" } },
+    "expression": { "script": { "desc": "Expression program. Lines: `OUTn = expr` (output) or `name = expr` (local). Supports + - * / %, comparisons, && || !, a ? b : c, functions (min max abs clamp round floor ceil sqrt pow avg exp), and dt / prev(OUTn)." } },
+    "ml_predictor": { "target": { "desc": "Trained target capability to predict" } },
+    "presence_mode": {
+      "homeMode": { "desc": "Mode when presence is detected" },
+      "awayMode": { "desc": "Mode after the silence delay" }
     }
   },
   "dialog": {

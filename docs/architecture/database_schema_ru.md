@@ -1,29 +1,33 @@
 # Схема данных и хранение Domovoy
 
-> Актуально на 2026-05-31 (после Шага 5 capability-миграции). Описывает реальное состояние кода в
-> `src/`. Прошлая версия документа (legacy `Device`/`Light`/`Sensor`/`MqttDevice`, Redis, PostgreSQL)
-> относилась к снятой 6-сервисной архитектуре и удалена.
+> Актуально на 2026-07-19 (после Фазы 2 + начала Фазы 3). Описывает реальное состояние кода в `src/`.
+> Предыдущая версия документа датировалась 2026-05-31 (эпоха «только `capability_devices`, P0-5/1B ещё не
+> реализованы») и была снята как сильно устаревшая — с тех пор появилось более 20 новых коллекций.
 >
-> Связанные: [`roadmap.md`](roadmap.md) (планы по data-path: P0-4, P0-5, 1B), [`positioning_ru.md`](positioning_ru.md)
-> (зачем event-log как feature store), [`../runbook.md`](../runbook.md) (запуск стека).
+> Связанные: [`roadmap.md`](roadmap.md) (эпики и DoD), [`positioning_ru.md`](positioning_ru.md)
+> (зачем event-log как feature store), [`../runbook.md`](../runbook.md) (запуск стека),
+> [`../../memory-bank/currentState.md`](../../memory-bank/currentState.md) (снимок кода целиком).
 
 ## Обзор
 
-Хранилище — **только MongoDB** (текущее состояние + будущие time-series). Доступ к БД
-инкапсулирован в **DbGateway** (Gateway Pattern): остальные сервисы не ходят в Mongo напрямую, а
-получают данные через REST DbGateway или реагируют на события шины. Redis и PostgreSQL в системе
-**нет**; RabbitMQ закрывает и шину сообщений, и MQTT-брокер; мониторинг — Prometheus.
+Хранилище — **только MongoDB**. Доступ к БД инкапсулирован в **DbGateway** (Gateway Pattern): остальные
+сервисы не ходят в Mongo напрямую (единственное исключение — Serilog Mongo-sink `ops_logs`, пишущий
+напрямую из всех сервисов). Внутри DbGateway **repository-слоя нет** — эндпоинты/сервисы вызывают
+`IMongoDatabase.GetCollection<T>(...)` напрямую (26 файлов / ~253 точки использования; самый сцепленный —
+`HistoryEndpoints`, роллапы). Это осознанный технический долг — план по введению доменных
+store-интерфейсов (шов Mongo↔PostgreSQL) задокументирован как **Эпик 3H** в roadmap.md (пока ADR-уровень,
+код не начат). RabbitMQ закрывает и шину сообщений, и MQTT-брокер; мониторинг — Prometheus.
 
 ## Поток данных (как состояние попадает в БД)
 
 ```
 Адаптер (Connectivity)                DbGateway                 ApiGateway            WebUI
-  Zigbee2MqttAdapter / NativeAdapter
+  Zigbee2MqttAdapter / DomovoyNativeAdapter / EspHomeMqttAdapter
         │ DeviceDiscoveredV1
         │ DeviceStateReportV1   ─────► EventInterceptor
-        │ DeviceOnlineChangedV1         upsert в Mongo
-        │  (шина domovoy.*)             коллекция
-        ▼                               capability_devices
+        │ DeviceOnlineChangedV1         upsert/delta в Mongo
+        │  (шина domovoy.*)             capability_devices + device_events + sensor_readings
+        ▼
    RabbitMQ (bus + MQTT)                     │
                                              │  GET /api/capability-devices ◄── CapabilityDevicesController
                                              └──────────────────────────────────────────────► список устройств
@@ -31,81 +35,119 @@
 
 Команда:  WebUI ─► POST /api/device-control/{id}/set ─► DeviceCommandV1 (domovoy.commands)
           ─► адаптер кодирует в протокол устройства ─► устройство
+          (тот же путь используют: control-block actuation, правила, сцены [3B, НЕ закоммичено])
 ```
 
-Ключевой принцип: на шине ходят **нормализованные capability-значения** (`on_off`=bool,
-`brightness`=0..100), а не сырые протокольные payload'ы. Кодирование/декодирование живёт в адаптере
-(`Zigbee2MqttCodec`), нативный протокол — near-identity.
+Ключевой принцип не изменился: на шине ходят **нормализованные capability-значения**, а не сырые
+протокольные payload'ы; кодирование/декодирование живёт в адаптере.
 
-## Активные коллекции
+## Активные коллекции (домовая логика)
 
-### `capability_devices` — read-модель устройств (используется)
+### `capability_devices` — read-модель устройств
+Пишется `EventInterceptor` из контракта (`DeviceDiscoveredV1`/`DeviceStateReportV1`/`DeviceOnlineChangedV1`),
+читается WebUI. Модель — [CapabilityDeviceDocument](../../src/Gateway/Domovoy.DbGateway/Models/CapabilityDeviceDocument.cs):
+`Id` (GUID, `DeviceIdFactory`), `Name`, `AdapterSource` (`Zigbee2Mqtt`/`DomovoyNative`/`EspHome`/`System`),
+`Model?`, `ZoneId`, `Archetype` (2D, авто+override), `Capabilities[]` (`Id`/`Kind`/`Writable`/`Unit?`/`Min?`/`Max?`),
+`State: Dictionary<string,object>`, `IsOnline`, `LastUpdated`.
 
-Пишется `EventInterceptor` из контракта (`DeviceDiscoveredV1` / `DeviceStateReportV1` /
-`DeviceOnlineChangedV1`), читается WebUI. Модель — [CapabilityDeviceDocument](../../src/Gateway/Domovoy.DbGateway/Models/CapabilityDeviceDocument.cs).
+### `device_events` / `sensor_readings` — Mongo time-series feature store (P0-5, 1B)
+Append-only. `device_events` ([DeviceEventLog](../../src/Gateway/Domovoy.DbGateway/Models/DeviceEventLog.cs)) —
+дельта `oldValue→newValue` + `triggerSource` (user/rule/device/ml/block) + `ruleId`/`decisionId` + `mode`
+(1G) + зона; `sensor_readings` ([SensorReading](../../src/Gateway/Domovoy.DbGateway/Models/SensorReading.cs)) —
+числовая телеметрия. TTL + индексы через `TimeSeriesInitializer` (`collMod`); агрегации `$dateTrunc`
+(minute/hour/day) + батч-эндпоинт (`aggregate/batch`, dashboard-fill); CSV-экспорт.
 
-| Поле | Тип | Назначение |
-|---|---|---|
-| `Id` (`_id`) | string (GUID) | Логический id устройства, стабильный при переименовании/рестарте (`DeviceIdFactory`) |
-| `Name` | string | Отображаемое имя |
-| `AdapterSource` | string | Владелец-адаптер: `Zigbee2Mqtt` / `DomovoyNative` |
-| `Model` | string? | Модель устройства |
-| `ZoneId` | string | Зона (привязка к участку/комнате; см. P0-3) |
-| `Capabilities` | `CapabilityDocument[]` | Список возможностей (см. ниже) |
-| `State` | `Dictionary<string,object>` | Последнее нормализованное состояние по каждой capability |
-| `IsOnline` | bool | Доступность (из `DeviceOnlineChangedV1`) |
-| `LastUpdated` | DateTime (UTC) | Время последнего обновления |
+### `zones` — граф зон (P0-3)
+[Zone](../../src/Gateway/Domovoy.DbGateway/Models/Zone.cs): `Id`, `Name`, `ParentZoneId?`, `Kind`. CRUD +
+привязка устройства (`PUT /capability-devices/{id}/zone`).
 
-`CapabilityDocument` (плоский дескриптор возможности): `Id`, `Kind` (`Boolean`/`Number`/`Enum`/`Color`/`Text`/`Action`),
-`Writable`, `Unit?`, `Min?`, `Max?`. Типы BSON-дружественные (без contract-записей) — простая сериализация Mongo.
+### `automations` / `auto_history` — правила (1A) + история срабатываний
+[AutomationRule](../../src/Common/Domovoy.Contracts/Automations/AutomationRule.cs): `Triggers[]` (OR),
+`Conditions[]` (AND), `Actions[]` (по порядку, включая delay/notify/**scene** — 3B, НЕ закоммичено),
+`Status` (Active/Shadow/Disabled). `AutoHistory` — что сработало, реплей поверх той же модели (1F).
 
-## Определённые, но ещё не подключённые модели
+### `control_blocks` / `block_state` / `block_history` — control blocks (1H/1D/2Q)
+[ControlBlock](../../src/Common/Domovoy.Contracts/Blocks/ControlBlock.cs): `TypeId`, `Params`, `Options`
+(2Q — enum/bool/text), `Outputs[]` (актуация), для композитов — `CompositeDefinition`/`CompositeParam`
+(param-passthrough). `block_state` ([BlockStateRecord](../../src/Common/Domovoy.Contracts/Blocks/BlockStateRecord.cs)) —
+персистентность stateful-примитивов (on_delay/latch/PID-автотюн/…) между рестартами. `block_history` —
+run-records для атрибуции в журнале (`BlockTriggeredV1`).
 
-Существуют в `src/Gateway/Domovoy.DbGateway/Models/`, но запись/использование появятся по roadmap —
-документируются как фундамент, чтобы не вводить дубль-модели позже:
+### `home_state` — текущий режим дома (1G)
+[HomeState](../../src/Gateway/Domovoy.DbGateway/Models/HomeState.cs): single-doc, режим (`WellKnownModes`),
+публикует `HomeModeChangedV1` при `PUT`.
 
-| Модель | Файл | Статус / когда оживёт |
-|---|---|---|
-| `SensorReading` | [SensorReading.cs](../../src/Gateway/Domovoy.DbGateway/Models/SensorReading.cs) | Модель есть, записи нет → **P0-5 / Эпик 1B** (Mongo time-series телеметрия) |
-| `Automation` | [Automation.cs](../../src/Gateway/Domovoy.DbGateway/Models/Automation.cs) | `trigger`/`condition`/`action` как словари → **Эпик 1A** (AutomationService) |
-| `AutoHistory` | [AutoHistory.cs](../../src/Gateway/Domovoy.DbGateway/Models/AutoHistory.cs) | История срабатываний → **1A** + объяснимость/реплей **1F** |
-| `Location` | [Location.cs](../../src/Gateway/Domovoy.DbGateway/Models/Location.cs) | Граф зон (`ParentLocationId`, `Floor`) не используется → **P0-3** (зоны first-class) |
-| `User` / `UserAccess` | Models/ | Авторизация отложена → **Фаза 2** (локальная auth) |
+### `ml_models` / `ml_tasks` — ML-субстрат (2A/2B/2I/2P)
+[MlModelDocument](../../src/Gateway/Domovoy.DbGateway/Models/MlModelDocument.cs) — реестр версий (артефакт
+inline), стадия (Shadow/Bounded-Active/Full), scorecard/дрифт. [MlTaskDocument](../../src/Gateway/Domovoy.DbGateway/Models/MlTaskDocument.cs) —
+runtime-редактируемые задачи обучения (2P): что/на чём/в каких пределах, multi-target `(target, scope)`,
+ретенция версий.
 
-## Доменный event-log (планируется — P0-5)
+### `proposals` — очередь предложений (2C)
+[Proposal](../../src/Common/Domovoy.Contracts/Proposals/Proposal.cs): `Kind` (Rule/MlPromotion/MlTask/…),
+`Evidence` (локализованное обоснование), `Status` (Pending/Approved/Rejected), `Source` (discovery/ml/…).
 
-> ⚠️ Это «**пока не поздно**»-решение. Подробные требования к схеме — в [`roadmap.md`](roadmap.md), Эпик P0-5.
+### `users` / `roles` — модель ролей (2E, без enforcement)
+[User](../../src/Gateway/Domovoy.DbGateway/Models/User.cs) (без пароля/логина), [Role](../../src/Common/Domovoy.Contracts/Security/Role.cs)
+(`WellKnownPermissions`, `IsBuiltIn`). Засеяно `SecuritySeeder` (admin/resident/guest, идемпотентно).
 
-Append-only журнал в **Mongo time-series collection** (та же БД). Схема фиксируется сразу как
-**реплейабельный feature store**: каждая запись несёт `timestamp`, `zone`, `deviceId`, `capabilityId`,
-**`oldValue → newValue`** (дельта, не только новое), **`triggerSource`** (пользователь/правило/адаптер/ML),
-**`ruleId`/`decisionId`** (связка с `AutoHistory` и трассировкой), **`mode`/`context`**. Это топливо
-ML (Фаза 2) и основа объяснимости/реплея (Эпик 1F). Доменный event-log — это *данные*; операционные
-логи (Serilog) — отдельно, не смешивать.
+### `dashboards` / `dashboard_prefs` — кастомные дашборды
+[DashboardDocument](../../src/Gateway/Domovoy.DbGateway/Models/DashboardDocument.cs) — вкладки-конструктор
+(пикер+секции, 4+ типа элементов, включая **сцена-плитка** — 3B, НЕ закоммичено); `dashboard_prefs` —
+скрытые авто-сферы (по архетипам).
+
+### `site_location` / `calendar_settings` — геолокация + календарь (2K)
+[SiteLocation](../../src/Common/Domovoy.Contracts/Home/SiteLocation.cs) (координаты, offline-таймзона
+через GeoTimeZone), [CalendarSettings](../../src/Common/Domovoy.Contracts/Home/CalendarSettings.cs)
+(праздники, Nager.Date импорт). Питают вирт. сенсоры Sun/Time/Calendar (2L, `SystemSensorService`,
+`AdapterSource=System`, не персистятся как отдельная коллекция — публикуются как обычные capability-устройства).
+
+### `narrative_entities` / `narrative_state` / `home_story` — Дневник дома (2N)
+[NarrativeEntity](../../src/Common/Domovoy.Contracts/Narrative/NarrativeEntity.cs) (имена духа/жильцов,
+override), `narrative_state` ([NarrativeState](../../src/Common/Domovoy.Contracts/Narrative/NarrativeState.cs)) —
+ротация тегов/tier-затухание, `home_story` ([HomeStoryEntry](../../src/Common/Domovoy.Contracts/Narrative/HomeStoryEntry.cs)) —
+материализованные записи дневника (детерминированный NLG, `Domovoy.Narrative`, без LLM).
+
+### `ops_logs` — операционные логи (Serilog Mongo-sink, 2G)
+Capped-коллекция, пишется **напрямую из всех сервисов** (`SerilogBootstrap`, `Serilog.Sinks.MongoDB` 5.4 —
+не 7.x). Смешивается с `device_events`/`auto_history` только на чтение (`GET /api/activity`), не на запись —
+доменные данные и операционная диагностика физически разделены.
+
+## Коллекции в рабочем дереве (НЕ закоммичено, 2026-07-19)
+
+### `scenes` — сцены как first-class объект (Эпик 3B)
+[Scene](../../src/Common/Domovoy.Contracts/Scenes/Scene.cs): `Targets[]` (device+capability-набор,
+нормализация JsonElement как у правил). Активация — `POST /api/scenes/{id}/activate` (fan-out
+`DeviceCommandV1`, `source=scene:{id}`). Редактирование значений **без** активации (Re-Capture — снимок
+текущего writable-состояния в сцену).
+
+### `backup_settings` — бэкапы/восстановление (Эпик 3A)
+[BackupSettings](../../src/Gateway/Domovoy.DbGateway/Models/BackupSettings.cs): расписание (таймзона
+площадки 2K) + ретенция keep-N. Сам бэкап — не коллекция, а zip-бандл (`manifest.json`+`collections/*.bson`
+всех перечисленных выше коллекций через Mongo-драйвер напрямую, без `mongodump`), плюс настройки плагинов
+(`.settings/{id}.json`). См. [BackupManifest](../../src/Gateway/Domovoy.DbGateway/Models/BackupManifest.cs),
+[`../backup_restore_ru.md`](../backup_restore_ru.md).
 
 ## Контракт на шине (источник записей)
 
 Определён в `Domovoy.Contracts` (zero-dep). Конверт — `Envelope<T>` (CloudEvents-стиль). Топология —
-[BusTopology](../../src/Common/Domovoy.Contracts/Messaging/BusTopology.cs):
-
-- **Exchanges** (AMQP topic): `domovoy.discovery`, `domovoy.commands`, `domovoy.events`, `domovoy.state`.
-- **Routing keys**: `device.discovered`, `device.command`, `device.state.updated`, `device.online.changed`.
-- **Версионируемые типы**: `domovoy.device.{discovered|state|command|online}.v1`.
-- **Payloads** ([Payloads.cs](../../src/Common/Domovoy.Contracts/Messaging/Payloads.cs)):
-  `DeviceDiscoveredV1(DeviceDescriptor)`, `DeviceStateReportV1(DeviceId, State)`,
-  `DeviceCommandV1(DeviceId, Set)`, `DeviceOnlineChangedV1(DeviceId, IsOnline)`.
+[BusTopology](../../src/Common/Domovoy.Contracts/Messaging/BusTopology.cs): exchanges
+`domovoy.discovery`/`domovoy.commands`/`domovoy.events`/`domovoy.state` (+ **[НЕ закоммичено]**
+`system.control` для self-restart, `SystemControl.cs` в `Domovoy.MessageBus`); версионируемые типы
+`domovoy.device.{discovered|state|command|online}.v1`.
 
 ## Доступ к данным и эволюция схемы
 
-- Сервисы **не** ходят в Mongo напрямую — только через DbGateway (REST) или события шины.
-- DbGateway: Minimal API, эндпоинты [CapabilityDeviceEndpoints](../../src/Gateway/Domovoy.DbGateway/Endpoints/CapabilityDeviceEndpoints.cs)
-  (`GET /api/capability-devices`, `GET /api/capability-devices/{id}`); запись — `EventInterceptor`.
-  ApiGateway проксирует чтения через `CapabilityDevicesController` (Ocelot убран — единый endpoint routing).
-- Схема эволюционирует гибко (Mongo, document-friendly типы); ломающие изменения контракта шины —
-  через новый `.vN` суффикс (старые/новые консьюмеры сосуществуют).
+- Сервисы **не** ходят в Mongo напрямую — только через DbGateway (REST) или события шины (кроме
+  Serilog-sink, см. выше).
+- Схема эволюционирует гибко (Mongo, document-friendly типы); ломающие изменения контракта шины — через
+  новый `.vN` суффикс (старые/новые консьюмеры сосуществуют).
+- **Куда движемся:** Эпик 3H (roadmap.md) вводит доменные store-интерфейсы внутри DbGateway как шов для
+  альтернативного бэкенда (PostgreSQL — JSONB+`date_trunc`, НЕ TimescaleDB); Mongo остаётся default.
 
 ## Производительность
 
 - Индексы по часто запрашиваемым полям (`_id`/`DeviceId`, `ZoneId`, `Timestamp` для time-series).
 - Состояние хранится как словарь capability→значение (гибкость без миграций схемы).
-- Для телеметрии (P0-5/1B): Mongo time-series, ретеншн-политики, минутные/часовые свёртки, экспорт за период.
+- Телеметрия (1B): Mongo time-series, ретеншн TTL, минутные/часовые/дневные свёртки, батч-агрегация
+  (dashboard-fill убивает N+1 для множества плиток/графиков одним запросом), CSV-экспорт.

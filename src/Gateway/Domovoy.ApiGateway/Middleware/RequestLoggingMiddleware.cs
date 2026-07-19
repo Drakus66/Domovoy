@@ -27,7 +27,9 @@ namespace Domovoy.ApiGateway.Middleware
                 // Collect request information
                 var requestMethod = context.Request.Method;
                 var requestPath = context.Request.Path;
-                var requestQueryString = context.Request.QueryString;
+                // SignalR passes the JWT as ?access_token= on /hub/* (it can't set an Authorization header on a
+                // WebSocket). Never let that reach the log sink (Serilog → Mongo) — redact it to a placeholder.
+                var requestQueryString = Redact(context.Request.QueryString.Value);
                 var requestId = context.TraceIdentifier;
 
                 _logger.LogInformation(
@@ -60,6 +62,16 @@ namespace Domovoy.ApiGateway.Middleware
                     context.Request.Method, context.Request.Path, context.TraceIdentifier);
                 throw;
             }
+        }
+
+        // Replace the value of any access_token query parameter with a placeholder, leaving the rest intact.
+        private static string Redact(string? queryString)
+        {
+            if (string.IsNullOrEmpty(queryString) || !queryString.Contains("access_token", StringComparison.OrdinalIgnoreCase))
+                return queryString ?? string.Empty;
+
+            return System.Text.RegularExpressions.Regex.Replace(
+                queryString, @"(access_token=)[^&]*", "$1***", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         }
     }
 

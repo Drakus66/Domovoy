@@ -12,7 +12,7 @@ import {
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CategoryRoundedIcon from '@mui/icons-material/CategoryRounded';
 import { HubConnection } from '@microsoft/signalr';
-import { capabilityDevicesApi, CapabilityDevice, isUnassignedZone } from '../api/capabilityDevices';
+import { capabilityDevicesApi, CapabilityDevice, isUnassignedZone, isServiceDevice } from '../api/capabilityDevices';
 import { mlApi, ArchetypeDisagreement } from '../api/ml';
 import { zonesApi, Zone } from '../api/zones';
 import type { Dashboard } from '../api/dashboards';
@@ -22,7 +22,7 @@ import type { CommandFn } from '../components/devices/CapabilityControls';
 import { asBool, asNum } from '../components/devices/deviceVisuals';
 import HomeStateBand from '../components/dashboard/HomeStateBand';
 import DomovoyRail from '../components/dashboard/DomovoyRail';
-import AllDevicesTab from '../components/dashboard/AllDevicesTab';
+import OverviewTab from '../components/dashboard/OverviewTab';
 import SphereTab from '../components/dashboard/SphereTab';
 import CustomDashboardTab from '../components/dashboard/CustomDashboardTab';
 import DashboardTabs from '../components/dashboard/DashboardTabs';
@@ -173,11 +173,16 @@ export default function Devices() {
   } = useDashboardStore();
   useEffect(() => { loadDashboards(); }, [loadDashboards]);
 
-  const spheres = useMemo(() => deriveSpheres(devices, hiddenSpheres), [devices, hiddenSpheres]);
-  const allSpheres = useMemo(() => deriveSpheres(devices, []), [devices]);
+  // The home screen shows the lived-in house: service devices (System virtual sensors, block
+  // projections) are registry material (/devices) and stay off the tabs. Custom dashboards still
+  // receive the full list — anything can be pinned there, service devices included.
+  const homeDevices = useMemo(() => devices.filter((d) => !isServiceDevice(d)), [devices]);
 
-  // Active tab: "all" (bare /), "sphere:<category>" or a dashboard id (route /t/:tabId).
-  const activeTab = tabId ?? 'all';
+  const spheres = useMemo(() => deriveSpheres(homeDevices, hiddenSpheres), [homeDevices, hiddenSpheres]);
+  const allSpheres = useMemo(() => deriveSpheres(homeDevices, []), [homeDevices]);
+
+  // Active tab: "overview" (bare /), "sphere:<category>" or a dashboard id (route /t/:tabId).
+  const activeTab = tabId ?? 'overview';
   const sphereCategory = sphereCategoryFromTabId(activeTab);
   const activeSphere = sphereCategory !== null && spheres.some((s) => s.category === sphereCategory)
     ? sphereCategory
@@ -187,17 +192,17 @@ export default function Devices() {
     [dashboards, activeTab],
   );
 
-  // A deep link to a deleted dashboard / hidden or empty sphere falls back to All —
-  // but only once both devices and dashboards have actually loaded.
+  // A deep link to a deleted dashboard / hidden or empty sphere (or the retired "all" tab)
+  // falls back to Overview — but only once both devices and dashboards have actually loaded.
   useEffect(() => {
     if (loading || !dashboardsLoaded) return;
-    if (activeTab !== 'all' && !activeSphere && !activeDashboard) {
+    if (activeTab !== 'overview' && !activeSphere && !activeDashboard) {
       navigate('/', { replace: true });
     }
   }, [loading, dashboardsLoaded, activeTab, activeSphere, activeDashboard, navigate]);
 
   const selectTab = useCallback(
-    (id: string) => navigate(id === 'all' ? '/' : `/t/${id}`),
+    (id: string) => navigate(id === 'overview' ? '/' : `/t/${id}`),
     [navigate],
   );
 
@@ -206,10 +211,12 @@ export default function Devices() {
     setEditorOpen(true);
   }, []);
 
-  const onlineCount = devices.filter((d) => d.isOnline).length;
-  const lightsOn = devices.filter((d) => 'on_off' in (d.state ?? {}) && asBool(d.state.on_off)
+  // Header stats count the lived-in house only — service devices are always "online" and would
+  // just pad the numbers.
+  const onlineCount = homeDevices.filter((d) => d.isOnline).length;
+  const lightsOn = homeDevices.filter((d) => 'on_off' in (d.state ?? {}) && asBool(d.state.on_off)
     && d.capabilities.some((c) => c.id === 'brightness')).length;
-  const totalPower = devices.reduce((sum, d) => sum + ('power' in (d.state ?? {}) ? asNum(d.state.power) : 0), 0);
+  const totalPower = homeDevices.reduce((sum, d) => sum + ('power' in (d.state ?? {}) ? asNum(d.state.power) : 0), 0);
 
   const selected = useMemo(() => devices.find((d) => d.id === selectedId) ?? null, [devices, selectedId]);
 
@@ -263,7 +270,7 @@ export default function Devices() {
           allSpheres={allSpheres}
           dashboards={dashboards}
           hiddenSpheres={hiddenSpheres}
-          activeId={activeDashboard ? activeDashboard.id : activeSphere ? `sphere:${activeSphere}` : 'all'}
+          activeId={activeDashboard ? activeDashboard.id : activeSphere ? `sphere:${activeSphere}` : 'overview'}
           onSelect={selectTab}
           onCreate={() => openEditor(null)}
           onEdit={openEditor}
@@ -292,14 +299,14 @@ export default function Devices() {
             ) : activeSphere ? (
               <SphereTab
                 category={activeSphere}
-                devices={devices}
+                devices={homeDevices}
                 zoneName={zoneName}
                 onOpen={(d) => setSelectedId(d.id)}
                 onCommand={handleCommand}
               />
             ) : (
-              <AllDevicesTab
-                devices={devices}
+              <OverviewTab
+                devices={homeDevices}
                 zoneName={zoneName}
                 loading={loading}
                 onOpen={(d) => setSelectedId(d.id)}
@@ -317,7 +324,7 @@ export default function Devices() {
         devices={devices}
         onClose={() => setEditorOpen(false)}
         onSaved={(d) => selectTab(d.id)}
-        onDeleted={(id) => { if (activeTab === id) selectTab('all'); }}
+        onDeleted={(id) => { if (activeTab === id) selectTab('overview'); }}
       />
 
       <DeviceDetailDrawer

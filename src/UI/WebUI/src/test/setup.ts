@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { expect, afterEach, beforeAll, afterAll, vi } from 'vitest';
+import { expect, afterEach, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { setupServer } from 'msw/node';
@@ -11,6 +11,7 @@ import i18n, { type ResourceLanguage } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import { baseOptions } from '../i18n/config';
 import { DEFAULT_LANGUAGE } from '../i18n/languages';
+import { useAuthStore } from '../store/authStore';
 
 // Tests can't use http-backend (no static server under jsdom), so init i18next with
 // the real locale JSON loaded inline. Language is pinned to the Russian default, so
@@ -63,8 +64,26 @@ if (!window.matchMedia) {
   });
 }
 
+// Synthetic signed-in admin so AuthGate resolves to "authenticated" in tests (mirrors the auth-off gateway
+// behaviour); system.admin implies every permission via the auth store's hasPermission fallback.
+const TEST_AUTH_USER = {
+  id: 'dev-admin',
+  username: 'admin',
+  displayName: 'Administrator (dev)',
+  email: null,
+  roleIds: ['admin'],
+  permissions: ['system.admin'],
+};
+
 // Setup MSW server for API mocking
 export const handlers = [
+  // Auth (mobile-app / remote-access track): default to signed-in so the app renders its routes in tests.
+  http.get('*/api/auth/me', () => HttpResponse.json(TEST_AUTH_USER)),
+  http.post('*/api/auth/login', () =>
+    HttpResponse.json({ accessToken: '', refreshToken: '', expiresAt: new Date().toISOString(), user: TEST_AUTH_USER })),
+  http.post('*/api/auth/refresh', () =>
+    HttpResponse.json({ accessToken: '', refreshToken: '', expiresAt: new Date().toISOString(), user: TEST_AUTH_USER })),
+  http.post('*/api/auth/logout', () => new HttpResponse(null, { status: 204 })),
   // Default handlers - can be overridden in individual tests
   http.get('/api/devices', () => {
     return HttpResponse.json([]);
@@ -90,6 +109,13 @@ export const server = setupServer(...handlers);
 // Start server before all tests
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'warn' });
+});
+
+// Start each test already signed in so AuthGate renders the routes synchronously on first paint (component
+// tests use sync queries and can't wait for the async /me round-trip). The useEffect bootstrap still runs and
+// re-confirms via the MSW handler above — same result.
+beforeEach(() => {
+  useAuthStore.setState({ status: 'authenticated', user: { ...TEST_AUTH_USER } });
 });
 
 // Reset handlers after each test

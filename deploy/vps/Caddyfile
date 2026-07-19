@@ -1,0 +1,22 @@
+# Domovoy VPS edge (Этап 3c). Publishes the public hostname and forwards to the home's reverse tunnel.
+# The home autossh binds 127.0.0.1:8443 on this host (via sshd GatewayPorts); Caddy terminates TLS and proxies
+# there. The home's own Caddy already terminated TLS too, so this is TLS-to-TLS — set the upstream as https and
+# skip verification of the inner cert (it's the tunnel, not the public trust boundary).
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMOVOY_DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	reverse_proxy https://127.0.0.1:8443 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+		header_up X-Forwarded-Proto https
+	}
+}

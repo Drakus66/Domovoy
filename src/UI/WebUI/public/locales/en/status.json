@@ -21,5 +21,24 @@
     "enabled": "Enabled via {{provider}}.",
     "stub": "Disabled"
   },
-  "noData": "No data received from Prometheus"
+  "noData": "No data received from Prometheus",
+  "control": {
+    "title": "System control",
+    "dockerOn": "Docker control is on — any container can be restarted, infrastructure included.",
+    "dockerOff": "Safe self-restart of services over the bus. Container control (docker.sock) is off.",
+    "restartAll": "Restart all",
+    "restart": "Restart",
+    "selfRestart": "self-restart",
+    "dockerOnly": "docker only",
+    "allServices": "all services",
+    "confirmAll": "Restart ALL services? The UI will lose connection for a few seconds.",
+    "confirmOne": "Restart \"{{name}}\"?",
+    "requested": "Restart of \"{{name}}\" requested.",
+    "failed": "Failed to restart \"{{name}}\".",
+    "kind": {
+      "gateway": "gateway",
+      "service": "service",
+      "container": "container"
+    }
+  }
 }

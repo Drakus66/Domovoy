@@ -57,8 +57,15 @@ internal static class Program
             builder.Services.Configure<Config.TelemetryOptions>(
                 builder.Configuration.GetSection(Config.TelemetryOptions.SectionName));
 
+            // Backup platform (roadmap Epic 3A): bundle service + daily scheduler.
+            builder.Services.Configure<Config.BackupOptions>(
+                builder.Configuration.GetSection(Config.BackupOptions.SectionName));
+            builder.Services.AddSingleton<Services.BackupService>();
+            builder.Services.AddHostedService<Services.BackupScheduler>();
+
             // Configure RabbitMQ
             builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
+            builder.Services.AddSystemControl("db-gateway"); // UI-issued restart (self-stop → restart policy)
 
             // Add EventInterceptor as a hosted service
             builder.Services.AddHostedService<Services.EventInterceptor>();
@@ -119,6 +126,7 @@ internal static class Program
             app.MapZoneEndpoints();
             app.MapHistoryEndpoints();
             app.MapAutomationEndpoints();
+            app.MapSceneEndpoints();
             app.MapModeEndpoints();
             app.MapBlockEndpoints();
             app.MapBlockStateEndpoints();
@@ -130,8 +138,10 @@ internal static class Program
             app.MapProposalsEndpoints();
             app.MapRoleEndpoints();
             app.MapUserEndpoints();
+            app.MapAuthEndpoints();
             app.MapSettingsEndpoints();
             app.MapDashboardEndpoints();
+            app.MapBackupEndpoints();
             app.MapMetrics();
 
             // Health check endpoint

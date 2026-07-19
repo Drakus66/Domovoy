@@ -42,6 +42,30 @@
   },
   "zone": "Zone",
   "unassigned": "Unassigned",
+  "registry": {
+    "title": "Device registry",
+    "subtitle": "Everything the house knows — physical, virtual and service devices.",
+    "shown": "{{shown}} of {{total}}",
+    "columns": {
+      "device": "Device",
+      "source": "Source",
+      "status": "Status",
+      "updated": "Updated"
+    },
+    "serviceToggle": "Service",
+    "serviceHint": "Platform sensors (sun, time, calendar, home) and control-block projections",
+    "delete": "Delete {{name}}",
+    "deleteAction": "Delete",
+    "deleteHint": "Remove from the registry (offline devices only)",
+    "deleteConfirmTitle": "Delete device?",
+    "deleteConfirm": "Remove \"{{name}}\" from the registry? Its history stays until it ages out. If the device comes back online, it will go through discovery again as a new arrival.",
+    "deleteError": "Could not delete — the device may have just come back online.",
+    "deleted": "\"{{name}}\" removed from the registry."
+  },
+  "overview": {
+    "lightsOn": "lights on: {{count}}",
+    "openRegistry": "Open the device registry"
+  },
   "type": {
     "label": "Type",
     "auto": "Auto · {{value}}",

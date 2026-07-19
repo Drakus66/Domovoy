@@ -29,6 +29,19 @@ public static class SetpointPreferenceMiner
         string FromTime,
         string ToTime);
 
+    /// <summary>
+    /// A setpoint the user varies with <b>structure</b> (not a single value) — the ML form of type B. Where
+    /// <see cref="SetpointPreference"/> captures "always 19 at night", this captures "you keep changing this and
+    /// the change tracks the time of day" — too varied for one scheduled value, but learnable. It maps to a
+    /// <see cref="Domovoy.Contracts.Proposals.ProposalKind.MlTask"/> proposal, not a fixed rule.
+    /// </summary>
+    public sealed record SetpointModelCandidate(
+        string DeviceId,
+        string CapabilityId,
+        int Samples,             // user-set observations
+        double OverallStdDev,    // total spread (why one scheduled value doesn't fit)
+        double ExplainedByTime); // η² — fraction of variance time-of-day explains (why it's learnable, not noise)
+
     public static List<SetpointPreference> Mine(
         IReadOnlyList<DbGatewayClient.EventLogEntry> events, AutomationOptions options)
     {
@@ -69,6 +82,75 @@ public static class SetpointPreferenceMiner
             .OrderByDescending(r => r.Support)
             .ThenBy(r => r.StdDev)
             .ToList();
+    }
+
+    /// <summary>
+    /// The ML form of type B (roadmap Epic 2F): find setpoints the user varies with temporal structure — too
+    /// scattered for a single scheduled value (<see cref="Mine"/>), yet with enough of the variance explained by
+    /// time-of-day (η²) that a model could learn it. These become "start learning X" ML-task proposals rather
+    /// than fixed rules. Only user-sourced settings count (anti-loop, same as <see cref="Mine"/>).
+    /// </summary>
+    public static List<SetpointModelCandidate> MineModelCandidates(
+        IReadOnlyList<DbGatewayClient.EventLogEntry> events, AutomationOptions options)
+    {
+        var caps = new HashSet<string>(options.SetpointPreferenceCapabilities, StringComparer.OrdinalIgnoreCase);
+        if (caps.Count == 0) return new();
+
+        // (device, cap) → all user-set values with their 6h time-of-day bucket.
+        var series = new Dictionary<(string Dev, string Cap), List<(int Bucket, double Value)>>();
+        foreach (var e in events)
+        {
+            if (!caps.Contains(e.CapabilityId)) continue;
+            if (!string.Equals(e.TriggerSource, "user", StringComparison.OrdinalIgnoreCase)) continue; // anti-loop
+            if (!TryNumber(e.NewValue, out var v)) continue;
+
+            var key = (e.DeviceId, e.CapabilityId);
+            if (!series.TryGetValue(key, out var list)) { list = new(); series[key] = list; }
+            list.Add((e.Timestamp.Hour / 6, v));
+        }
+
+        var results = new List<SetpointModelCandidate>();
+        foreach (var ((dev, cap), points) in series)
+        {
+            if (points.Count < options.SetpointModelMinSupport) continue;
+
+            var all = points.Select(p => p.Value).ToList();
+            var grand = all.Average();
+            var totalStd = StdDev(all, grand);
+            if (totalStd <= options.SetpointMaxStdDev) continue; // a single value fits → the scheduled form (or none)
+
+            var eta = EtaSquaredByBucket(points, grand);
+            if (eta < options.SetpointModelMinExplained) continue; // no temporal structure → noise, don't train
+
+            results.Add(new SetpointModelCandidate(dev, cap, points.Count, Math.Round(totalStd, 3), Math.Round(eta, 3)));
+        }
+
+        // Strongest signal first: most history, then most explainable.
+        return results
+            .OrderByDescending(r => r.Samples)
+            .ThenByDescending(r => r.ExplainedByTime)
+            .ToList();
+    }
+
+    /// <summary>
+    /// One-way ANOVA effect size η² = between-group / total variance, grouping by the 6h time-of-day bucket.
+    /// 0 = time explains nothing (pure noise); →1 = time explains the setpoint fully. Returns 0 when there is no
+    /// spread to explain.
+    /// </summary>
+    private static double EtaSquaredByBucket(List<(int Bucket, double Value)> points, double grandMean)
+    {
+        var totalSs = points.Sum(p => (p.Value - grandMean) * (p.Value - grandMean));
+        if (totalSs <= 1e-9) return 0;
+
+        var betweenSs = points
+            .GroupBy(p => p.Bucket)
+            .Sum(g =>
+            {
+                var mean = g.Average(p => p.Value);
+                return g.Count() * (mean - grandMean) * (mean - grandMean);
+            });
+
+        return Math.Clamp(betweenSs / totalSs, 0, 1);
     }
 
     private static double StdDev(List<double> values, double mean)
