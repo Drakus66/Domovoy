@@ -16,6 +16,7 @@ import { modeApi } from '../../api/mode';
 import { CATEGORY_ACCENT } from '../devices/deviceVisuals';
 import { fmtTime } from '../../i18n/format';
 import DomovoyDigest from '../common/DomovoyDigest';
+import HearthMark from '../common/HearthMark';
 import { summarizeHome } from './homeSummary';
 
 const REFRESH_INTERVAL_MS = 60_000;
@@ -60,12 +61,9 @@ export default function HomeStateBand({ devices }: { devices: CapabilityDevice[]
 
   return (
     <Box sx={{ mb: 3 }}>
-      {/* Voice of the house spirit (reused digest) with a breathing ember. */}
+      {/* Voice of the house spirit (reused digest) marked by the hearth sign. */}
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-        <Box sx={{
-          width: 9, height: 9, borderRadius: '50%', flexShrink: 0,
-          bgcolor: 'secondary.main', boxShadow: (th) => `0 0 6px 1px ${th.palette.secondary.main}`,
-        }} />
+        <HearthMark size={18} />
         <DomovoyDigest />
       </Stack>
 

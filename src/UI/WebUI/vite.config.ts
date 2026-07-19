@@ -15,7 +15,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['domovoy-icon.svg'],
+      includeAssets: ['favicon.svg', 'domovoy-icon.svg', 'domovoy-icon-maskable.svg'],
       manifest: {
         name: 'Domovoy',
         short_name: 'Domovoy',
@@ -29,7 +29,7 @@ export default defineConfig({
         scope: '/',
         icons: [
           { src: 'domovoy-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-          { src: 'domovoy-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+          { src: 'domovoy-icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
         ],
       },
       workbox: {

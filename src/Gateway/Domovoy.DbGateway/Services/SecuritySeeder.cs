@@ -112,16 +112,21 @@ public sealed class SecuritySeeder : IHostedService
     }
 
     /// <summary>
-    /// Create the initial <c>admin</c> login user only when the users collection is empty, so a fresh install can
-    /// sign in. The password comes from <c>Security:BootstrapAdminPassword</c> (env
+    /// Create the initial <c>admin</c> login user when no <b>login-capable</b> account exists yet, so a fresh
+    /// install can sign in. "Login-capable" = a user with a username; this still fires on an empty database and
+    /// also recovers one that only holds identity-only users (Epic 2E users created before auth, which have no
+    /// username/password) — otherwise those stragglers would make the collection "non-empty" and leave nobody
+    /// able to sign in. The password comes from <c>Security:BootstrapAdminPassword</c> (env
     /// <c>SECURITY__BOOTSTRAPADMINPASSWORD</c>); if unset it defaults to <c>admin</c> and we log a loud warning to
-    /// change it before exposing the system. Once any user exists this is a no-op forever.
+    /// change it before exposing the system. Once a login-capable user exists this is a no-op.
     /// </summary>
     private async Task SeedAdminUserAsync(CancellationToken cancellationToken)
     {
         var users = _db.GetCollection<User>(UsersEndpoints.Collection);
-        var anyUser = await users.Find(FilterDefinition<User>.Empty).AnyAsync(cancellationToken);
-        if (anyUser) return;
+        var loginCapableExists = await users
+            .Find(u => u.Username != null && u.Username != "")
+            .AnyAsync(cancellationToken);
+        if (loginCapableExists) return;
 
         var configured = _config["Security:BootstrapAdminPassword"];
         var password = string.IsNullOrWhiteSpace(configured) ? "admin" : configured;

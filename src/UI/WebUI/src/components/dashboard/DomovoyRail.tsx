@@ -13,6 +13,7 @@ import { activityApi, ActivityEntry } from '../../api/activity';
 import { proposalsApi, Proposal } from '../../api/proposals';
 import { automationsApi, AutomationRule } from '../../api/automations';
 import { proposalTitle } from '../proposals/proposalText';
+import HearthMark from '../common/HearthMark';
 import { fmtTime } from '../../i18n/format';
 
 const REFRESH_INTERVAL_MS = 60_000;
@@ -87,10 +88,7 @@ export default function DomovoyRail({ devices }: { devices: CapabilityDevice[] }
         <Card variant="outlined">
           <CardContent sx={{ '&:last-child': { pb: 2 } }}>
             <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
-              <Box sx={{
-                width: 7, height: 7, borderRadius: '50%',
-                bgcolor: 'secondary.main', boxShadow: (th) => `0 0 6px 1px ${th.palette.secondary.main}`,
-              }} />
+              <HearthMark size={16} />
               <Typography variant="subtitle2">{t('rail.today')}</Typography>
             </Stack>
 

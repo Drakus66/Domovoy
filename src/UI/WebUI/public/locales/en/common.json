@@ -56,7 +56,10 @@
     "ariaLabel": "system health",
     "lit": "The hearth is lit — all {{count}} services up",
     "smoldering": "The hearth smolders — {{up}} of {{total}} services up",
-    "cold": "The hearth is cold — no metrics"
+    "cold": "The hearth is cold — no metrics",
+    "attention": "The spirit awaits your decision — {{count}} proposals pending",
+    "active": "The spirit is busy — automations just acted",
+    "sleeping": "The house sleeps — night mode"
   },
   "digest": {
     "greeting": {

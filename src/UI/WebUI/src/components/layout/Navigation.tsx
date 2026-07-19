@@ -30,7 +30,7 @@ import ColorModeToggle from '../theme/ColorModeToggle';
 import ThemePicker from '../theme/ThemePicker';
 import LanguagePicker from '../i18n/LanguagePicker';
 import AccountMenu from '../auth/AccountMenu';
-import HearthIndicator from './HearthIndicator';
+import BrandHearth from './BrandHearth';
 
 const DRAWER_WIDTH = 248;
 
@@ -76,17 +76,11 @@ const navGroups = [
 ];
 
 function Brand() {
+  // One mark instead of the old gradient square + ember pair: the avatar is the status now.
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-      <Box
-        sx={{
-          width: 30, height: 30, borderRadius: 2,
-          background: 'linear-gradient(135deg, var(--mui-palette-primary-main), var(--mui-palette-secondary-main))',
-          flexShrink: 0,
-        }}
-      />
+      <BrandHearth />
       <Typography variant="h6" fontWeight={800} letterSpacing="-0.02em">Domovoy</Typography>
-      <HearthIndicator />
     </Box>
   );
 }

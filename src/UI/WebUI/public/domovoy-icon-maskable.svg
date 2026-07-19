@@ -5,7 +5,8 @@
       <stop offset="1" stop-color="#12141a"></stop>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="120" fill="url(#bg)"></rect>
+  <!-- Full-bleed background (the launcher applies its own mask); the mark stays inside the centre safe zone. -->
+  <rect width="512" height="512" fill="url(#bg)"></rect>
   <g transform="translate(88 88) scale(7)">
     <path d="M24 6 L41 20 V41 a1 1 0 0 1-1 1 H8 a1 1 0 0 1-1-1 V20 Z" fill="none" stroke="#5B7CFF" stroke-width="2.8" stroke-linejoin="round"></path>
     <path d="M17 27.5 C13.6 26 13.4 30.8 16.4 33 C15.8 31 16.2 29.2 17 27.5 Z" fill="#EDAE49"></path>
