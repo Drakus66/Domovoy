@@ -4,8 +4,15 @@
 
 import apiClient from './client';
 
-export type ProposalKind = 'Rule' | 'BlockPromotion' | 'ModelSelection' | 'MlTask';
+export type ProposalKind = 'Rule' | 'BlockPromotion' | 'ModelSelection' | 'MlTask' | 'Scene' | 'RuleAmendment';
 export type ProposalStatus = 'Proposed' | 'Approved' | 'Rejected';
+
+/** A proposed scene to create on approve (matches Domovoy.Contracts Scene, Epic 3B). */
+export interface SceneDraft {
+  name: string;
+  icon?: string | null;
+  targets: { deviceId: string; set: Record<string, unknown> }[];
+}
 
 /** A candidate change awaiting approval (matches Domovoy.Contracts Proposal, Epic 2C). */
 export interface Proposal {
@@ -22,6 +29,12 @@ export interface Proposal {
   modelVersion?: number | null;
   /** MlTask: target capability the proposed training task would learn (Epic 2P). */
   mlTaskTarget?: string | null;
+  /** Scene: the scene to create on approve — devices + captured state (Epic 2F × 3B). */
+  sceneDraft?: SceneDraft | null;
+  /** Scene: optional daily cron; when set, approve also creates a rule that activates the new scene. */
+  sceneScheduleCron?: string | null;
+  /** RuleAmendment: what approve does to the rule ruleId points at — v1 "disable" (Epic 3J). */
+  amendmentAction?: string | null;
   modelId?: string | null;
   metric?: string | null;
   score?: number | null;

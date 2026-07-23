@@ -19,6 +19,8 @@ import RuleRoundedIcon from '@mui/icons-material/RuleRounded';
 import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
 import PushPinRoundedIcon from '@mui/icons-material/PushPinRounded';
 import SchoolRoundedIcon from '@mui/icons-material/SchoolRounded';
+import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
+import AutoDeleteRoundedIcon from '@mui/icons-material/AutoDeleteRounded';
 import { proposalsApi, Proposal, ProposalKind, ProposalStatus } from '../api/proposals';
 import { automationsApi, AutomationRule } from '../api/automations';
 import { capabilityDevicesApi } from '../api/capabilityDevices';
@@ -31,6 +33,8 @@ const KIND_ICONS: Record<ProposalKind, typeof RuleRoundedIcon> = {
   BlockPromotion: TrendingUpRoundedIcon,
   ModelSelection: PushPinRoundedIcon,
   MlTask: SchoolRoundedIcon,
+  Scene: AutoAwesomeRoundedIcon,
+  RuleAmendment: AutoDeleteRoundedIcon,
 };
 
 const statusColor = (s: ProposalStatus) =>
@@ -38,7 +42,8 @@ const statusColor = (s: ProposalStatus) =>
 
 // Deep-link to the proposal's target so the reviewer can inspect it before deciding.
 const targetLink = (p: Proposal): { to: string; label: string } | null => {
-  if (p.kind === 'Rule' && p.ruleId) return { to: `/automations?focus=${p.ruleId}`, label: 'actions.openRule' };
+  if ((p.kind === 'Rule' || p.kind === 'RuleAmendment') && p.ruleId)
+    return { to: `/automations?focus=${p.ruleId}`, label: 'actions.openRule' };
   if ((p.kind === 'BlockPromotion' || p.kind === 'ModelSelection') && p.blockId)
     return { to: `/blocks?focus=${p.blockId}`, label: 'actions.openBlock' };
   if (p.kind === 'MlTask') return { to: '/models', label: 'actions.openMl' };

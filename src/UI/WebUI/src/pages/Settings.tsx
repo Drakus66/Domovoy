@@ -26,6 +26,7 @@ import TabletMacRoundedIcon from '@mui/icons-material/TabletMacRounded';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded';
 import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
+import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
 import { settingsApi, GeocodeResult } from '../api/settings';
 import { securityApi, User } from '../api/security';
 import { backupsApi, BackupListItem, BackupSettings } from '../api/backups';
@@ -33,6 +34,7 @@ import { getCurrentUserId, setCurrentUserId } from '../api/currentUser';
 import KioskSettings from '../components/kiosk/KioskSettings';
 import TariffEditor from '../components/settings/TariffEditor';
 import LoadManagementEditor from '../components/settings/LoadManagementEditor';
+import IntelligenceEditor from '../components/settings/IntelligenceEditor';
 import PowerTopologyEditor from '../components/settings/PowerTopologyEditor';
 
 // A collapsible settings card. Collapsed by default so a long section (e.g. the location
@@ -682,6 +684,11 @@ export default function Settings() {
         {/* ── Load management (Epic 3C-LM) ────────────────────────── */}
         <Section icon={<SpeedRoundedIcon color="primary" />} title={t('loadManagement.title')} caption={t('loadManagement.caption')}>
           <LoadManagementEditor />
+        </Section>
+
+        {/* ── Intelligence layer (Epic 3I) ────────────────────────── */}
+        <Section icon={<PsychologyRoundedIcon color="primary" />} title={t('intelligence.title')} caption={t('intelligence.caption')}>
+          <IntelligenceEditor />
         </Section>
 
         {/* ── Who am I (self-declared attribution, not auth) ────────── */}
