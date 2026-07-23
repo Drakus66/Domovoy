@@ -15,6 +15,10 @@ namespace Domovoy.Narrative;
 /// actor synonym's gender/number selects the past-tense verb column and the anaphora pronoun; places and
 /// device nouns use stored inflected forms (no morphology generation). Synonym choice is a deterministic
 /// cooldown/LRU over <see cref="NarrativeState"/> — never randomness — so replay is exact.
+/// Sentence-quality invariants: a verb that requires a device object is never emitted bare (the scene is
+/// skipped instead), the third+ mention of an actor drops the subject (Russian pro-drop), a time-of-day
+/// adverb opens a sentence when the narration moves to another part of the day, and a merged repeated
+/// scene gets an «— и так несколько раз за день» tail.
 /// </summary>
 public sealed class RuLanguagePackRenderer : INarrativeRenderer
 {
@@ -25,53 +29,101 @@ public sealed class RuLanguagePackRenderer : INarrativeRenderer
     public RenderedStory Render(DayStory day, LanguagePack pack, NarrativeState state)
     {
         state.EntryCounter++; // advance the cooldown clock once per day-entry
+        var tz = ResolveTimeZone(day.TimeZoneId);
         var anaphora = new Dictionary<PersonaRole, ActorMention>();
+        var mentions = new Dictionary<PersonaRole, int>();
         var sentences = new List<string>();
+        string? prevBucket = null;
 
         foreach (var scene in day.Scenes)
         {
-            var s = RenderScene(scene, pack, state, anaphora);
-            if (!string.IsNullOrWhiteSpace(s)) sentences.Add(EnsureSentence(Clean(s)));
+            var bucket = TimeOfDayBucket(scene.StartedAt, tz);
+            var adverbBucket = sentences.Count > 0 && !string.Equals(bucket, prevBucket, StringComparison.Ordinal)
+                ? bucket
+                : null;
+
+            var s = RenderScene(scene, pack, state, anaphora, mentions, adverbBucket);
+            if (string.IsNullOrWhiteSpace(s)) continue;
+
+            sentences.Add(EnsureSentence(Capitalize(Clean(s))));
+            prevBucket = bucket;
         }
 
         state.UpdatedAt = DateTime.UtcNow;
         return new RenderedStory(string.Join(" ", sentences), "deterministic");
     }
 
-    private string RenderScene(Scene scene, LanguagePack pack, NarrativeState state, Dictionary<PersonaRole, ActorMention> anaphora)
+    private string RenderScene(
+        Scene scene, LanguagePack pack, NarrativeState state,
+        Dictionary<PersonaRole, ActorMention> anaphora, Dictionary<PersonaRole, int> mentions,
+        string? adverbBucket)
     {
         var beat = scene.Beats.FirstOrDefault();
         if (beat is null) return string.Empty;
 
-        // Impersonal scene (System sensors, 2L): just the impersonal phrase, no actor/verb.
+        string sentence;
         if (scene.Actor == PersonaRole.Impersonal)
-            return Capitalize(PickImpersonal(beat, pack, state));
+        {
+            // Impersonal scene (System sensors, 2L): just the impersonal phrase, no actor/verb.
+            sentence = PickImpersonal(beat, pack, state);
+            if (string.IsNullOrWhiteSpace(sentence)) return string.Empty;
+        }
+        else
+        {
+            var lemma = ResolveVerbLemma(beat, pack, state);
+            if (lemma is null) return string.Empty;
+            var (forms, objectMode, placeMode) = lemma.Value;
 
-        var actor = ResolveActor(scene.Actor, pack, state, anaphora);
-        var verb = ResolveVerb(beat, actor, pack, state);
-        var obj = ResolveObject(beat, verb, pack);
-        var place = ResolvePlace(beat, verb, pack);
+            var obj = string.Equals(objectMode, "device", StringComparison.OrdinalIgnoreCase)
+                ? ResolveDevice(beat, pack)?.Text ?? string.Empty
+                : string.Empty;
+            // Invariant: a verb that needs its device object never goes out bare («Домочадцы изменили.»).
+            if (string.Equals(objectMode, "device", StringComparison.OrdinalIgnoreCase) && obj.Length == 0)
+                return string.Empty;
 
-        // Cause: a pre-resolved phrase wins; otherwise localize the language-neutral cause beat here.
-        var cause = scene.Cause;
-        if (string.IsNullOrWhiteSpace(cause) && scene.CauseBeat is not null)
-            cause = PickImpersonal(scene.CauseBeat, pack, state);
+            var place = ResolvePlace(beat, placeMode, pack);
 
-        if (!string.IsNullOrWhiteSpace(cause))
-            return Fill(pack.Templates.CausalEffect,
-                ("Cause", Capitalize(cause!)), ("Actor", actor.Text),
-                ("Verb", verb.Text), ("Object", obj), ("Place", place));
+            var actor = ResolveActor(scene.Actor, pack, state, anaphora, mentions);
+            var verb = forms.Form(actor.Gender, actor.Number);
+            if (string.IsNullOrWhiteSpace(verb)) return string.Empty;
 
-        return Fill(pack.Templates.ActorAction,
-            ("Actor", Capitalize(actor.Text)), ("Verb", verb.Text), ("Object", obj), ("Place", place));
+            // Cause: a pre-resolved phrase wins; otherwise localize the language-neutral cause beat here.
+            var cause = scene.Cause;
+            if (string.IsNullOrWhiteSpace(cause) && scene.CauseBeat is not null)
+                cause = PickImpersonal(scene.CauseBeat, pack, state);
+
+            sentence = !string.IsNullOrWhiteSpace(cause)
+                ? Fill(pack.Templates.CausalEffect,
+                    ("Cause", cause!), ("Actor", actor.Text), ("Verb", verb), ("Object", obj), ("Place", place))
+                : Fill(pack.Templates.ActorAction,
+                    ("Actor", actor.Text), ("Verb", verb), ("Object", obj), ("Place", place));
+        }
+
+        if (adverbBucket is not null)
+        {
+            var adverb = PickTimeAdverb(adverbBucket, pack, state);
+            if (adverb.Length > 0) sentence = $"{adverb} {sentence}";
+        }
+
+        if (scene.RepeatCount > 1)
+            sentence += RepeatTail(scene.RepeatCount, pack);
+
+        return sentence;
     }
 
     private static ActorMention ResolveActor(
-        PersonaRole role, LanguagePack pack, NarrativeState state, Dictionary<PersonaRole, ActorMention> anaphora)
+        PersonaRole role, LanguagePack pack, NarrativeState state,
+        Dictionary<PersonaRole, ActorMention> anaphora, Dictionary<PersonaRole, int> mentions)
     {
-        // Later mention within the same day-entry → pronoun (keeps the introduced form's agreement).
-        if (anaphora.TryGetValue(role, out var prev) && pack.Anaphora.LaterMention == "pronoun")
-            return prev with { Text = prev.Pronoun ?? prev.Text };
+        var mention = mentions.TryGetValue(role, out var n) ? n : 0;
+        mentions[role] = mention + 1;
+
+        // Second mention within the day-entry → pronoun; third+ → null subject (pro-drop), both keeping
+        // the introduced form's agreement.
+        if (mention > 0 && pack.Anaphora.LaterMention == "pronoun" && anaphora.TryGetValue(role, out var prev))
+            return mention == 1
+                ? prev with { Text = prev.Pronoun ?? prev.Text }
+                : prev with { Text = string.Empty };
 
         if (!pack.Personas.TryGetValue(role.ToString(), out var poolDef) || poolDef.Pool.Count == 0)
         {
@@ -82,35 +134,32 @@ public sealed class RuLanguagePackRenderer : INarrativeRenderer
 
         var idx = PickIndex($"persona:{role}", poolDef.Pool.Count, poolDef.Cooldown, state);
         var syn = poolDef.Pool[idx];
-        var mention = new ActorMention(syn.SubjectCase ?? syn.Text, syn.Gender, syn.Number, syn.Pronoun);
-        anaphora[role] = mention;
-        return mention;
+        var introduced = new ActorMention(syn.SubjectCase ?? syn.Text, syn.Gender, syn.Number, syn.Pronoun);
+        anaphora[role] = introduced;
+        return introduced;
     }
 
-    private static VerbChoice ResolveVerb(Beat beat, ActorMention actor, LanguagePack pack, NarrativeState state)
+    /// <summary>Pick the verb lemma (base or rotated synonym) plus the effective object/place modes.
+    /// A synonym may override how the device/zone attach; unset falls back to the base lemma.</summary>
+    private static (VerbForms Forms, string ObjectMode, string PlaceMode)? ResolveVerbLemma(
+        Beat beat, LanguagePack pack, NarrativeState state)
     {
         var key = VerbKey(beat);
         if (!pack.Verbs.TryGetValue(key, out var forms))
             pack.Verbs.TryGetValue($"default.{beat.Transition}", out forms);
-        if (forms is null)
-            return new VerbChoice(string.Empty, "device", "zone");
+        if (forms is null) return null;
 
         var lemmas = new List<VerbForms> { forms };
         if (forms.Synonyms is { Count: > 0 }) lemmas.AddRange(forms.Synonyms);
         var idx = PickIndex($"verb:{key}", lemmas.Count, 1, state);
-        var text = lemmas[idx].Form(actor.Gender, actor.Number);
-        return new VerbChoice(text, forms.Object, forms.Place);
+        var chosen = lemmas[idx];
+
+        return (chosen, chosen.Object ?? forms.Object ?? "device", chosen.Place ?? forms.Place ?? "zone");
     }
 
-    private static string ResolveObject(Beat beat, VerbChoice verb, LanguagePack pack)
+    private static string ResolvePlace(Beat beat, string placeMode, LanguagePack pack)
     {
-        if (!string.Equals(verb.ObjectMode, "device", StringComparison.OrdinalIgnoreCase)) return string.Empty;
-        return ResolveDevice(beat, pack)?.Text ?? string.Empty;
-    }
-
-    private static string ResolvePlace(Beat beat, VerbChoice verb, LanguagePack pack)
-    {
-        var place = verb.PlaceMode.ToLowerInvariant() switch
+        var place = placeMode.ToLowerInvariant() switch
         {
             "device" => ResolveDevice(beat, pack),
             "zone" => ResolveZone(beat, pack),
@@ -148,6 +197,23 @@ public sealed class RuLanguagePackRenderer : INarrativeRenderer
         return phrases[idx];
     }
 
+    private static string PickTimeAdverb(string bucket, LanguagePack pack, NarrativeState state)
+    {
+        if (!pack.TimesOfDay.TryGetValue(bucket, out var adverbs) || adverbs.Count == 0) return string.Empty;
+        var idx = PickIndex($"time:{bucket}", adverbs.Count, 1, state);
+        return adverbs[idx];
+    }
+
+    private static string RepeatTail(int count, LanguagePack pack)
+    {
+        var template = pack.Templates.RepeatSuffix;
+        if (string.IsNullOrEmpty(template)) return string.Empty;
+        if (!pack.RepeatCounts.TryGetValue(count.ToString(CultureInfo.InvariantCulture), out var word) &&
+            !pack.RepeatCounts.TryGetValue("many", out word))
+            return string.Empty;
+        return template.Replace("{Count}", word);
+    }
+
     /// <summary>Deterministic cooldown/LRU: round-robin the pool, advancing the persisted cursor (no RNG).</summary>
     private static int PickIndex(string poolKey, int count, int cooldown, NarrativeState state)
     {
@@ -159,6 +225,26 @@ public sealed class RuLanguagePackRenderer : INarrativeRenderer
     }
 
     private static string VerbKey(Beat beat) => $"{beat.ArchetypeKey}.{beat.CapabilityId}.{beat.Transition}";
+
+    private static TimeZoneInfo ResolveTimeZone(string? timeZoneId)
+    {
+        if (string.IsNullOrWhiteSpace(timeZoneId)) return TimeZoneInfo.Utc;
+        try { return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }
+        catch (Exception) { return TimeZoneInfo.Utc; }
+    }
+
+    private static string TimeOfDayBucket(DateTime utc, TimeZoneInfo tz)
+    {
+        var instant = utc.Kind == DateTimeKind.Utc ? utc : DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+        var local = TimeZoneInfo.ConvertTimeFromUtc(instant, tz);
+        return local.Hour switch
+        {
+            >= 5 and < 11 => "morning",
+            >= 11 and < 17 => "day",
+            >= 17 and < 23 => "evening",
+            _ => "night",
+        };
+    }
 
     private static string Fill(string template, params (string Key, string Value)[] slots)
     {
@@ -187,7 +273,4 @@ public sealed class RuLanguagePackRenderer : INarrativeRenderer
 
     /// <summary>An actor's rendered surface plus the grammar needed to agree the verb and pick the pronoun.</summary>
     private sealed record ActorMention(string Text, string? Gender, string? Number, string? Pronoun);
-
-    /// <summary>A chosen verb surface plus how the device/zone attach to the clause.</summary>
-    private sealed record VerbChoice(string Text, string ObjectMode, string PlaceMode);
 }

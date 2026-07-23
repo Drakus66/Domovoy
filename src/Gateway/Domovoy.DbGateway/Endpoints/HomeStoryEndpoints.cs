@@ -175,7 +175,9 @@ public static class HomeStoryEndpoints
         return new Beat
         {
             Timestamp = pb.Timestamp ?? DateTime.UtcNow,
-            Actor = PersonaResolver.Resolve(pb.TriggerSource, adapterSource),
+            Actor = PersonaResolver.Resolve(pb.TriggerSource, adapterSource, archetype, pb.CapabilityId),
+            CauseCandidate = string.Equals(
+                adapterSource, PersonaResolver.SystemAdapterSource, StringComparison.OrdinalIgnoreCase),
             ArchetypeKey = archetype,
             CapabilityId = pb.CapabilityId,
             Transition = TransitionResolver.Derive(pb.CapabilityId, oldValue, newValue),

@@ -37,6 +37,12 @@ public sealed class LanguagePack
     /// <summary>Impersonal phrases (System sensors, 2L), keyed by verb-key (<c>sun.is_dark.On</c>, <c>climate.colder</c>).</summary>
     public Dictionary<string, List<string>> Impersonal { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Time-of-day adverb pools («утром»/«вечером»…), keyed by bucket (<c>morning</c>/<c>day</c>/<c>evening</c>/<c>night</c>).</summary>
+    public Dictionary<string, List<string>> TimesOfDay { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Count words for the repeat tail («дважды»/«трижды»), keyed by the count or <c>many</c>.</summary>
+    public Dictionary<string, string> RepeatCounts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public TemplatesPack Templates { get; set; } = new();
 
     public AnaphoraPack Anaphora { get; set; } = new();
@@ -63,6 +69,8 @@ public sealed class LanguagePack
         pack.Personas = Ci(pack.Personas);
         pack.Verbs = Ci(pack.Verbs);
         pack.Impersonal = Ci(pack.Impersonal);
+        pack.TimesOfDay = Ci(pack.TimesOfDay);
+        pack.RepeatCounts = Ci(pack.RepeatCounts);
         pack.Places.ByZoneId = Ci(pack.Places.ByZoneId);
         pack.Places.ByZoneName = Ci(pack.Places.ByZoneName);
         pack.Places.ByZoneKind = Ci(pack.Places.ByZoneKind);
@@ -121,11 +129,17 @@ public sealed class VerbForms
     /// <summary>Alternate lemmas (each carrying the 3 forms) — cooldown-rotated to avoid repetition.</summary>
     public List<VerbForms>? Synonyms { get; set; }
 
-    /// <summary>How the device renders: <c>device</c> (nominative object, «зажгли свет») or <c>none</c>.</summary>
-    public string Object { get; set; } = "device";
+    /// <summary>
+    /// How the device renders: <c>device</c> (nominative object, «зажгли свет») or <c>none</c>.
+    /// Null on a synonym means «inherit from the base lemma»; null on a base lemma means <c>device</c>.
+    /// </summary>
+    public string? Object { get; set; }
 
-    /// <summary>Where the location comes from: <c>zone</c> («в гостиной»), <c>device</c> («в котле») or <c>none</c>.</summary>
-    public string Place { get; set; } = "zone";
+    /// <summary>
+    /// Where the location comes from: <c>zone</c> («в гостиной»), <c>device</c> («в котле») or <c>none</c>.
+    /// Null on a synonym means «inherit from the base lemma»; null on a base lemma means <c>zone</c>.
+    /// </summary>
+    public string? Place { get; set; }
 
     /// <summary>Pick the form for an actor's gender/number.</summary>
     public string Form(string? gender, string? number)
@@ -167,6 +181,9 @@ public sealed class TemplatesPack
 
     /// <summary>«{Cause}, и {Actor} {Verb} {Object}{Place}» — a caused effect (comma form).</summary>
     public string CausalComma { get; set; } = "{Cause}, и {Actor} {Verb} {Object}{Place}";
+
+    /// <summary>Tail appended when a merged scene repeated during the day: « — и так {Count} за день».</summary>
+    public string RepeatSuffix { get; set; } = " — и так {Count} за день";
 }
 
 /// <summary>Anaphora policy: introduce with a full name, then pronominalize within the day-entry.</summary>

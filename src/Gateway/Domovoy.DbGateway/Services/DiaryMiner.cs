@@ -58,7 +58,11 @@ public sealed class DiaryMiner
             beats.Add(new Beat
             {
                 Timestamp = e.Timestamp,
-                Actor = PersonaResolver.Resolve(e.TriggerSource, dev?.AdapterSource),
+                Actor = PersonaResolver.Resolve(e.TriggerSource, dev?.AdapterSource, archetype, e.CapabilityId),
+                // Only System virtual sensors (2L) may be narrated as a scene's cause; a hardware telemetry
+                // tick that merely preceded a rule must not be claimed as its reason.
+                CauseCandidate = string.Equals(
+                    dev?.AdapterSource, PersonaResolver.SystemAdapterSource, StringComparison.OrdinalIgnoreCase),
                 ArchetypeKey = archetype,
                 CapabilityId = e.CapabilityId,
                 Transition = TransitionResolver.Derive(e.CapabilityId, e.OldValue, e.NewValue),

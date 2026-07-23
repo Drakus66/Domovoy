@@ -89,7 +89,7 @@ public class SignificanceTests
     public void Consolidate_narrates_and_caps_and_orders_by_time()
     {
         var scenes = Enumerable.Range(0, 6)
-            .Select(i => Scored(S(PersonaRole.Spirit, Noon.AddMinutes(-i)), 2.0)) // descending time
+            .Select(i => Rooted(Scored(S(PersonaRole.Spirit, Noon.AddMinutes(-i)), 2.0), $"manual:d{i}")) // distinct roots
             .ToArray();
 
         var day = DayConsolidator.Consolidate(DateOnly.FromDateTime(Noon), "UTC", scenes);
@@ -100,9 +100,42 @@ public class SignificanceTests
         Assert.Equal(8.0, day.DayScore, 3);
     }
 
+    [Fact]
+    public void Consolidate_merges_same_signature_repeats_into_one_scene_with_count()
+    {
+        var scenes = Enumerable.Range(0, 4)
+            .Select(i => Rooted(Scored(S(PersonaRole.Residents, Noon.AddHours(i)), 3.5), "manual:d1"))
+            .ToArray();
+
+        var day = DayConsolidator.Consolidate(DateOnly.FromDateTime(Noon), "UTC", scenes);
+
+        Assert.NotNull(day);
+        var scene = Assert.Single(day!.Scenes);             // ×4 clones collapse into the earliest occurrence
+        Assert.Equal(4, scene.RepeatCount);
+        Assert.Equal(Noon, scene.StartedAt);
+        Assert.Equal(3.5, day.DayScore, 3);                 // best of the group, not the sum
+    }
+
+    [Fact]
+    public void Consolidate_keeps_a_day_of_nothing_but_one_routine_repeat_silent()
+    {
+        // Four clones of a 2.0-scene merge into one 2.0-scene — below the 3.0 day threshold → silence.
+        var scenes = Enumerable.Range(0, 4)
+            .Select(i => Rooted(Scored(S(PersonaRole.Spirit, Noon.AddHours(i)), 2.0), "rule:r1"))
+            .ToArray();
+
+        Assert.Null(DayConsolidator.Consolidate(DateOnly.FromDateTime(Noon), "UTC", scenes));
+    }
+
     private static Scene Scored(Scene s, double score)
     {
         s.Significance = score;
+        return s;
+    }
+
+    private static Scene Rooted(Scene s, string root)
+    {
+        s.CausalRootKey = root;
         return s;
     }
 }
