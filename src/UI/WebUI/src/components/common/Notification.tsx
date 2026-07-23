@@ -7,7 +7,6 @@
 
 import React from 'react';
 import {
-  Snackbar,
   Alert,
   AlertColor,
   IconButton,
@@ -18,7 +17,10 @@ import { useTranslation } from 'react-i18next';
 import { useUIStore, Notification as NotificationData } from '../../store/uiStore';
 
 /**
- * Single notification item component
+ * Single notification item component. Rendered directly inside the fixed column container below (no MUI
+ * Snackbar wrapper): a Snackbar carries its own fixed top-right anchor, so several at once would stack on the
+ * same spot and hide each other. As a plain Alert it flows in the flex column and banners stack vertically.
+ * Auto-dismiss is driven by the store timer (uiStore.showNotification), so no per-item timer is needed here.
  */
 interface NotificationItemProps {
   notification: NotificationData;
@@ -27,45 +29,30 @@ interface NotificationItemProps {
 
 const NotificationItem: React.FC<NotificationItemProps> = ({ notification, onClose }) => {
   const { t } = useTranslation('common');
-  const handleClose = (_event?: React.SyntheticEvent | Event, reason?: string) => {
-    // Don't close on clickaway
-    if (reason === 'clickaway') {
-      return;
-    }
-    onClose(notification.id);
-  };
+  const handleClose = () => onClose(notification.id);
 
   return (
-    <Snackbar
-      open={true}
-      autoHideDuration={notification.duration || null}
-      onClose={handleClose}
-      anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-      sx={{ position: 'relative' }}
+    <Alert
+      severity={notification.type as AlertColor}
+      variant="filled"
+      action={
+        <IconButton
+          size="small"
+          aria-label={t('actions.close')}
+          color="inherit"
+          onClick={handleClose}
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      }
+      sx={{
+        minWidth: 300,
+        maxWidth: 420,
+        boxShadow: 6,
+      }}
     >
-      <Alert
-        severity={notification.type as AlertColor}
-        variant="filled"
-        onClose={handleClose}
-        action={
-          <IconButton
-            size="small"
-            aria-label={t('actions.close')}
-            color="inherit"
-            onClick={handleClose}
-          >
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        }
-        sx={{
-          width: '100%',
-          minWidth: 300,
-          maxWidth: 500,
-        }}
-      >
-        {notification.message}
-      </Alert>
-    </Snackbar>
+      {notification.message}
+    </Alert>
   );
 };
 

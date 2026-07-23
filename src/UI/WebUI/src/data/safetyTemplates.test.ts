@@ -134,3 +134,47 @@ describe('rule draft validity', () => {
     expect(rule.triggers[0].capabilityId).toBe('motion');
   });
 });
+
+describe('Epic 3E draft handling', () => {
+  it('a WaitForEvent action is complete only with a capability and a device or zone', () => {
+    const d = emptyDraft();
+    d.name = 'wait';
+    d.triggers = [{ type: 'Sun', sun: 'Sunset', offsetMinutes: 0 }];
+    // capability but no device/zone → incomplete
+    d.actions = [{ type: 'WaitForEvent', waitCapabilityId: 'contact' }];
+    expect(isDraftValid(d)).toBe(false);
+    // capability + device → complete (timeout/branches optional)
+    d.actions = [{ type: 'WaitForEvent', waitDeviceId: 'door', waitCapabilityId: 'contact' }];
+    expect(isDraftValid(d)).toBe(true);
+    // capability + zone also satisfies
+    d.actions = [{ type: 'WaitForEvent', waitZoneId: 'z1', waitCapabilityId: 'contact' }];
+    expect(isDraftValid(d)).toBe(true);
+  });
+
+  it('draftFromRule deep-clones a required expression without aliasing the source rule', () => {
+    const rule: AutomationRule = {
+      id: 'r2', name: 'Gated', status: 'Active', isProtected: false,
+      triggers: [{ type: 'DeviceState', deviceId: 'd1', capabilityId: 'motion', operator: 'eq', value: true }],
+      conditions: [],
+      requiredExpression: {
+        expression: 'C0 && !C1',
+        conditions: [
+          { type: 'Mode', mode: 'Home' },
+          { type: 'DeviceState', deviceId: 'd2', capabilityId: 'occupancy', operator: 'eq', value: true },
+        ],
+      },
+      actions: [{ type: 'Command', deviceId: 'lamp', set: { on_off: true } }],
+      createdAt: '', updatedAt: '',
+    };
+    const d = draftFromRule(rule);
+    expect(d.requiredExpression?.expression).toBe('C0 && !C1');
+    expect(d.requiredExpression?.conditions).toHaveLength(2);
+    // per-item clone: editing a gate condition must not mutate the source rule
+    d.requiredExpression!.conditions[0].mode = 'Away';
+    expect(rule.requiredExpression!.conditions[0].mode).toBe('Home');
+  });
+
+  it('emptyDraft has no required expression by default', () => {
+    expect(emptyDraft().requiredExpression).toBeUndefined();
+  });
+});

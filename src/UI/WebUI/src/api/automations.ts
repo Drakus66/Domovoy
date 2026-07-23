@@ -7,7 +7,7 @@ import apiClient from './client';
 export type RuleStatus = 'Proposed' | 'Approved' | 'Active' | 'Disabled' | 'Shadow' | 'BoundedActive';
 export type TriggerType = 'DeviceState' | 'Time' | 'Sun';
 export type ConditionType = 'DeviceState' | 'TimeOfDay' | 'Sun' | 'Mode';
-export type ActionType = 'Command' | 'Delay' | 'Notify' | 'Scene';
+export type ActionType = 'Command' | 'Delay' | 'Notify' | 'Scene' | 'WaitForEvent';
 export type SunEvent = 'Sunrise' | 'Sunset';
 
 export interface RuleTrigger {
@@ -43,6 +43,26 @@ export interface RuleAction {
   message?: string | null;
   /** Scene action (Epic 3B): id of the scene to activate. */
   sceneId?: string | null;
+  /** WaitForEvent (Epic 3E) — same device-state match shape as RuleTrigger/RuleCondition. */
+  waitDeviceId?: string | null;
+  waitZoneId?: string | null;
+  waitCapabilityId?: string | null;
+  /** eq | ne | gt | lt | gte | lte (default eq). */
+  waitOperator?: string | null;
+  waitValue?: unknown;
+  /** Seconds to wait before giving up (<=0 defaults to 300s server-side). */
+  timeoutSeconds?: number;
+  /** Branch: runs only when the wait timed out. Terminal — the sequence does not resume after it. */
+  onTimeout?: RuleAction[] | null;
+  /** Branch: runs if this action throws at runtime. Terminal. Notify.message may use the "{error}" token. */
+  onError?: RuleAction[] | null;
+}
+
+/** Live gate (Epic 3E, "required expression"): must hold to start AND continuously while a rule runs. */
+export interface RequiredExpression {
+  conditions: RuleCondition[];
+  /** e.g. "C0 && (C1 || !C2)"; blank = AND of all conditions. */
+  expression: string;
 }
 
 /** Automation rule (matches Domovoy.Contracts AutomationRule, Epic 1A). */
@@ -54,6 +74,8 @@ export interface AutomationRule {
   isProtected: boolean;
   triggers: RuleTrigger[];
   conditions: RuleCondition[];
+  /** Live gate (Epic 3E); null/absent = no gate beyond `conditions`. */
+  requiredExpression?: RequiredExpression | null;
   actions: RuleAction[];
   createdAt: string;
   updatedAt: string;

@@ -26,13 +26,17 @@ import {
 import { replayApi, ReplayResult } from '../api/replay';
 import { operatorSummary } from '../i18n/optionLabels';
 import { capabilityDevicesApi, CapabilityDevice } from '../api/capabilityDevices';
+import { zonesApi, Zone } from '../api/zones';
 import { scenesApi, Scene } from '../api/scenes';
 import {
   RuleDraft, emptyDraft, draftFromRule, isDraftValid, newTrigger, newCondition, newAction,
   SafetyTemplate, SAFETY_TEMPLATES, recommendedTemplateIds, buildDraftFromTemplate,
 } from '../data/safetyTemplates';
 import { TriggerEditor, ConditionEditor, ActionEditor } from '../components/automations/RuleEditors';
+import RequiredExpressionEditor from '../components/automations/RequiredExpressionEditor';
 import { fmt } from '../components/automations/ruleValues';
+import { readableMatch } from '../components/automations/ruleReadable';
+import { capabilityLabel } from '../components/devices/deviceVisuals';
 import { useFocusParam, scrollIntoViewRef } from '../hooks/useFocusParam';
 
 // User-selectable lifecycle (Proposed/Approved are reserved for ML proposals, Epic 1F/Phase 2).
@@ -46,10 +50,13 @@ const normalizeTrigger = (t: RuleTrigger): RuleTrigger =>
   t.type === 'DeviceState' && t.operator === 'changed' ? { ...t, value: null } : t;
 
 export default function Automations() {
-  const { t } = useTranslation('automations');
+  // `devices` ns is loaded alongside `automations` so capability labels resolve in the rule-card summaries
+  // (readableMatch / capabilityLabel) even while the editor dialog — which also loads it — is closed.
+  const { t } = useTranslation(['automations', 'devices']);
   const focusId = useFocusParam();
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [devices, setDevices] = useState<CapabilityDevice[]>([]);
+  const [zones, setZones] = useState<Zone[]>([]);
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,13 +73,15 @@ export default function Automations() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [r, d, s] = await Promise.all([
+      const [r, d, z, s] = await Promise.all([
         automationsApi.getRules(),
         capabilityDevicesApi.getDevices(),
+        zonesApi.getZones().catch(() => [] as Zone[]),
         scenesApi.getScenes().catch(() => [] as Scene[]),
       ]);
       setRules(r);
       setDevices(d);
+      setZones(z);
       setScenes(s);
     } catch {
       setError(t('errors.load'));
@@ -96,23 +105,33 @@ export default function Automations() {
     catch { setError(t('errors.delete')); }
   };
 
+  // Epic 3G: device-state rows render as a plain-language sentence, zone-aware and by capability label
+  // (readableMatch), instead of the raw "capabilityId op value · device" code.
   const triggerText = useCallback((t: RuleTrigger): string => {
-    if (t.type === 'DeviceState') return `${t.capabilityId ?? i18n.t('automations:trigger.any')} ${operatorSummary(i18n.t, t.operator)} ${fmt(t.value)} · ${deviceName(t.deviceId)}`;
+    if (t.type === 'DeviceState') return readableMatch(devices, zones, t);
     if (t.type === 'Time') return i18n.t('automations:trigger.schedule', { cron: t.cron ?? '' });
     return `${t.sun ?? i18n.t('automations:trigger.sun')}${t.offsetMinutes ? ` ${t.offsetMinutes > 0 ? '+' : ''}${t.offsetMinutes}m` : ''}`;
-  }, [deviceName]);
+  }, [devices, zones]);
 
   const conditionText = (c: RuleCondition): string => {
     if (c.type === 'Sun') return c.dark === false ? i18n.t('automations:condition.whileLight') : i18n.t('automations:condition.whileDark');
     if (c.type === 'TimeOfDay') return `${c.fromTime}–${c.toTime}`;
     if (c.type === 'Mode') return i18n.t('automations:condition.mode', { mode: c.mode });
-    return `${c.capabilityId} ${operatorSummary(i18n.t, c.operator)} ${fmt(c.value)}`;
+    return readableMatch(devices, zones, c);
   };
 
   const actionText = useCallback((a: RuleAction): string => {
-    if (a.type === 'Command') return `${i18n.t('automations:action.set', { assignments: Object.entries(a.set ?? {}).map(([k, v]) => `${k}=${fmt(v)}`).join(', ') })} · ${deviceName(a.deviceId)}`;
+    if (a.type === 'Command') return `${i18n.t('automations:action.set', { assignments: Object.entries(a.set ?? {}).map(([k, v]) => `${capabilityLabel(k)}=${fmt(v)}`).join(', ') })} · ${deviceName(a.deviceId)}`;
     if (a.type === 'Delay') return i18n.t('automations:action.wait', { seconds: a.delaySeconds });
     if (a.type === 'Scene') return i18n.t('automations:action.scene', { name: scenes.find((s) => s.id === a.sceneId)?.name ?? a.sceneId ?? '—' });
+    if (a.type === 'WaitForEvent') {
+      return i18n.t('automations:action.waitForEvent', {
+        capability: a.waitCapabilityId ? capabilityLabel(a.waitCapabilityId) : i18n.t('automations:trigger.any'),
+        op: operatorSummary(i18n.t, a.waitOperator),
+        value: fmt(a.waitValue),
+        seconds: a.timeoutSeconds && a.timeoutSeconds > 0 ? a.timeoutSeconds : 300,
+      });
+    }
     return i18n.t('automations:action.notify', { message: a.message ?? '' });
   }, [deviceName, scenes]);
 
@@ -136,6 +155,7 @@ export default function Automations() {
       name: draft.name.trim(), description: null, status: draft.status,
       triggers: draft.triggers.map(normalizeTrigger),
       conditions: draft.conditions,
+      requiredExpression: draft.requiredExpression ?? null,
       actions: draft.actions,
     };
     try {
@@ -198,6 +218,9 @@ export default function Automations() {
                         <Typography fontWeight={700}>{rule.name}</Typography>
                         <Chip size="small" label={t(`status.${rule.status}`)}
                           color={statusColor(rule.status)} variant="outlined" />
+                        {rule.requiredExpression && (
+                          <Chip size="small" variant="outlined" color="info" label={t('requiredExpression.gated')} />
+                        )}
                       </Stack>
                       <Typography variant="body2" color="text.secondary">
                         <b>{t('rule.when')}</b> {rule.triggers.map(triggerText).join(' or ')}
@@ -244,7 +267,7 @@ export default function Automations() {
       <TemplateGallery
         open={templatePicker} devices={devices} rules={rules}
         onPick={adoptTemplate} onClose={() => setTemplatePicker(false)} />
-      <RuleDialog draft={draft} devices={devices} scenes={scenes} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} />
+      <RuleDialog draft={draft} devices={devices} zones={zones} scenes={scenes} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} />
       <HistoryDrawer target={historyFor} onClose={() => setHistoryFor(null)} />
       <SimulateDialog rule={simulateFor} onClose={() => setSimulateFor(null)} />
     </Container>
@@ -257,10 +280,11 @@ export default function Automations() {
  * independent editor with add/remove, so a rule can watch several triggers and do several things.
  */
 function RuleDialog({
-  draft, devices, scenes, onChange, onClose, onSave,
+  draft, devices, zones, scenes, onChange, onClose, onSave,
 }: {
   draft: RuleDraft | null;
   devices: CapabilityDevice[];
+  zones: Zone[];
   scenes: Scene[];
   onChange: (d: RuleDraft) => void;
   onClose: () => void;
@@ -274,7 +298,7 @@ function RuleDialog({
     <Dialog open={draft !== null} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>{editing ? t('dialog.editTitle') : t('dialog.createTitle')}</DialogTitle>
       <DialogContent>
-        {draft && <RuleDialogBody draft={draft} devices={devices} scenes={scenes} onChange={onChange} />}
+        {draft && <RuleDialogBody draft={draft} devices={devices} zones={zones} scenes={scenes} onChange={onChange} />}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t('actions.cancel')}</Button>
@@ -287,10 +311,11 @@ function RuleDialog({
 }
 
 function RuleDialogBody({
-  draft, devices, scenes, onChange,
+  draft, devices, zones, scenes, onChange,
 }: {
   draft: RuleDraft;
   devices: CapabilityDevice[];
+  zones: Zone[];
   scenes: Scene[];
   onChange: (d: RuleDraft) => void;
 }) {
@@ -299,6 +324,7 @@ function RuleDialogBody({
   const setTriggers = (triggers: RuleTrigger[]) => onChange({ ...draft, triggers });
   const setConditions = (conditions: RuleCondition[]) => onChange({ ...draft, conditions });
   const setActions = (actions: RuleAction[]) => onChange({ ...draft, actions });
+  const setRequiredExpression = (requiredExpression: RuleDraft['requiredExpression']) => onChange({ ...draft, requiredExpression });
 
   return (
     <Stack spacing={2.5} mt={1}>
@@ -322,7 +348,7 @@ function RuleDialogBody({
         {draft.triggers.map((tr, i) => (
           <RuleRow key={i} connector={i > 0 ? t('sections.or') : undefined} deletable={draft.triggers.length > 1}
             onDelete={() => setTriggers(draft.triggers.filter((_, x) => x !== i))}>
-            <TriggerEditor devices={devices} caps={caps} value={tr}
+            <TriggerEditor devices={devices} caps={caps} zones={zones} value={tr}
               onChange={(v) => setTriggers(draft.triggers.map((x, xi) => (xi === i ? v : x)))} />
           </RuleRow>
         ))}
@@ -338,11 +364,16 @@ function RuleDialogBody({
         {draft.conditions.map((c, i) => (
           <RuleRow key={i} connector={i > 0 ? t('sections.and') : undefined} deletable
             onDelete={() => setConditions(draft.conditions.filter((_, x) => x !== i))}>
-            <ConditionEditor devices={devices} caps={caps} value={c}
+            <ConditionEditor devices={devices} caps={caps} zones={zones} value={c}
               onChange={(v) => setConditions(draft.conditions.map((x, xi) => (xi === i ? v : x)))} />
           </RuleRow>
         ))}
       </EditorSection>
+
+      <Divider />
+
+      <RequiredExpressionEditor value={draft.requiredExpression ?? null} onChange={setRequiredExpression}
+        devices={devices} caps={caps} zones={zones} />
 
       <Divider />
 
@@ -351,7 +382,7 @@ function RuleDialogBody({
         {draft.actions.map((a, i) => (
           <RuleRow key={i} connector={i > 0 ? t('sections.andThen') : undefined} deletable={draft.actions.length > 1}
             onDelete={() => setActions(draft.actions.filter((_, x) => x !== i))}>
-            <ActionEditor devices={devices} caps={caps} scenes={scenes} value={a}
+            <ActionEditor devices={devices} caps={caps} zones={zones} scenes={scenes} value={a}
               onChange={(v) => setActions(draft.actions.map((x, xi) => (xi === i ? v : x)))} />
           </RuleRow>
         ))}

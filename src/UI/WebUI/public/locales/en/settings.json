@@ -34,7 +34,13 @@
     "save": "Save calendar",
     "saved": "Calendar saved.",
     "days": {
-      "mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri", "sat": "Sat", "sun": "Sun"
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
     }
   },
   "backups": {
@@ -78,5 +84,102 @@
     "caption": "For the activity log: commands from this browser will be attributed to the selected resident. This is not a login — real authentication comes in Phase 3.",
     "label": "User",
     "anonymous": "Not set (anonymous)"
+  },
+  "tariff": {
+    "title": "Electricity tariff",
+    "caption": "Static tariff zones (T1/T2/T3) — for money and the cheap-hours block. Works offline.",
+    "currency": "Currency",
+    "defaultPrice": "Default price",
+    "zones": "Tariff zones",
+    "zoneName": "Name",
+    "price": "Price",
+    "addZone": "Add zone",
+    "removeZone": "Remove zone",
+    "addInterval": "Add window",
+    "removeInterval": "Remove window",
+    "from": "From",
+    "to": "To",
+    "hint": "A zone with no windows is always active. If “To” ≤ “From”, the window wraps past midnight (e.g. 23:00→07:00).",
+    "noZones": "No zones — the default price applies (single-rate tariff).",
+    "save": "Save tariff",
+    "saved": "Tariff saved",
+    "kwh": "kWh"
+  },
+  "powerTopology": {
+    "title": "Electrical topology",
+    "caption": "Supplies, panels and breaker circuits with their phases — the tree behind the per-circuit and per-phase breakdown, the balance check against meters, and per-phase limits.",
+    "hint": "Build the tree: supply → panel → circuit. A device is attached to a circuit from its own card; the phase is inherited from the circuit.",
+    "name": "Name",
+    "kind": "Node kind",
+    "kinds": {
+      "supply": "Supply",
+      "panel": "Panel",
+      "circuit": "Circuit (breaker)"
+    },
+    "add": {
+      "supply": "Supply",
+      "panel": "Panel",
+      "circuit": "Circuit"
+    },
+    "newNames": {
+      "supply": "Supply",
+      "panel": "Panel",
+      "circuit": "Circuit"
+    },
+    "parent": "Fed from",
+    "noParent": "None (root)",
+    "phase": "Phase",
+    "phaseInherit": "Same as parent",
+    "phases": {
+      "l1": "L1",
+      "l2": "L2",
+      "l3": "L3",
+      "three": "Three-phase"
+    },
+    "breaker": "Breaker",
+    "meter": "Node meter",
+    "noMeter": "No meter",
+    "delete": "Delete node",
+    "loadError": "Could not load the electrical topology",
+    "saveError": "Could not save the change"
+  },
+  "loadManagement": {
+    "title": "Load management",
+    "caption": "Cap the house's total power draw by power source — sheds non-critical loads over budget. Off by default.",
+    "enabled": "Enable load management",
+    "hint": "An empty budget list is a no-op even when enabled. Priorities and protection are set per device in the device drawer.",
+    "phaseLimits": "Per-phase limits",
+    "phaseLimitsHint": "For a three-phase intake: empty ⇒ the limit comes from the intake breaker's rating in the electrical topology. A circuit's limit comes from its own breaker.",
+    "budgets": "Budgets by power source",
+    "noBudgets": "No budgets — nothing is limited.",
+    "powerSource": "Power source",
+    "powerSources": {
+      "grid": "Grid",
+      "grid_peak": "Grid (peak tariff)",
+      "battery": "Battery/UPS",
+      "solar": "Solar",
+      "off": "No power"
+    },
+    "limitWatts": "Limit",
+    "watts": "W",
+    "seconds": "s",
+    "addBudget": "Add budget",
+    "removeBudget": "Remove budget",
+    "restoreMargin": "Restore margin",
+    "minDwell": "Minimum dwell",
+    "save": "Save",
+    "saved": "Settings saved"
+  },
+  "intelligence": {
+    "title": "Intelligence layer",
+    "caption": "Control learning, model-driven governance and proactive suggestions.",
+    "enabled": "Intelligence layer",
+    "enabledHint": "Off pauses everything: training, model-driven control (governors fall back to Shadow) and all suggestions. Nothing is lost — turn it back on to resume.",
+    "proposals": "Proactive suggestions",
+    "proposalsHint": "Off keeps learning and control running but stops the system proposing new rules, scenes and models on its own. The manual scan buttons still work.",
+    "minHistoryDays": "History before suggesting, days",
+    "minHistoryDaysHint": "On a fresh install the suggesters stay quiet until this much history has accrued — the ML page shows the progress.",
+    "save": "Save",
+    "saved": "Settings saved"
   }
 }

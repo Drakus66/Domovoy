@@ -2,13 +2,14 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AppBar, Toolbar, Typography, Box, IconButton, Drawer, List, ListItem,
-  ListItemButton, ListItemIcon, ListItemText, Collapse, useMediaQuery, useTheme,
+  ListItemButton, ListItemIcon, ListItemText, Collapse, Badge, useMediaQuery, useTheme,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
+import { proposalsApi } from '../../api/proposals';
 import MenuIcon from '@mui/icons-material/Menu';
 import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import SpaceDashboardRoundedIcon from '@mui/icons-material/SpaceDashboardRounded';
@@ -24,6 +25,7 @@ import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
 import ExtensionRoundedIcon from '@mui/icons-material/ExtensionRounded';
 import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
 import RuleRoundedIcon from '@mui/icons-material/RuleRounded';
+import DataObjectRoundedIcon from '@mui/icons-material/DataObjectRounded';
 import GroupRoundedIcon from '@mui/icons-material/GroupRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import ColorModeToggle from '../theme/ColorModeToggle';
@@ -54,6 +56,7 @@ const navGroups = [
       { key: 'blocks', path: '/blocks', icon: <AccountTreeRoundedIcon /> },
       { key: 'models', path: '/models', icon: <PsychologyRoundedIcon /> },
       { key: 'proposals', path: '/proposals', icon: <RuleRoundedIcon /> },
+      { key: 'variables', path: '/variables', icon: <DataObjectRoundedIcon /> },
     ],
   },
   {
@@ -85,9 +88,25 @@ function Brand() {
   );
 }
 
+// Epic 3I: the always-visible signal that the intelligence layer has queued something — a count on the
+// Proposals nav item. Polled (not pushed) every minute; fails silently so a gateway blip never breaks the nav.
+function usePendingProposalsCount(): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      proposalsApi.list('Proposed').then((ps) => { if (!cancelled) setCount(ps.length); }).catch(() => undefined);
+    load();
+    const id = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+  return count;
+}
+
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { t } = useTranslation('nav');
+  const pendingProposals = usePendingProposalsCount();
   const activeGroup = navGroups.find((g) => g.items.some((i) => i.path === location.pathname))?.key;
   // Start with the active section open; the user can toggle any section freely afterwards.
   const [open, setOpen] = useState<Record<string, boolean>>(
@@ -136,7 +155,11 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
                           },
                         }}
                       >
-                        <ListItemIcon sx={{ minWidth: 34, color: 'text.secondary' }}>{item.icon}</ListItemIcon>
+                        <ListItemIcon sx={{ minWidth: 34, color: 'text.secondary' }}>
+                          {item.key === 'proposals' && pendingProposals > 0 ? (
+                            <Badge badgeContent={pendingProposals} color="primary">{item.icon}</Badge>
+                          ) : item.icon}
+                        </ListItemIcon>
                         <ListItemText
                           primary={t(item.key)}
                           primaryTypographyProps={{ fontWeight: selected ? 700 : 500, noWrap: true }}

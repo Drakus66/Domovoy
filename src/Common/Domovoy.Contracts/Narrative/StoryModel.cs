@@ -72,6 +72,13 @@ public class Beat
     /// <summary>Rule that caused it (Epic 1A), if any — links to the causal clause.</summary>
     public string? RuleId { get; set; }
 
+    /// <summary>
+    /// Whether an impersonal beat may be adopted as a scene's narrative cause («стало темнеть → …»).
+    /// The miner sets it: true only for System virtual sensors (2L), false for hardware telemetry — a
+    /// coincidental temperature tick must not be claimed as the reason a rule fired.
+    /// </summary>
+    public bool CauseCandidate { get; set; } = true;
+
     /// <summary>Lifted <c>auto_history.TriggerSummary</c> (Epic 1F) — the raw "why", turned into a subclause.</summary>
     public string? CauseSummary { get; set; }
 
@@ -113,6 +120,12 @@ public class Scene
     public string? Mode { get; set; }
 
     public List<Beat> Beats { get; set; } = new();
+
+    /// <summary>
+    /// How many same-signature scenes of the day this one stands for (consolidation merges repeats so
+    /// «убавили тепло» ×4 narrates once with an «— и так несколько раз за день» tail). 1 = no repetition.
+    /// </summary>
+    public int RepeatCount { get; set; } = 1;
 
     /// <summary>Significance score (roadmap Epic 2N) — the diary's main filter.</summary>
     public double Significance { get; set; }

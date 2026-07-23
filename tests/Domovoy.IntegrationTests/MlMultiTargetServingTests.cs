@@ -88,7 +88,7 @@ public sealed class MlMultiTargetServingTests
         var db = new DbGatewayClient(
             new HttpClient(handler) { BaseAddress = new Uri("http://stub") }, NullLogger<DbGatewayClient>.Instance);
         var service = new MlModelService(
-            db, new HomeModeState(), Options.Create(new AutomationOptions()), NullLogger<MlModelService>.Instance);
+            db, new HomeModeState(), new MlRuntimeState(), Options.Create(new AutomationOptions()), NullLogger<MlModelService>.Instance);
         await service.RefreshAsync(CancellationToken.None);
         return service;
     }

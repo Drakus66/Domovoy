@@ -23,6 +23,8 @@ vi.mock('../api/settings', () => ({
     getCalendar: vi.fn(),
     saveCalendar: vi.fn(),
     importHolidays: vi.fn(),
+    getTariff: vi.fn(),
+    saveTariff: vi.fn(),
   },
 }));
 
@@ -86,6 +88,12 @@ describe('Settings page', () => {
     });
     mockedApi.saveCalendar.mockResolvedValue({
       id: 'current', weekendDays: [6, 0], holidays: ['2026-01-01'], updatedAt: '2026-07-06T00:00:00Z',
+    });
+    mockedApi.getTariff.mockResolvedValue({
+      id: 'current', currency: '₽', defaultPrice: 5, zones: [], updatedAt: '2026-07-20T00:00:00Z',
+    });
+    mockedApi.saveTariff.mockResolvedValue({
+      id: 'current', currency: '₽', defaultPrice: 5, zones: [], updatedAt: '2026-07-20T00:00:00Z',
     });
     mockedBackups.getSettings.mockResolvedValue(sampleBackupSettings);
     mockedBackups.saveSettings.mockResolvedValue(sampleBackupSettings);

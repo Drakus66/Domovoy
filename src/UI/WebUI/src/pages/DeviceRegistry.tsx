@@ -21,6 +21,8 @@ import { zonesApi, Zone } from '../api/zones';
 import DeviceDetailDrawer from '../components/devices/DeviceDetailDrawer';
 import type { CommandFn } from '../components/devices/CapabilityControls';
 import { deviceCategory, capabilityIconForCategory, CATEGORY_ACCENT } from '../components/devices/deviceVisuals';
+import { deviceLabel, proposeZoneName } from '../components/devices/deviceNaming';
+import { useDeviceRename } from '../components/devices/useDeviceRename';
 import { useUIStore } from '../store/uiStore';
 
 const REFRESH_INTERVAL_MS = 20_000;
@@ -90,8 +92,11 @@ export default function DeviceRegistry() {
       .filter((d) =>
         (adapter === 'all' || d.adapterSource === adapter) &&
         (!onlineOnly || d.isOnline) &&
-        (!q || d.name.toLowerCase().includes(q) || zoneName(d.zoneId).toLowerCase().includes(q)))
-      .sort((a, b) => a.name.localeCompare(b.name));
+        (!q
+          || deviceLabel(d).toLowerCase().includes(q)
+          || d.name.toLowerCase().includes(q)
+          || zoneName(d.zoneId).toLowerCase().includes(q)))
+      .sort((a, b) => deviceLabel(a).localeCompare(deviceLabel(b)));
   }, [visible, search, adapter, onlineOnly, zoneName]);
 
   const handleCommand = useCallback<CommandFn>((deviceId, set) => {
@@ -100,10 +105,26 @@ export default function DeviceRegistry() {
     capabilityDevicesApi.sendCommand(deviceId, set).catch(() => setError(t('errors.command')));
   }, [t]);
 
+  // Rename-on-zone flow (Epic 3G): reflect applied aliases in local state.
+  const { dialog: renameDialog, requestRename } = useDeviceRename((updates) => {
+    setDevices((prev) => prev.map((d) => (d.id in updates ? { ...d, alias: updates[d.id] } : d)));
+  });
+
   const handleAssignZone = useCallback((deviceId: string, zoneId: string | null) => {
     const normalized = zoneId ?? '';
+    const device = devices.find((d) => d.id === deviceId);
     setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, zoneId: normalized } : d)));
     capabilityDevicesApi.assignZone(deviceId, zoneId).catch(() => setError(t('errors.assignZone')));
+    if (device) {
+      const newZoneName = zoneId ? (zones.find((z) => z.id === zoneId)?.name ?? null) : null;
+      const current = deviceLabel(device);
+      requestRename([{ device, current, proposed: proposeZoneName(current, newZoneName, zones.map((z) => z.name)) }]);
+    }
+  }, [devices, zones, requestRename, t]);
+
+  const handleSetAlias = useCallback((deviceId: string, alias: string | null) => {
+    setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, alias } : d)));
+    capabilityDevicesApi.setAlias(deviceId, alias).catch(() => setError(t('errors.setAlias')));
   }, [t]);
 
   const handleSetArchetype = useCallback((deviceId: string, archetype: string | null) => {
@@ -116,7 +137,7 @@ export default function DeviceRegistry() {
     setDeleting(true);
     try {
       await capabilityDevicesApi.deleteDevice(deleteTarget.id);
-      useUIStore.getState().showNotification('success', t('registry.deleted', { name: deleteTarget.name }));
+      useUIStore.getState().showNotification('success', t('registry.deleted', { name: deviceLabel(deleteTarget) }));
       setDeleteTarget(null);
       await fetchDevices();
     } catch {
@@ -237,7 +258,7 @@ export default function DeviceRegistry() {
                         <Stack direction="row" spacing={1.25} alignItems="center">
                           <Icon fontSize="small" sx={{ color: CATEGORY_ACCENT[category] }} />
                           <Box>
-                            <Typography variant="body2" fontWeight={600}>{device.name}</Typography>
+                            <Typography variant="body2" fontWeight={600}>{deviceLabel(device)}</Typography>
                             {device.model && (
                               <Typography variant="caption" color="text.secondary">{device.model}</Typography>
                             )}
@@ -274,7 +295,7 @@ export default function DeviceRegistry() {
                             <IconButton
                               size="small"
                               color="error"
-                              aria-label={t('registry.delete', { name: device.name })}
+                              aria-label={t('registry.delete', { name: deviceLabel(device) })}
                               onClick={(e) => { e.stopPropagation(); setDeleteTarget(device); }}
                             >
                               <DeleteOutlineRoundedIcon fontSize="small" />
@@ -295,7 +316,7 @@ export default function DeviceRegistry() {
         <DialogTitle>{t('registry.deleteConfirmTitle')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {t('registry.deleteConfirm', { name: deleteTarget?.name })}
+            {t('registry.deleteConfirm', { name: deleteTarget ? deviceLabel(deleteTarget) : '' })}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -314,7 +335,10 @@ export default function DeviceRegistry() {
         onCommand={handleCommand}
         onAssignZone={handleAssignZone}
         onSetArchetype={handleSetArchetype}
+        onSetAlias={handleSetAlias}
       />
+
+      {renameDialog}
     </Container>
   );
 }

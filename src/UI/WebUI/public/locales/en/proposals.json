@@ -23,7 +23,7 @@
     "sourcesTitle": "Where proposals come from",
     "sources": {
       "ml_proposer": "Event-log scanner — spots simple pairs \"sensor fired → you turned a device on yourself\" that repeat day after day.",
-      "discovery": "Pattern discovery — a statistical search for richer regularities (thresholds, time of day) with false-discovery control.",
+      "discovery": "Pattern discovery — a statistical search for richer regularities (thresholds, time of day) with false-discovery control. It also spots multi-device states you keep arranging by hand and proposes saving them as scenes.",
       "ml_task_scanner": "ML-task scanner — notices quantities with enough accumulated history and suggests starting to train a model.",
       "user": "You — e.g. an ML block promotion requested from the Blocks page."
     },
@@ -34,13 +34,15 @@
     "Rule": "Rule",
     "BlockPromotion": "Block authority",
     "ModelSelection": "Model version",
-    "MlTask": "Training task"
+    "MlTask": "Training task",
+    "Scene": "Scene"
   },
   "source": {
     "user": "you",
     "ml_proposer": "event-log scanner",
     "discovery": "pattern discovery",
     "ml_task_scanner": "ML-task scanner",
+    "intervention": "override tracker",
     "demo": "demo",
     "other": "{{source}}"
   },
@@ -49,6 +51,7 @@
     "ml_proposer": "Found by the event-log scanner: a simple \"sensor → your action\" pair",
     "discovery": "Found by the statistical pattern search over history",
     "ml_task_scanner": "Suggested by the ML-task scanner: enough history to train",
+    "intervention": "Noticed you keep overriding this rule",
     "demo": "A test proposal from the demo script — safe to reject",
     "other": "Source: {{source}}"
   },
@@ -67,7 +70,10 @@
     "promotion": "the block gets the \"{{to}}\" stage (currently \"{{from}}\").",
     "pin": "the block is pinned to model version v{{version}} and stops switching to newer ones.",
     "unpin": "the block will follow the latest model version.",
-    "mlTask": "a \"{{target}}\" training task appears — tune it on the ML page."
+    "mlTask": "a \"{{target}}\" training task appears — tune it on the ML page.",
+    "scene": "a scene \"{{name}}\" is created from {{count}} devices — find and edit it on the Scenes page.",
+    "sceneSchedule": "a scene \"{{name}}\" is created from {{count}} devices and activated automatically every day at {{time}}.",
+    "amendmentDisable": "the rule is disabled (re-enable it any time on the Automations page)."
   },
   "rule": {
     "sentence": "If {{when}} — {{then}}",
@@ -95,9 +101,13 @@
     "stats": "That is {{lift}}× the base rate (significance p = {{p}}).",
     "setpoint": "You set ≈{{value}} at this time {{support}} times (spread ±{{stdDev}}).",
     "mlSetpoint": "You changed this setpoint often ({{samples}} times, spread ±{{stdDev}}), and {{explained}}% of those changes track the time of day — too varied for one schedule, but a model can learn it.",
-    "mlTask": "{{samples}} records accumulated over {{windowDays}} days (≥ {{required}} needed) — enough history, and a block exists that can consume the model."
+    "mlTask": "{{samples}} records accumulated over {{windowDays}} days (≥ {{required}} needed) — enough history, and a block exists that can consume the model.",
+    "scene": "You arranged this set of {{devices}} devices by hand {{support}} times over the last {{windowDays}} days.",
+    "deadRule": "You overrode this rule in {{overrides}} of its {{firings}} runs ({{rate}}%) — it may no longer match how you use the home."
   },
   "mlTaskTitle": "Start learning: {{target}}",
+  "sceneTitle": "New scene: {{name}}",
+  "amendmentTitle": "Retire rule \"{{name}}\"?",
   "meta": {
     "proposed": "proposed {{when}}",
     "decided": "decided {{when}}",

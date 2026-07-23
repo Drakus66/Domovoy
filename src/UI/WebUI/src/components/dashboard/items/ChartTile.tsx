@@ -5,6 +5,7 @@
 import { Card, CardContent, Stack, Typography, Box } from '@mui/material';
 import type { Capability, CapabilityDevice } from '../../../api/capabilityDevices';
 import { capabilityIcon, capabilityLabel } from '../../devices/deviceVisuals';
+import { deviceLabel } from '../../devices/deviceNaming';
 import TelemetryChart from '../../charts/TelemetryChart';
 
 /**
@@ -26,7 +27,7 @@ export default function ChartTile({
         <Stack direction="row" alignItems="center" spacing={1} mb={1} minWidth={0}>
           <Box sx={{ color: 'text.secondary', display: 'flex' }}><Icon fontSize="small" /></Box>
           <Typography variant="subtitle2" fontWeight={700} noWrap>
-            {device.name} · {capabilityLabel(cap.id)}
+            {deviceLabel(device)} · {capabilityLabel(cap.id)}
           </Typography>
         </Stack>
         <TelemetryChart

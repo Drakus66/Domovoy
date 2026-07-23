@@ -6,10 +6,11 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from 'i18next';
 import {
-  Box, Drawer, Stack, Typography, IconButton, Chip, Divider, Button,
-  TextField, MenuItem,
+  Box, Drawer, Stack, Typography, IconButton, Chip, Button, Tab, Tabs,
+  TextField, MenuItem, InputAdornment, Tooltip,
 } from '@mui/material';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded';
 import CircleIcon from '@mui/icons-material/Circle';
 import ArrowRightAltRoundedIcon from '@mui/icons-material/ArrowRightAltRounded';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
@@ -25,6 +26,9 @@ import { applicableTypesFor } from '../ml/mlHub';
 import MlApplyWizard from '../ml/MlApplyWizard';
 import CapabilityControl, { type CommandFn } from './CapabilityControls';
 import { describeDevice } from './deviceVisuals';
+import { deviceLabel, autoDeviceName, isCrypticName } from './deviceNaming';
+import EnergyProfileEditor from './EnergyProfileEditor';
+import LoadSheddingProfileEditor from './LoadSheddingProfileEditor';
 import { fmtDateTime } from '../../i18n/format';
 import TelemetryChart from '../charts/TelemetryChart';
 import TriggerChip from '../common/TriggerChip';
@@ -37,10 +41,11 @@ const fmtValue = (v: unknown): string => {
 
 export type AssignZoneFn = (deviceId: string, zoneId: string | null) => void;
 export type SetArchetypeFn = (deviceId: string, archetype: string | null) => void;
+export type SetAliasFn = (deviceId: string, alias: string | null) => void;
 
 /** Sliding panel with the full per-capability control surface for one device. */
 export default function DeviceDetailDrawer({
-  device, zones, open, onClose, onCommand, onAssignZone, onSetArchetype,
+  device, zones, open, onClose, onCommand, onAssignZone, onSetArchetype, onSetAlias,
 }: {
   device: CapabilityDevice | null;
   zones: Zone[];
@@ -49,18 +54,20 @@ export default function DeviceDetailDrawer({
   onCommand: CommandFn;
   onAssignZone: AssignZoneFn;
   onSetArchetype: SetArchetypeFn;
+  onSetAlias?: SetAliasFn;
 }) {
   return (
     <Drawer
       anchor="right"
       open={open && !!device}
       onClose={onClose}
-      PaperProps={{ sx: { width: { xs: '100%', sm: 380 }, maxWidth: '100%' } }}
+      PaperProps={{ sx: { width: { xs: '100%', sm: 460, md: 560 }, maxWidth: '100%' } }}
     >
       {device && (
         <DrawerBody
           device={device} zones={zones} onClose={onClose}
           onCommand={onCommand} onAssignZone={onAssignZone} onSetArchetype={onSetArchetype}
+          onSetAlias={onSetAlias}
         />
       )}
     </Drawer>
@@ -68,7 +75,7 @@ export default function DeviceDetailDrawer({
 }
 
 function DrawerBody({
-  device, zones, onClose, onCommand, onAssignZone, onSetArchetype,
+  device, zones, onClose, onCommand, onAssignZone, onSetArchetype, onSetAlias,
 }: {
   device: CapabilityDevice;
   zones: Zone[];
@@ -76,11 +83,29 @@ function DrawerBody({
   onCommand: CommandFn;
   onAssignZone: AssignZoneFn;
   onSetArchetype: SetArchetypeFn;
+  onSetAlias?: SetAliasFn;
 }) {
   const { t } = useTranslation('devices');
   const { accent, Icon } = describeDevice(device);
   const offline = !device.isOnline;
   const currentZone = isUnassignedZone(device.zoneId) ? '' : device.zoneId;
+
+  // The panel is split into tabs (overview / history / settings) so the setup forms — alias, zone,
+  // archetype, energy role, load-shedding profile — no longer sit above the live surface and squeeze
+  // it into a sliver. Each tab owns the full scroll height; the tab resets when the device changes.
+  const [tab, setTab] = useState(0);
+  useEffect(() => { setTab(0); }, [device.id]);
+
+  // Friendly name editor (Epic 3G): local draft committed on blur/Enter; empty clears the alias so the
+  // device falls back to a type-derived label. The placeholder shows what that fallback would be.
+  const [aliasDraft, setAliasDraft] = useState(device.alias ?? '');
+  useEffect(() => { setAliasDraft(device.alias ?? ''); }, [device.id, device.alias]);
+  const commitAlias = () => {
+    const next = aliasDraft.trim();
+    if (next === (device.alias ?? '').trim()) return;
+    onSetAlias?.(device.id, next || null);
+  };
+  const clearAlias = () => { setAliasDraft(''); if (device.alias) onSetAlias?.(device.id, null); };
 
   // Recent history for this device (P0-5 event-log): shows who/what changed each capability.
   const [history, setHistory] = useState<EventLogEntry[]>([]);
@@ -111,7 +136,7 @@ function DrawerBody({
     if (id) {
       if (e.triggerSource === 'rule') name = ruleNames[id] ?? null;
       else if (e.triggerSource === 'block') name = mlCtx?.blocks.find((b) => b.id === id)?.name ?? null;
-      else if (id === device.id) name = device.name;
+      else if (id === device.id) name = deviceLabel(device);
     }
     return { id, name };
   };
@@ -156,7 +181,7 @@ function DrawerBody({
     Promise.all([blocksApi.getBlocks(), capabilityDevicesApi.getDevices()])
       .then(([blocks, devs]) => {
         if (cancelled) return;
-        setDeviceNames(Object.fromEntries(devs.map((d) => [d.id, d.name])));
+        setDeviceNames(Object.fromEntries(devs.map((d) => [d.id, deviceLabel(d)])));
         const block = blocks.find((b) => b.deviceId === device.id);
         setWiring(block ? { inputs: Object.entries(block.inputs), outputs: Object.entries(block.outputs) } : null);
       })
@@ -176,8 +201,9 @@ function DrawerBody({
   };
 
   return (
-    <Box sx={{ p: 2.5, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Stack direction="row" alignItems="flex-start" spacing={1.5} mb={2}>
+    <Box sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {/* Identity strip — stays put while the tab below scrolls. */}
+      <Stack direction="row" alignItems="flex-start" spacing={1.5} sx={{ px: 2.5, pt: 2.5, pb: 1.5, flexShrink: 0 }}>
         <Box
           sx={{
             width: 48, height: 48, borderRadius: 2.5, flexShrink: 0,
@@ -189,7 +215,7 @@ function DrawerBody({
         </Box>
         <Box flex={1} minWidth={0}>
           <Typography variant="h6" fontWeight={700} sx={{ wordBreak: 'break-word' }}>
-            {device.name}
+            {deviceLabel(device)}
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
             <Chip
@@ -210,160 +236,226 @@ function DrawerBody({
         <IconButton onClick={onClose} aria-label={t('actions.close', { ns: 'common' })} edge="end"><CloseRoundedIcon /></IconButton>
       </Stack>
 
-      <Typography variant="caption" color="text.secondary" mb={2}>
-        {device.adapterSource}{device.model ? ` · ${device.model}` : ''}
-      </Typography>
-
-      <TextField
-        select
-        size="small"
-        label={t('zone')}
-        value={currentZone}
-        onChange={(e) => onAssignZone(device.id, e.target.value || null)}
-        sx={{ mb: 2 }}
-        fullWidth
+      <Tabs
+        value={tab}
+        onChange={(_, v: number) => setTab(v)}
+        variant="fullWidth"
+        sx={{ px: 1.5, borderBottom: 1, borderColor: 'divider', flexShrink: 0, minHeight: 40 }}
       >
-        <MenuItem value=""><em>{t('unassigned')}</em></MenuItem>
-        {zones.map((z) => (
-          <MenuItem key={z.id} value={z.id}>{z.name}</MenuItem>
-        ))}
-      </TextField>
+        <Tab label={t('tabs.overview')} sx={{ minHeight: 40 }} />
+        <Tab label={t('tabs.history')} sx={{ minHeight: 40 }} />
+        <Tab label={t('tabs.settings')} sx={{ minHeight: 40 }} />
+      </Tabs>
 
-      {/* Semantic type (Epic 2D): empty = auto-classified; pick to override. */}
-      <TextField
-        select
-        size="small"
-        label={t('type.label')}
-        value={device.archetype ?? ''}
-        onChange={(e) => onSetArchetype(device.id, e.target.value || null)}
-        sx={{ mb: 2 }}
-        fullWidth
-      >
-        <MenuItem value=""><em>{t('type.auto', { value: device.autoArchetype ?? t('type.unknown') })}</em></MenuItem>
-        {DEVICE_ARCHETYPES.map((a) => (
-          <MenuItem key={a} value={a}>{a.replace(/_/g, ' ')}</MenuItem>
-        ))}
-      </TextField>
-
-      <Box sx={{ flex: 1, overflowY: 'auto', mx: -0.5, px: 0.5 }}>
-        {wiring && (wiring.inputs.length > 0 || wiring.outputs.length > 0) && (
-          <Section title={t('blockIo.title')}>
-            <Stack spacing={0.75}>
-              {wiring.inputs.map(([port, bind]) => (
-                <Typography key={`in-${port}`} variant="body2" color="text.secondary">
-                  <b>{t('blockIo.reads')}</b>{' '}
-                  {port} ← {deviceNames[bind.deviceId] ?? bind.deviceId}.{bind.capabilityId}
-                </Typography>
-              ))}
-              {wiring.outputs.map(([cap, bind]) => (
-                <Typography key={`out-${cap}`} variant="body2" color="text.secondary">
-                  <b>{t('blockIo.drives')}</b>{' '}
-                  {cap} → {deviceNames[bind.deviceId] ?? bind.deviceId}.{bind.capabilityId}
-                </Typography>
-              ))}
-            </Stack>
-          </Section>
-        )}
-
-        {/* ML governance (Epic 2P): connect an applicable model to this device via the apply wizard. */}
-        {mlCtx && mlCtx.types.length > 0 && (
-          <Section title={t('ml.title')} action={
-            <Button size="small" startIcon={<AutoAwesomeRoundedIcon />} onClick={() => setApplyOpen(true)}>
-              {t('ml.connect')}
-            </Button>
-          }>
-            {governedBy.length > 0 ? (
-              <Stack spacing={0.5}>
-                {governedBy.map((b) => (
-                  <Stack key={b.id} direction="row" spacing={1} alignItems="center">
-                    <Typography variant="body2">{b.name}</Typography>
-                    <Chip size="small" variant="outlined" color="info"
-                      label={t(`ml.stage.${Math.round(b.params.stage ?? 0) >= 2 ? 'full' : Math.round(b.params.stage ?? 0) === 1 ? 'bounded' : 'shadow'}`)} />
-                  </Stack>
-                ))}
-              </Stack>
-            ) : (
-              <Typography variant="body2" color="text.secondary">{t('ml.hint')}</Typography>
-            )}
-          </Section>
-        )}
-
-        {controls.length > 0 && (
-          <Section title={t('sections.controls')} action={
-            controls.some((c) => c.id === 'on_off')
-              ? <Button size="small" onClick={allOff} disabled={offline}>{t('actions.allOff')}</Button>
-              : undefined
-          }>
-            <Stack spacing={2.25}>
-              {controls.map((cap) => (
-                <CapabilityControl key={cap.id} device={device} cap={cap}
-                  value={device.state?.[cap.id]} onCommand={onCommand} />
-              ))}
-            </Stack>
-          </Section>
-        )}
-
-        {sensors.length > 0 && (
-          <Section title={t('sections.sensors')}>
-            <Stack spacing={2}>
-              {sensors.map((cap) => (
-                <CapabilityControl key={cap.id} device={device} cap={cap}
-                  value={device.state?.[cap.id]} onCommand={onCommand} />
-              ))}
-            </Stack>
-          </Section>
-        )}
-
-        {device.capabilities.length === 0 && (
-          <Typography variant="body2" color="text.secondary">{t('noCapabilities')}</Typography>
-        )}
-
-        {numericSensors.length > 0 && (
-          <Section title={t('sections.trends')}>
-            <Stack spacing={2.5}>
-              {numericSensors.map((cap) => (
-                <Box key={cap.id}>
-                  <Typography variant="body2" fontWeight={600} mb={0.5}>
-                    {cap.id}{cap.unit ? ` (${cap.unit})` : ''}
-                  </Typography>
-                  <TelemetryChart capabilityId={cap.id} deviceId={device.id} unit={cap.unit} height={160} />
-                </Box>
-              ))}
-            </Stack>
-          </Section>
-        )}
-
-        <Section title={t('sections.history')}>
-          {history.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">{t('noHistory')}</Typography>
-          ) : (
-            <Stack spacing={1.25}>
-              {history.map((e, i) => (
-                <Stack key={`${e.timestamp}-${e.capabilityId}-${i}`} direction="row" alignItems="center"
-                  spacing={1} flexWrap="wrap" useFlexGap>
-                  <Typography variant="body2" fontWeight={600} sx={{ minWidth: 96 }}>{e.capabilityId}</Typography>
-                  {e.kind === 'command' ? (
-                    <Typography variant="body2">→ {fmtValue(e.newValue)}</Typography>
-                  ) : (
-                    <Stack direction="row" alignItems="center" spacing={0.5}>
-                      <Typography variant="body2" color="text.secondary">{fmtValue(e.oldValue)}</Typography>
-                      <ArrowRightAltRoundedIcon fontSize="small" sx={{ color: 'text.disabled' }} />
-                      <Typography variant="body2">{fmtValue(e.newValue)}</Typography>
-                    </Stack>
-                  )}
-                  <Box flex={1} />
-                  {(() => {
-                    const { id, name } = triggerInfo(e);
-                    return <TriggerChip kind={e.triggerSource} id={id} name={name} />;
-                  })()}
-                  <Typography variant="caption" color="text.secondary">
-                    {fmtDateTime(e.timestamp)}
-                  </Typography>
+      {/* The one and only scroll surface: whichever tab is active gets the whole remaining height. */}
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', px: 2.5, py: 2.5, '& > :last-child': { mb: 0 } }}>
+        {tab === 0 && (
+          <>
+            {wiring && (wiring.inputs.length > 0 || wiring.outputs.length > 0) && (
+              <Section title={t('blockIo.title')}>
+                <Stack spacing={0.75}>
+                  {wiring.inputs.map(([port, bind]) => (
+                    <Typography key={`in-${port}`} variant="body2" color="text.secondary">
+                      <b>{t('blockIo.reads')}</b>{' '}
+                      {port} ← {deviceNames[bind.deviceId] ?? bind.deviceId}.{bind.capabilityId}
+                    </Typography>
+                  ))}
+                  {wiring.outputs.map(([cap, bind]) => (
+                    <Typography key={`out-${cap}`} variant="body2" color="text.secondary">
+                      <b>{t('blockIo.drives')}</b>{' '}
+                      {cap} → {deviceNames[bind.deviceId] ?? bind.deviceId}.{bind.capabilityId}
+                    </Typography>
+                  ))}
                 </Stack>
-              ))}
-            </Stack>
-          )}
-        </Section>
+              </Section>
+            )}
+
+            {controls.length > 0 && (
+              <Section title={t('sections.controls')} action={
+                controls.some((c) => c.id === 'on_off')
+                  ? <Button size="small" onClick={allOff} disabled={offline}>{t('actions.allOff')}</Button>
+                  : undefined
+              }>
+                <Stack spacing={2.25}>
+                  {controls.map((cap) => (
+                    <CapabilityControl key={cap.id} device={device} cap={cap}
+                      value={device.state?.[cap.id]} onCommand={onCommand} />
+                  ))}
+                </Stack>
+              </Section>
+            )}
+
+            {sensors.length > 0 && (
+              <Section title={t('sections.sensors')}>
+                <Stack spacing={2}>
+                  {sensors.map((cap) => (
+                    <CapabilityControl key={cap.id} device={device} cap={cap}
+                      value={device.state?.[cap.id]} onCommand={onCommand} />
+                  ))}
+                </Stack>
+              </Section>
+            )}
+
+            {device.capabilities.length === 0 && (
+              <Typography variant="body2" color="text.secondary">{t('noCapabilities')}</Typography>
+            )}
+
+            {/* ML governance (Epic 2P): connect an applicable model to this device via the apply wizard. */}
+            {mlCtx && mlCtx.types.length > 0 && (
+              <Section title={t('ml.title')} action={
+                <Button size="small" startIcon={<AutoAwesomeRoundedIcon />} onClick={() => setApplyOpen(true)}>
+                  {t('ml.connect')}
+                </Button>
+              }>
+                {governedBy.length > 0 ? (
+                  <Stack spacing={0.5}>
+                    {governedBy.map((b) => (
+                      <Stack key={b.id} direction="row" spacing={1} alignItems="center">
+                        <Typography variant="body2">{b.name}</Typography>
+                        <Chip size="small" variant="outlined" color="info"
+                          label={t(`ml.stage.${Math.round(b.params.stage ?? 0) >= 2 ? 'full' : Math.round(b.params.stage ?? 0) === 1 ? 'bounded' : 'shadow'}`)} />
+                      </Stack>
+                    ))}
+                  </Stack>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">{t('ml.hint')}</Typography>
+                )}
+              </Section>
+            )}
+          </>
+        )}
+
+        {tab === 1 && (
+          <>
+            {numericSensors.length > 0 && (
+              <Section title={t('sections.trends')}>
+                <Stack spacing={2.5}>
+                  {numericSensors.map((cap) => (
+                    <Box key={cap.id}>
+                      <Typography variant="body2" fontWeight={600} mb={0.5}>
+                        {cap.id}{cap.unit ? ` (${cap.unit})` : ''}
+                      </Typography>
+                      <TelemetryChart capabilityId={cap.id} deviceId={device.id} unit={cap.unit} height={180} />
+                    </Box>
+                  ))}
+                </Stack>
+              </Section>
+            )}
+
+            <Section title={t('sections.history')}>
+              {history.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">{t('noHistory')}</Typography>
+              ) : (
+                <Stack spacing={1.25}>
+                  {history.map((e, i) => (
+                    <Stack key={`${e.timestamp}-${e.capabilityId}-${i}`} direction="row" alignItems="center"
+                      spacing={1} flexWrap="wrap" useFlexGap>
+                      <Typography variant="body2" fontWeight={600} sx={{ minWidth: 96 }}>{e.capabilityId}</Typography>
+                      {e.kind === 'command' ? (
+                        <Typography variant="body2">→ {fmtValue(e.newValue)}</Typography>
+                      ) : (
+                        <Stack direction="row" alignItems="center" spacing={0.5}>
+                          <Typography variant="body2" color="text.secondary">{fmtValue(e.oldValue)}</Typography>
+                          <ArrowRightAltRoundedIcon fontSize="small" sx={{ color: 'text.disabled' }} />
+                          <Typography variant="body2">{fmtValue(e.newValue)}</Typography>
+                        </Stack>
+                      )}
+                      <Box flex={1} />
+                      {(() => {
+                        const { id, name } = triggerInfo(e);
+                        return <TriggerChip kind={e.triggerSource} id={id} name={name} />;
+                      })()}
+                      <Typography variant="caption" color="text.secondary">
+                        {fmtDateTime(e.timestamp)}
+                      </Typography>
+                    </Stack>
+                  ))}
+                </Stack>
+              )}
+            </Section>
+          </>
+        )}
+
+        {tab === 2 && (
+          <>
+            <Section title={t('sections.identity')}>
+              {/* Friendly name (Epic 3G): user-editable; empty ⇒ type-derived label (shown as placeholder). */}
+              {onSetAlias && (
+                <TextField
+                  size="small"
+                  label={t('alias.label')}
+                  value={aliasDraft}
+                  placeholder={autoDeviceName(device)}
+                  onChange={(e) => setAliasDraft(e.target.value)}
+                  onBlur={commitAlias}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                  helperText={t('alias.hint')}
+                  sx={{ mb: 2 }}
+                  fullWidth
+                  InputProps={{
+                    endAdornment: (device.alias || aliasDraft) ? (
+                      <InputAdornment position="end">
+                        <Tooltip title={t('alias.clear')}>
+                          <IconButton size="small" edge="end" aria-label={t('alias.clear')} onClick={clearAlias}>
+                            <RestartAltRoundedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </InputAdornment>
+                    ) : undefined,
+                  }}
+                />
+              )}
+
+              <TextField
+                select
+                size="small"
+                label={t('zone')}
+                value={currentZone}
+                onChange={(e) => onAssignZone(device.id, e.target.value || null)}
+                sx={{ mb: 2 }}
+                fullWidth
+              >
+                <MenuItem value=""><em>{t('unassigned')}</em></MenuItem>
+                {zones.map((z) => (
+                  <MenuItem key={z.id} value={z.id}>{z.name}</MenuItem>
+                ))}
+              </TextField>
+
+              {/* Semantic type (Epic 2D): empty = auto-classified; pick to override. */}
+              <TextField
+                select
+                size="small"
+                label={t('type.label')}
+                value={device.archetype ?? ''}
+                onChange={(e) => onSetArchetype(device.id, e.target.value || null)}
+                fullWidth
+              >
+                <MenuItem value=""><em>{t('type.auto', { value: device.autoArchetype ?? t('type.unknown') })}</em></MenuItem>
+                {DEVICE_ARCHETYPES.map((a) => (
+                  <MenuItem key={a} value={a}>{a.replace(/_/g, ' ')}</MenuItem>
+                ))}
+              </TextField>
+            </Section>
+
+            {/* Energy accounting (Epic 3C-D): the toggle, the nameplate watts and the role behind kWh totals. */}
+            <EnergyProfileEditor device={device} />
+
+            {/* Load-shedding profile (Epic 3C-LM): only for devices with a writable on_off capability. */}
+            <LoadSheddingProfileEditor device={device} />
+
+            <Section title={t('sections.tech')}>
+              <Stack spacing={0.75}>
+                <TechRow label={t('tech.source')} value={device.adapterSource} />
+                {device.model && <TechRow label={t('tech.model')} value={device.model} />}
+                {isCrypticName(device.name) && <TechRow label={t('tech.rawName')} value={device.name} mono />}
+                <TechRow label={t('tech.id')} value={device.id} mono />
+                {device.lastUpdated && (
+                  <TechRow label={t('tech.updated')} value={fmtDateTime(device.lastUpdated)} />
+                )}
+              </Stack>
+            </Section>
+          </>
+        )}
       </Box>
 
       {mlCtx && (
@@ -378,18 +470,6 @@ function DrawerBody({
           onCreated={() => setApplyOpen(false)}
         />
       )}
-
-      <Divider sx={{ mt: 2 }} />
-      <Stack spacing={0.25} pt={1.5}>
-        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-          {device.id}
-        </Typography>
-        {device.lastUpdated && (
-          <Typography variant="caption" color="text.secondary">
-            {t('updated', { when: fmtDateTime(device.lastUpdated) })}
-          </Typography>
-        )}
-      </Stack>
     </Box>
   );
 }
@@ -403,5 +483,20 @@ function Section({ title, action, children }: { title: string; action?: React.Re
       </Stack>
       {children}
     </Box>
+  );
+}
+
+/** Label/value line for the technical block — long ids wrap instead of widening the panel. */
+function TechRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <Stack direction="row" spacing={1} alignItems="baseline">
+      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 104, flexShrink: 0 }}>{label}</Typography>
+      <Typography
+        variant="caption"
+        sx={{ wordBreak: 'break-all', fontFamily: mono ? 'monospace' : undefined }}
+      >
+        {value}
+      </Typography>
+    </Stack>
   );
 }

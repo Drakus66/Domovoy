@@ -25,6 +25,11 @@ namespace Domovoy.AutomationService.Services;
 /// preserved — which is what lets a control block (e.g. <c>presence_mode</c>) or a rule drive the mode
 /// like any other actuator, with correct journal attribution, instead of the mode switch living in
 /// platform code.</para>
+///
+/// <para>A fourth virtual device, <b>Power</b> (roadmap Epic 3C-LM), publishes the <c>power_source</c>
+/// signal <see cref="LoadManager"/> uses to pick a budget tier. It is also commandable, but — unlike the
+/// Home device — the value is held only in <see cref="PowerSourceState"/> (no DbGateway round-trip): it
+/// is a live signal a rule/user sets, not durable configuration.</para>
 /// </summary>
 public sealed class SystemSensorService : BackgroundService
 {
@@ -36,6 +41,8 @@ public sealed class SystemSensorService : BackgroundService
     private static readonly Guid CalendarDeviceId = DeviceIdFactory.Derive(Source, "calendar");
     /// <summary>The Home virtual device (home mode as a capability) — public so blocks/UI can target it.</summary>
     public static readonly Guid HomeDeviceId = DeviceIdFactory.Derive(Source, "home");
+    /// <summary>The Power virtual device (power-source signal, Epic 3C-LM) — public so rules/UI can target it.</summary>
+    public static readonly Guid PowerDeviceId = DeviceIdFactory.Derive(Source, "power");
     private static readonly TimeSpan TickInterval = TimeSpan.FromMinutes(1);
 
     private static readonly Capability[] SunCapabilities =
@@ -67,23 +74,30 @@ public sealed class SystemSensorService : BackgroundService
         WellKnownCapabilities.HomeMode(),
     };
 
+    private static readonly Capability[] PowerCapabilities =
+    {
+        WellKnownCapabilities.PowerSourceCap(),
+    };
+
     private readonly IMessageBus _bus;
     private readonly SunCalculator _sun;
     private readonly SiteContext _site;
     private readonly CalendarContext _calendar;
     private readonly HomeModeState _mode;
+    private readonly PowerSourceState _powerSource;
     private readonly DbGatewayClient _db;
     private readonly ILogger<SystemSensorService> _logger;
 
     public SystemSensorService(
         IMessageBus bus, SunCalculator sun, SiteContext site, CalendarContext calendar,
-        HomeModeState mode, DbGatewayClient db, ILogger<SystemSensorService> logger)
+        HomeModeState mode, PowerSourceState powerSource, DbGatewayClient db, ILogger<SystemSensorService> logger)
     {
         _bus = bus;
         _sun = sun;
         _site = site;
         _calendar = calendar;
         _mode = mode;
+        _powerSource = powerSource;
         _db = db;
         _logger = logger;
     }
@@ -94,6 +108,7 @@ public sealed class SystemSensorService : BackgroundService
         await AnnounceAsync(TimeDeviceId, "Time", "system/clock", TimeCapabilities, stoppingToken);
         await AnnounceAsync(CalendarDeviceId, "Calendar", "system/calendar", CalendarCapabilities, stoppingToken);
         await AnnounceAsync(HomeDeviceId, "Home", "system/home", HomeCapabilities, stoppingToken);
+        await AnnounceAsync(PowerDeviceId, "Power", "system/power", PowerCapabilities, stoppingToken);
 
         // Commands aimed at the Home device retarget the home mode (the device→mode bridge).
         await _bus.SubscribeAsync<Envelope<DeviceCommandV1>>(
@@ -101,6 +116,15 @@ public sealed class SystemSensorService : BackgroundService
             BusTopology.CommandsExchange,
             BusTopology.DeviceCommandKey,
             env => HandleHomeCommand(env, stoppingToken),
+            stoppingToken);
+
+        // Commands aimed at the Power device update the live power-source signal (Epic 3C-LM) — no
+        // DbGateway round-trip, so the ack (republished state) is immediate.
+        await _bus.SubscribeAsync<Envelope<DeviceCommandV1>>(
+            "automation-power-source-commands",
+            BusTopology.CommandsExchange,
+            BusTopology.DeviceCommandKey,
+            env => HandlePowerCommand(env, stoppingToken),
             stoppingToken);
 
         // The mode changes rarely; push the Home device's state immediately on a change so blocks
@@ -124,6 +148,7 @@ public sealed class SystemSensorService : BackgroundService
                 await PublishStateAsync(TimeDeviceId, "time", ComputeTime(now).ToState(), stoppingToken);
                 await PublishStateAsync(CalendarDeviceId, "calendar", ComputeCalendar(now).ToState(), stoppingToken);
                 await PublishHomeAsync(stoppingToken);
+                await PublishPowerAsync(stoppingToken);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
@@ -158,6 +183,30 @@ public sealed class SystemSensorService : BackgroundService
     private Task PublishHomeAsync(CancellationToken ct) =>
         PublishStateAsync(HomeDeviceId, "home",
             new Dictionary<string, object?> { [CapabilityIds.HomeMode] = _mode.Current }, ct);
+
+    /// <summary>
+    /// Device→signal bridge for load management (Epic 3C-LM): a command setting <c>power_source</c> on
+    /// the Power device updates <see cref="PowerSourceState"/> directly (no DbGateway — the signal isn't
+    /// persisted) and republishes state immediately so <c>LoadManager</c> doesn't wait out the 1-min tick.
+    /// </summary>
+    private async Task HandlePowerCommand(Envelope<DeviceCommandV1> envelope, CancellationToken ct)
+    {
+        var cmd = envelope.Data;
+        if (cmd is null || cmd.DeviceId != PowerDeviceId) return;
+        if (!cmd.Set.TryGetValue(CapabilityIds.PowerSource, out var raw)) return;
+
+        var source = raw?.ToString()?.Trim();
+        if (string.IsNullOrEmpty(source)) return;
+
+        _powerSource.Set(source);
+        _logger.LogInformation("Power-device command → power_source {Source} (by {By})",
+            source, string.IsNullOrEmpty(envelope.Source) ? "unknown" : envelope.Source);
+        await PublishPowerAsync(ct);
+    }
+
+    private Task PublishPowerAsync(CancellationToken ct) =>
+        PublishStateAsync(PowerDeviceId, "power",
+            new Dictionary<string, object?> { [CapabilityIds.PowerSource] = _powerSource.Current }, ct);
 
     /// <summary>Local wall-clock now at the site (2L) — the basis for the Time and Calendar sensors.</summary>
     private DateTimeOffset LocalNow(DateTimeOffset nowUtc) => TimeZoneInfo.ConvertTime(nowUtc, _site.TimeZone);

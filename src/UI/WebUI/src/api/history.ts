@@ -42,10 +42,14 @@ export interface HistoryQuery {
   limit?: number;
 }
 
+/** Aggregation functions the rollup endpoints accept. avg/min/max = band stats; sum = total of the
+ *  bucket's samples; delta = last−first within the bucket (energy consumption from a counter, Epic 3C). */
+export type AggFn = 'avg' | 'min' | 'max' | 'sum' | 'delta';
+
 /** One aggregated time bucket (matches DbGateway AggregateBucket, Epic 1B). */
 export interface AggregateBucket {
   timestamp: string;
-  value: number; // the requested aggregate (avg | min | max)
+  value: number; // the requested aggregate (see AggFn)
   min: number;
   max: number;
   avg: number;
@@ -59,7 +63,7 @@ export interface AggregateQuery {
   from?: string;
   to?: string;
   bucket?: 'minute' | 'hour' | 'day';
-  agg?: 'avg' | 'min' | 'max';
+  agg?: AggFn;
 }
 
 /** One (device, capability) series requested in a batch aggregation. */
@@ -78,7 +82,7 @@ export interface AggregateBatchQuery {
   from?: string;
   to?: string;
   bucket?: 'minute' | 'hour' | 'day';
-  agg?: 'avg' | 'min' | 'max';
+  agg?: AggFn;
   /** Max points kept per series (most-recent); server default is 48. */
   maxPoints?: number;
 }

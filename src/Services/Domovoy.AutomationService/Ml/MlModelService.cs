@@ -30,6 +30,7 @@ public sealed class MlModelService
 {
     private readonly DbGatewayClient _db;
     private readonly HomeModeState _mode;
+    private readonly MlRuntimeState _runtime;
     private readonly AutomationOptions _options;
     private readonly ILogger<MlModelService> _logger;
 
@@ -55,10 +56,12 @@ public sealed class MlModelService
     private sealed record Loaded(
         string ModelId, Func<DateTimeOffset, double>? Scalar, Func<DateTimeOffset, string?>? Class, MlModel Meta);
 
-    public MlModelService(DbGatewayClient db, HomeModeState mode, IOptions<AutomationOptions> options, ILogger<MlModelService> logger)
+    public MlModelService(
+        DbGatewayClient db, HomeModeState mode, MlRuntimeState runtime, IOptions<AutomationOptions> options, ILogger<MlModelService> logger)
     {
         _db = db;
         _mode = mode;
+        _runtime = runtime;
         _options = options.Value;
         _logger = logger;
     }
@@ -276,6 +279,8 @@ public sealed class MlModelService
     public bool TryPredict(string target, DateTimeOffset now, IReadOnlyList<ModelScope> chain, int pinnedVersion, out float value)
     {
         value = 0;
+        // Epic 3I: the master switch turns serving off — governors then see "no model" and auto-demote to Shadow.
+        if (!_runtime.LayerEnabled) return false;
         var targetKey = TargetKey(target);
         lock (_lock)
         {
@@ -303,6 +308,8 @@ public sealed class MlModelService
     /// </summary>
     public string? TryPredictClass(string target, DateTimeOffset now, IReadOnlyList<ModelScope> chain, int pinnedVersion)
     {
+        // Epic 3I: the master switch turns serving off — selector governors then see "no model" and auto-demote.
+        if (!_runtime.LayerEnabled) return null;
         var targetKey = TargetKey(target);
         lock (_lock)
         {

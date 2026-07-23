@@ -121,11 +121,21 @@ internal static class Program
             // Prometheus: collect per-request HTTP metrics and expose them on /metrics (port 8080).
             app.UseHttpMetrics();
 
+            // Fold the legacy Epic 3C energy role into the per-device energy profile (Epic 3C-D). Idempotent
+            // and best-effort, so it stays harmless on every later start.
+            Services.EnergyProfileMigration.RunAsync(
+                app.Services.GetRequiredService<IMongoDatabase>(),
+                app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("EnergyProfileMigration"))
+                .GetAwaiter().GetResult();
+
             // Map endpoints
             app.MapCapabilityDeviceEndpoints();
             app.MapZoneEndpoints();
             app.MapHistoryEndpoints();
+            app.MapEnergyEndpoints();
+            app.MapPowerTopologyEndpoints();
             app.MapAutomationEndpoints();
+            app.MapVariableEndpoints();
             app.MapSceneEndpoints();
             app.MapModeEndpoints();
             app.MapBlockEndpoints();
@@ -135,6 +145,7 @@ internal static class Program
             app.MapNarrativeEntityEndpoints();
             app.MapMlEndpoints();
             app.MapMlTaskEndpoints();
+            app.MapMlActivityEndpoints();
             app.MapProposalsEndpoints();
             app.MapRoleEndpoints();
             app.MapUserEndpoints();

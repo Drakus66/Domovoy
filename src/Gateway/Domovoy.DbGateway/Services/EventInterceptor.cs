@@ -191,11 +191,16 @@ public class EventInterceptor : BackgroundService
         {
             var collection = _database.GetCollection<CapabilityDeviceDocument>(CapabilityCollection);
             var filter = Builders<CapabilityDeviceDocument>.Filter.Eq(x => x.Id, device.Id.ToString());
+            // The announce rewrites the whole capability list, so the platform's synthetic power/energy series
+            // (Epic 3C-D) has to be re-applied from the stored energy profile — otherwise a re-announce would
+            // silently drop a tracked device out of the accounting.
+            var existing = await collection.Find(x => x.Id == device.Id.ToString()).FirstOrDefaultAsync();
             var update = Builders<CapabilityDeviceDocument>.Update
                 .Set(x => x.Name, device.Name)
                 .Set(x => x.AdapterSource, device.Identity.AdapterSource)
                 .Set(x => x.Model, device.Model)
-                .Set(x => x.Capabilities, device.Capabilities.Select(ToCapabilityDocument).ToList())
+                .Set(x => x.Capabilities, SyntheticCapabilities.Apply(
+                    device.Capabilities.Select(ToCapabilityDocument), existing?.EnergyProfile))
                 // While the Zigbee bridge is down, a re-delivered RETAINED discovery must not flip the device
                 // back online (the broker replays z2m's last device list even though z2m can't reach it).
                 .Set(x => x.IsOnline, ResolveOnline(device.Identity.AdapterSource))
@@ -233,9 +238,12 @@ public class EventInterceptor : BackgroundService
             await RecordStateDeltas(report, envelope.Source, zoneId, oldState, existing);
 
             var update = Builders<CapabilityDeviceDocument>.Update
-                // A retained state message during a bridge outage must not re-online a Zigbee device (see discovery).
-                .Set(x => x.IsOnline, ResolveOnline(existing?.AdapterSource))
                 .Set(x => x.LastUpdated, DateTime.UtcNow);
+            // The platform's own energy estimate (Epic 3C-D) is published on behalf of the device and says
+            // nothing about its reachability — only a report the device itself produced may (re)online it.
+            // A retained state message during a bridge outage must not re-online a Zigbee device (see discovery).
+            if (!IsEstimatorReport(envelope.Source))
+                update = update.Set(x => x.IsOnline, ResolveOnline(existing?.AdapterSource));
             foreach (var kv in report.State)
                 update = update.Set($"State.{kv.Key}", Normalize(kv.Value));
 
@@ -420,6 +428,10 @@ public class EventInterceptor : BackgroundService
         // text values (clock, sunrise, date) update only the read-model.
         var isSystem = string.Equals(existing?.AdapterSource, "System", StringComparison.OrdinalIgnoreCase);
 
+        // The energy estimator (Epic 3C-D) republishes a device's derived power/energy on a timer. Those are
+        // trends, not events — they go to telemetry below, but never into the activity journal.
+        var isEstimator = IsEstimatorReport(reportSource);
+
         var logs = new List<DeviceEventLog>();
         var readings = new List<SensorReading>();
         var deviceId = report.DeviceId.ToString();
@@ -448,6 +460,7 @@ public class EventInterceptor : BackgroundService
                     Value = num,
                 });
 
+            if (isEstimator) continue;
             // For a System sensor, only discrete (Boolean/Enum) transitions belong in the activity log.
             if (isSystem && !IsDiscreteCapability(existing, kv.Key)) continue;
             // The Home device mirrors the home mode as a capability (device→mode bridge); the canonical
@@ -609,6 +622,17 @@ public class EventInterceptor : BackgroundService
         return doc ?? string.Empty;
     }
 
+    /// <summary>
+    /// True for a state report the platform's energy estimator published on a device's behalf (Epic 3C-D,
+    /// source <c>energy:{deviceId}</c>). Such a report carries only the derived power/energy series: it must
+    /// not affect reachability, and its numeric churn belongs in telemetry rather than the activity journal.
+    /// </summary>
+    private static bool IsEstimatorReport(string? source) =>
+        source?.StartsWith(EstimatorSourcePrefix, StringComparison.OrdinalIgnoreCase) == true;
+
+    /// <summary>Actor-string prefix the AutomationService energy estimator publishes with (Epic 3C-D).</summary>
+    public const string EstimatorSourcePrefix = "energy:";
+
     private static string? UnitOf(CapabilityDeviceDocument? device, string capabilityId) =>
         device?.Capabilities.FirstOrDefault(c => c.Id == capabilityId)?.Unit;
 
@@ -635,6 +659,10 @@ public class EventInterceptor : BackgroundService
         // Control-block actuation is published as source "block:{id}" (Epic 1H BlockRuntime). Attribute it
         // to the block, not the user, so a thermostat/sequencer loop is distinguishable from manual actions.
         if (s.StartsWith("block")) return (TriggerSources.Block, id);
+        // A scene activation is published as source "scene:{id}" (Epic 3B ScenesController). Attribute it to
+        // the scene (id = scene id) so scene-schedule discovery (Epic 2F) can see "which scene was activated
+        // when" instead of it collapsing into an anonymous user change.
+        if (s.StartsWith("scene")) return (TriggerSources.Scene, id);
         if (s.Contains("automation") || s.Contains("rule")) return (TriggerSources.Rule, id);
         if (s.StartsWith("user")) return (TriggerSources.User, id);
         if (s.Contains("ml")) return (TriggerSources.Ml, id);

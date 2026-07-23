@@ -23,7 +23,7 @@ public sealed class BlockCatalog
 {
     private readonly Dictionary<string, IBlockType> _types;
 
-    public BlockCatalog(MlModelService models, SunCalculator sun, IOptions<AutomationOptions> options)
+    public BlockCatalog(MlModelService models, SunCalculator sun, TariffContext tariff, IOptions<AutomationOptions> options)
     {
         var o = options.Value;
         var types = new List<IBlockType>
@@ -67,6 +67,10 @@ public sealed class BlockCatalog
             // Epic 2Q Phase 3: control ramp + the custom expression (script) block.
             new RampType(),
             new ExpressionType(),
+
+            // Epic 3C: shift a deferrable load into the cheapest tariff hours (reads the forward price series
+            // from the injected TariffContext).
+            new CheapHoursType(tariff),
 
             // Presence → home mode as a user-owned block (replaces the hardcoded 1G PresenceMonitor):
             // household policy lives in the block layer, not in platform code.

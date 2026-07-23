@@ -77,4 +77,51 @@ public sealed class AutomationRuleNormalizationTests
         Assert.Equal(true, stored.Actions[0].Set!["on_off"]);
         Assert.Equal(80d, Convert.ToDouble(stored.Actions[0].Set!["brightness"]));
     }
+
+    [Fact]
+    [Trait("Category", "OfflineSmoke")]
+    public async Task Rule_WithEpic3EFields_NormalizesNestedJsonElements()
+    {
+        // Every Epic 3E surface that carries an object? value must be flattened too, or the whole rule fails
+        // to persist: the required-expression gate's conditions, a WaitForEvent's WaitValue, and the values
+        // inside its OnTimeout / OnError branch actions.
+        var rule = new AutomationRule
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "3e rule",
+            Status = RuleStatus.Active,
+            Triggers = { new RuleTrigger { Type = TriggerType.DeviceState, DeviceId = "d", CapabilityId = "contact", Operator = "eq", Value = Json("true") } },
+            RequiredExpression = new RequiredExpression
+            {
+                Expression = "C0",
+                Conditions = { new RuleCondition { Type = ConditionType.DeviceState, DeviceId = "d2", CapabilityId = "occupancy", Operator = "eq", Value = Json("true") } },
+            },
+            Actions =
+            {
+                new RuleAction
+                {
+                    Type = ActionType.WaitForEvent,
+                    WaitDeviceId = "d3", WaitCapabilityId = "contact", WaitOperator = "eq", WaitValue = Json("true"),
+                    TimeoutSeconds = 60,
+                    OnTimeout = new()
+                    {
+                        new RuleAction { Type = ActionType.Command, DeviceId = "d4", Set = new() { ["on_off"] = Json("false") } },
+                    },
+                    OnError = new()
+                    {
+                        new RuleAction { Type = ActionType.Command, DeviceId = "d5", Set = new() { ["brightness"] = Json("10") } },
+                    },
+                },
+            },
+        };
+
+        AutomationEndpoints.NormalizeJsonValues(rule);
+        await Rules.InsertOneAsync(rule); // BsonSerializationException if any nested JsonElement survived
+
+        var stored = await Rules.Find(x => x.Id == rule.Id).FirstOrDefaultAsync();
+        Assert.Equal(true, stored.RequiredExpression!.Conditions[0].Value);
+        Assert.Equal(true, stored.Actions[0].WaitValue);
+        Assert.Equal(false, stored.Actions[0].OnTimeout![0].Set!["on_off"]);
+        Assert.Equal(10d, Convert.ToDouble(stored.Actions[0].OnError![0].Set!["brightness"]));
+    }
 }

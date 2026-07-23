@@ -27,6 +27,7 @@ export const namespaces = [
   'blocks',
   'models',
   'proposals',
+  'variables',
   'users',
   'plugins',
   'logs',

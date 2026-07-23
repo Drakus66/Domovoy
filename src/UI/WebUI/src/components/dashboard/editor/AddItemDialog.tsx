@@ -15,10 +15,12 @@ import SensorsRoundedIcon from '@mui/icons-material/SensorsRounded';
 import ShowChartRoundedIcon from '@mui/icons-material/ShowChartRounded';
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import MovieFilterRoundedIcon from '@mui/icons-material/MovieFilterRounded';
+import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import type { CapabilityDevice } from '../../../api/capabilityDevices';
 import type { DashboardItem, DashboardItemType } from '../../../api/dashboards';
 import { scenesApi, type Scene } from '../../../api/scenes';
 import { capabilityLabel, describeDevice } from '../../devices/deviceVisuals';
+import { deviceLabel } from '../../devices/deviceNaming';
 
 /** Chart window presets → aggregation bucket (mirrors the device drawer's trend presets). */
 const CHART_WINDOWS: Record<number, 'minute' | 'hour' | 'day'> = { 6: 'minute', 24: 'hour', 168: 'day' };
@@ -29,6 +31,7 @@ const TYPE_ICONS: Record<DashboardItemType, JSX.Element> = {
   chart: <ShowChartRoundedIcon />,
   modes: <TuneRoundedIcon />,
   scene: <MovieFilterRoundedIcon />,
+  energy: <BoltRoundedIcon />,
 };
 
 /**
@@ -76,8 +79,10 @@ export default function AddItemDialog({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const list = q ? devices.filter((d) => d.name.toLowerCase().includes(q)) : devices;
-    return [...list].sort((a, b) => a.name.localeCompare(b.name));
+    const list = q
+      ? devices.filter((d) => deviceLabel(d).toLowerCase().includes(q) || d.name.toLowerCase().includes(q))
+      : devices;
+    return [...list].sort((a, b) => deviceLabel(a).localeCompare(deviceLabel(b)));
   }, [devices, search]);
 
   const selectedDevice = deviceId ? devices.find((d) => d.id === deviceId) ?? null : null;
@@ -91,6 +96,7 @@ export default function AddItemDialog({
 
   const canAdd =
     type === 'modes' ||
+    type === 'energy' ||
     (type === 'scene' && sceneId !== '') ||
     (type === 'device' && selectedIds.size > 0) ||
     ((type === 'capability' || type === 'chart') && deviceId !== null && capabilityId !== '');
@@ -99,6 +105,8 @@ export default function AddItemDialog({
     if (!type) return;
     if (type === 'modes') {
       onAdd([{ type: 'modes' }]);
+    } else if (type === 'energy') {
+      onAdd([{ type: 'energy' }]);
     } else if (type === 'scene') {
       onAdd([{ type: 'scene', params: { sceneId } }]);
     } else if (type === 'device') {
@@ -130,7 +138,7 @@ export default function AddItemDialog({
       <DialogContent dividers sx={{ minHeight: 320 }}>
         {type === null && (
           <List>
-            {(['device', 'capability', 'chart', 'modes', 'scene'] as DashboardItemType[]).map((option) => (
+            {(['device', 'capability', 'chart', 'modes', 'scene', 'energy'] as DashboardItemType[]).map((option) => (
               <ListItemButton key={option} onClick={() => setType(option)} sx={{ borderRadius: 2 }}>
                 <ListItemIcon>{TYPE_ICONS[option]}</ListItemIcon>
                 <ListItemText
@@ -144,6 +152,10 @@ export default function AddItemDialog({
 
         {type === 'modes' && (
           <Typography variant="body2" color="text.secondary">{t('editor.typeHints.modes')}</Typography>
+        )}
+
+        {type === 'energy' && (
+          <Typography variant="body2" color="text.secondary">{t('editor.typeHints.energy')}</Typography>
         )}
 
         {type === 'scene' && (
@@ -194,7 +206,7 @@ export default function AddItemDialog({
                         : <Radio edge="start" size="small" checked={checked} disableRipple tabIndex={-1} />}
                     </ListItemIcon>
                     <ListItemIcon sx={{ minWidth: 34, color: 'text.secondary' }}><Icon fontSize="small" /></ListItemIcon>
-                    <ListItemText primary={device.name} secondary={device.model || device.adapterSource} />
+                    <ListItemText primary={deviceLabel(device)} secondary={device.model || device.adapterSource} />
                   </ListItemButton>
                 );
               })}

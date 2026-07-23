@@ -133,4 +133,65 @@ public class RuLanguagePackRendererTests
         Assert.StartsWith("Семья", second);
         Assert.StartsWith("Домочадцы", third);
     }
+
+    [Fact]
+    public void Scene_with_unresolvable_device_object_is_skipped_not_rendered_bare()
+    {
+        // default.Set needs its device object; archetype «gizmo» has no noun → no «Домочадцы изменили.»
+        var scene = MakeScene(MakeBeat(PersonaRole.Residents, "gizmo", "mode", Transition.Set));
+        Assert.Equal("", Render(new NarrativeState(), scene));
+    }
+
+    [Fact]
+    public void Unknown_archetype_falls_back_to_generic_device_noun()
+    {
+        var scene = MakeScene(MakeBeat(PersonaRole.Residents, "unknown", "mode", Transition.Set, zoneName: "Гостиная"));
+        Assert.Equal("Домочадцы изменили устройство в гостиной.", Render(new NarrativeState(), scene));
+    }
+
+    [Fact]
+    public void Verb_synonym_object_override_is_honoured()
+    {
+        // Rotate valve.on_off.On to its synonym «включил», which overrides object=none → object=device.
+        var state = new NarrativeState();
+        state.LastUsedIndex["verb:valve.on_off.On"] = 0;
+        var scene = MakeScene(MakeBeat(PersonaRole.Residents, "valve", "on_off", Transition.On, zoneName: "Сад"));
+        Assert.Equal("Домочадцы включили полив в саду.", Render(state, scene));
+    }
+
+    [Fact]
+    public void Third_mention_of_same_persona_drops_the_subject()
+    {
+        var s1 = MakeScene(MakeBeat(PersonaRole.Spirit, "light", "on_off", Transition.On));
+        var s2 = MakeScene(MakeBeat(PersonaRole.Spirit, "light", "on_off", Transition.Off));
+        var s3 = MakeScene(MakeBeat(PersonaRole.Spirit, "light", "on_off", Transition.On));
+        var text = Render(new NarrativeState(), s1, s2, s3);
+        // full name → pronoun → null subject; the On-verb pool also rotates (зажёг → включил)
+        Assert.Equal("Домовой зажёг свет. Он погасил свет. Включил свет.", text);
+    }
+
+    [Fact]
+    public void Time_of_day_adverb_opens_a_sentence_when_the_bucket_changes()
+    {
+        var morning = MakeBeat(PersonaRole.Spirit, "light", "on_off", Transition.On);
+        morning.Timestamp = new DateTime(2026, 7, 9, 7, 0, 0, DateTimeKind.Utc);
+        var evening = MakeBeat(PersonaRole.Spirit, "light", "on_off", Transition.Off);
+        evening.Timestamp = new DateTime(2026, 7, 9, 20, 0, 0, DateTimeKind.Utc);
+
+        var text = Render(new NarrativeState(), MakeScene(morning), MakeScene(evening));
+
+        Assert.Equal("Домовой зажёг свет. Вечером он погасил свет.", text);
+    }
+
+    [Fact]
+    public void Merged_repeat_scene_gets_a_count_tail()
+    {
+        var twice = MakeScene(MakeBeat(PersonaRole.Residents, "light", "on_off", Transition.On, zoneName: "Кухня"));
+        twice.RepeatCount = 2;
+        Assert.Equal("Домочадцы зажгли свет на кухне — и так дважды за день.", Render(new NarrativeState(), twice));
+
+        var many = MakeScene(MakeBeat(PersonaRole.Residents, "light", "on_off", Transition.On, zoneName: "Кухня"));
+        many.RepeatCount = 5;
+        Assert.EndsWith("— и так несколько раз за день.", Render(new NarrativeState(), many));
+    }
 }

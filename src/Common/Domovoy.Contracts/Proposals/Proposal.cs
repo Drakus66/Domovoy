@@ -6,6 +6,8 @@ namespace Domovoy.Contracts.Proposals;
 
 using System.Text.Json.Serialization;
 
+using Domovoy.Contracts.Scenes;
+
 /// <summary>
 /// A candidate change awaiting human approval (roadmap Epic 2C) — the single queue in front of every
 /// automated suggestion the system makes. Persisted in the <c>proposals</c> collection (DbGateway is the
@@ -40,8 +42,18 @@ public class Proposal
 
     // --- kind: Rule (a Proposed AutomationRule to activate; justified by 1F replay) ---
 
-    /// <summary>The candidate rule's id in <c>automations</c> (Proposed status). Approve → sets it Active.</summary>
+    /// <summary>The candidate rule's id in <c>automations</c> (Proposed status). Approve → sets it Active.
+    /// Reused by <see cref="ProposalKind.RuleAmendment"/> to point at the <i>existing</i> rule to amend.</summary>
     public string? RuleId { get; set; }
+
+    // --- kind: RuleAmendment (change an existing rule the household keeps overriding, Epic 3J) ---
+
+    /// <summary>
+    /// RuleAmendment: what to do to the rule <see cref="RuleId"/> points at on approve. v1 supports
+    /// <c>disable</c> — retire a rule the household systematically overrides (the "living rules" signal, Epic 3J).
+    /// Null for every other kind.
+    /// </summary>
+    public string? AmendmentAction { get; set; }
 
     // --- kind: BlockPromotion / ModelSelection (both target a control block) ---
 
@@ -61,6 +73,23 @@ public class Proposal
 
     /// <summary>MlTask: target capability the proposed training task would learn. Approve → creates the task in <c>ml_tasks</c>.</summary>
     public string? MlTaskTarget { get; set; }
+
+    // --- kind: Scene (create a first-class scene from a discovered configuration, Epic 3B × 2F) ---
+
+    /// <summary>
+    /// Scene: the scene to create on approve — a name plus the per-device target states the discovery engine
+    /// found the household repeatedly arranging by hand (Epic 2F scene-configuration mining). No id yet: the
+    /// scene does not exist until approved (like <see cref="MlTaskTarget"/>, the side-effect materializes it).
+    /// Null for every other kind.
+    /// </summary>
+    public Scene? SceneDraft { get; set; }
+
+    /// <summary>
+    /// Scene: an optional daily cron (<c>"M H * * *"</c>). When set, approving the scene proposal ALSO creates
+    /// an Active rule that activates the new scene on this schedule — the "you keep setting this up around the
+    /// same time" bundle (Epic 2F). Null ⇒ approve creates only the scene, no rule.
+    /// </summary>
+    public string? SceneScheduleCron { get; set; }
 
     // --- provenance / scorecard (model-backed proposals) ---
 
@@ -107,6 +136,15 @@ public enum ProposalKind
 
     /// <summary>Create an ML training task for a capability with enough history (Epic 2P auto-suggestions).</summary>
     MlTask,
+
+    /// <summary>Create a first-class scene (Epic 3B) from a repeatedly hand-arranged zone configuration, optionally
+    /// with a daily schedule rule (Epic 2F scene-configuration mining). Approve materializes the scene (+ rule).</summary>
+    Scene,
+
+    /// <summary>Amend an existing rule the household keeps overriding (Epic 3J "living rules"). v1: disable a rule
+    /// the user overrode in most of its firings. Approve applies <see cref="Proposal.AmendmentAction"/> to
+    /// <see cref="Proposal.RuleId"/>; reject leaves the rule running.</summary>
+    RuleAmendment,
 }
 
 /// <summary>Proposal lifecycle. Only <see cref="Proposed"/> is actionable; approve/reject are terminal.</summary>

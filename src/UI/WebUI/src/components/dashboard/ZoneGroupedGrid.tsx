@@ -6,6 +6,7 @@ import { useMemo, type ReactNode } from 'react';
 import { Box, Chip, Divider, Grid, Stack, Typography } from '@mui/material';
 import type { CapabilityDevice } from '../../api/capabilityDevices';
 import DeviceTile from '../devices/DeviceTile';
+import { deviceLabel } from '../devices/deviceNaming';
 import type { CommandFn } from '../devices/CapabilityControls';
 
 /**
@@ -33,7 +34,7 @@ export default function ZoneGroupedGrid({
     }
     return Array.from(map.entries())
       .sort(([a], [b]) => (a === unassignedLabel ? 1 : b === unassignedLabel ? -1 : a.localeCompare(b)))
-      .map(([zone, items]) => ({ zone, items: items.sort((x, y) => x.name.localeCompare(y.name)) }));
+      .map(([zone, items]) => ({ zone, items: items.sort((x, y) => deviceLabel(x).localeCompare(deviceLabel(y))) }));
   }, [devices, zoneName, unassignedLabel]);
 
   return (

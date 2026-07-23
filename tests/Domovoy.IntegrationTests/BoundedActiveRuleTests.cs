@@ -71,7 +71,10 @@ public sealed class BoundedActiveRuleTests
         var scenes = new SceneStore(
             new DbGatewayClient(new HttpClient(), NullLogger<DbGatewayClient>.Instance),
             NullLogger<SceneStore>.Instance);
-        return new ActionExecutor(bus, dispatcher, scenes, options, NullLogger<ActionExecutor>.Instance);
+        // Epic 3E: ActionExecutor now also needs the registry (WaitForEvent already-matches check) and the
+        // in-process event broker (WaitForEvent waiters). These tests use Command actions, so both stay idle.
+        return new ActionExecutor(bus, dispatcher, scenes, new DeviceRegistry(), new DeviceEventBroker(),
+            options, NullLogger<ActionExecutor>.Instance);
     }
 
     private static AutomationRule CommandRule(RuleStatus status) => new()

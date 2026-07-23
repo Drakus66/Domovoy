@@ -68,7 +68,11 @@ public static class SceneBuilder
         }
 
         // 2) Causal linkage: a rule-caused scene adopts the nearest preceding impersonal scene as its cause.
-        var impersonal = order.Where(s => s.Actor == PersonaRole.Impersonal).ToList();
+        // Only cause-candidate beats qualify (System sensors) — a hardware telemetry tick that merely
+        // happened to precede the rule must not be narrated as its reason.
+        var impersonal = order
+            .Where(s => s.Actor == PersonaRole.Impersonal && s.Beats.Count > 0 && s.Beats[0].CauseCandidate)
+            .ToList();
         var consumed = new HashSet<Scene>();
 
         foreach (var s in order)

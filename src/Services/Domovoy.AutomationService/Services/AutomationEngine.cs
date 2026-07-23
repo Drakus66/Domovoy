@@ -21,17 +21,19 @@ public sealed class AutomationEngine : BackgroundService
     private readonly RuleStore _store;
     private readonly RuleEvaluator _evaluator;
     private readonly RuleRunner _runner;
+    private readonly DeviceEventBroker _broker;
     private readonly ILogger<AutomationEngine> _logger;
 
     public AutomationEngine(
         IMessageBus bus, DeviceRegistry registry, RuleStore store,
-        RuleEvaluator evaluator, RuleRunner runner, ILogger<AutomationEngine> logger)
+        RuleEvaluator evaluator, RuleRunner runner, DeviceEventBroker broker, ILogger<AutomationEngine> logger)
     {
         _bus = bus;
         _registry = registry;
         _store = store;
         _evaluator = evaluator;
         _runner = runner;
+        _broker = broker;
         _logger = logger;
     }
 
@@ -58,6 +60,10 @@ public sealed class AutomationEngine : BackgroundService
         {
             var oldValue = _registry.SetValue(report.DeviceId, kv.Key, kv.Value);
             var newValue = _registry.GetValue(report.DeviceId, kv.Key);
+
+            // Fan out to WaitForEvent waiters and required-expression gate watchers (roadmap Epic 3E) —
+            // in-process, independent of whether any rule's trigger matches this change.
+            _broker.Publish(report.DeviceId, kv.Key, newValue);
 
             foreach (var rule in ActiveRules())
             {

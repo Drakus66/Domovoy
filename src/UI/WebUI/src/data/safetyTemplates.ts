@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { AutomationRule, RuleStatus, RuleTrigger, RuleCondition, RuleAction } from '../api/automations';
+import { AutomationRule, RuleStatus, RuleTrigger, RuleCondition, RuleAction, RequiredExpression } from '../api/automations';
 import { CapabilityDevice } from '../api/capabilityDevices';
 
 /**
@@ -18,6 +18,8 @@ export interface RuleDraft {
   status: RuleStatus;
   triggers: RuleTrigger[];
   conditions: RuleCondition[];
+  /** Live gate (Epic 3E); undefined/null = no gate beyond `conditions`. */
+  requiredExpression?: RequiredExpression | null;
   actions: RuleAction[];
 }
 
@@ -30,7 +32,7 @@ export const newAction = (): RuleAction => ({ type: 'Command', set: {} });
 
 /** A blank draft: one trigger and one action to fill in, no conditions. Fresh arrays every call. */
 export const emptyDraft = (): RuleDraft => ({
-  name: '', status: 'Active', triggers: [newTrigger()], conditions: [], actions: [newAction()],
+  name: '', status: 'Active', triggers: [newTrigger()], conditions: [], requiredExpression: undefined, actions: [newAction()],
 });
 
 /** Editable copy of an existing rule for the edit path — per-item clones so page state is never mutated. */
@@ -40,17 +42,28 @@ export const draftFromRule = (rule: AutomationRule): RuleDraft => ({
   status: rule.status,
   triggers: rule.triggers.length ? rule.triggers.map((t) => ({ ...t })) : [newTrigger()],
   conditions: (rule.conditions ?? []).map((c) => ({ ...c })),
+  requiredExpression: rule.requiredExpression
+    ? { expression: rule.requiredExpression.expression, conditions: rule.requiredExpression.conditions.map((c) => ({ ...c })) }
+    : undefined,
   actions: rule.actions.length ? rule.actions.map((a) => ({ ...a })) : [newAction()],
 });
 
-/** A trigger is bound when it can actually fire: DeviceState needs a device+capability, Time a cron; Sun always can. */
+/**
+ * A trigger is bound when it can actually fire: DeviceState needs a capability plus a target — either a
+ * specific device or a whole zone (Epic 3G: a zone-scoped match fires on any device in the zone, honoured
+ * by the backend RuleEvaluator); Time needs a cron; Sun always can.
+ */
 const triggerBound = (t: RuleTrigger): boolean => {
-  if (t.type === 'DeviceState') return !!t.deviceId && !!t.capabilityId;
+  if (t.type === 'DeviceState') return (!!t.deviceId || !!t.zoneId) && !!t.capabilityId;
   if (t.type === 'Time') return !!t.cron?.trim();
   return true; // Sun
 };
 
-/** An action is complete when runnable: Command needs a device + one set assignment, Notify a message, Delay a positive wait, Scene a scene id. */
+/**
+ * An action is complete when runnable: Command needs a device + one set assignment, Notify a message,
+ * Delay a positive wait, Scene a scene id, WaitForEvent a capability + a device or zone to watch (timeout
+ * and branches are optional — a wait defaults to 300s server-side and simply falls through with no branch).
+ */
 const actionComplete = (a: RuleAction): boolean => {
   if (a.type === 'Command') {
     const keys = Object.keys(a.set ?? {});
@@ -59,12 +72,13 @@ const actionComplete = (a: RuleAction): boolean => {
   if (a.type === 'Notify') return !!a.message?.trim();
   if (a.type === 'Delay') return (a.delaySeconds ?? 0) > 0;
   if (a.type === 'Scene') return !!a.sceneId;
+  if (a.type === 'WaitForEvent') return !!a.waitCapabilityId && !!(a.waitDeviceId || a.waitZoneId);
   return false;
 };
 
-/** A condition is complete when it can be evaluated: DeviceState needs device+capability, TimeOfDay a window; Sun/Mode always. */
+/** A condition is complete when evaluable: DeviceState needs a capability + a device or zone (Epic 3G), TimeOfDay a window; Sun/Mode always. */
 const conditionComplete = (c: RuleCondition): boolean => {
-  if (c.type === 'DeviceState') return !!c.deviceId && !!c.capabilityId;
+  if (c.type === 'DeviceState') return (!!c.deviceId || !!c.zoneId) && !!c.capabilityId;
   if (c.type === 'TimeOfDay') return !!c.fromTime && !!c.toTime;
   return true; // Sun, Mode
 };

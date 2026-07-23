@@ -28,13 +28,14 @@ public static class DeviceArchetypes
     public const string Sun = "sun";                     // system sun sensor (elevation/azimuth/is_dark…) (2L)
     public const string Clock = "clock";                 // system time sensor (time_of_day/clock) (2L)
     public const string Calendar = "calendar";           // system calendar sensor (day_of_week/weekend/holiday) (2L)
+    public const string Tariff = "tariff";               // system tariff entity (price/tariff_zone) (3C)
     public const string Unknown = "unknown";
 
     /// <summary>Canonical list for UI selection (open set — custom archetypes may also appear).</summary>
     public static readonly IReadOnlyList<string> All = new[]
     {
         Light, Switch, Thermostat, ClimateSensor, Motion, Contact, Lock, Valve, EnergyMeter, Sensor,
-        ControlBlock, Sun, Clock, Calendar, Unknown,
+        ControlBlock, Sun, Clock, Calendar, Tariff, Unknown,
     };
 
     public static bool IsKnown(string? archetype) =>

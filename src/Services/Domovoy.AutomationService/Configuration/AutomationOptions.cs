@@ -161,6 +161,59 @@ public class AutomationOptions
     /// </summary>
     public double SetpointModelMinExplained { get; set; } = 0.3;
 
+    // --- Scene-configuration mining (roadmap Epic 2F × 3B — recurring hand-arranged zone states) ---
+
+    /// <summary>
+    /// Writable capabilities that make up a "scene configuration": the state the discovery engine snapshots
+    /// when a person arranges a zone by hand. on_off carries which devices are on; the rest carry how (level,
+    /// warmth, target). Capabilities outside this set are ignored when comparing/creating configurations.
+    /// </summary>
+    public string[] SceneStateCapabilities { get; set; } =
+        { "on_off", "brightness", "color_temp", "color", "level", "position", "temperature_setpoint" };
+
+    /// <summary>Quantization step per numeric scene capability — two arrangements match if their values round to
+    /// the same step. Coarse on purpose (a person dials "about 40%", not exactly 42). Caps not listed use step 1.</summary>
+    public Dictionary<string, double> SceneQuantizeSteps { get; set; } = new()
+    {
+        ["brightness"] = 10,
+        ["level"] = 10,
+        ["position"] = 10,
+        ["color_temp"] = 50,
+    };
+
+    /// <summary>Max seconds between consecutive user touches for them to count as one "arrangement" of a zone
+    /// (the burst after which the zone's state is snapshotted as a configuration instance).</summary>
+    public int SceneCoWindowSeconds { get; set; } = 180;
+
+    /// <summary>Minimum distinct devices a single arrangement must touch to be a scene candidate (below this it is
+    /// a single-device rule's job, not a scene).</summary>
+    public int SceneMinDevices { get; set; } = 2;
+
+    /// <summary>Minimum times a configuration must recur before it is proposed as a scene.</summary>
+    public int SceneMinSupport { get; set; } = 4;
+
+    /// <summary>Minimum activations of a configuration/scene that must cluster around one time of day before a
+    /// daily-schedule rule is proposed alongside it (Epic 2F scene-schedule mining).</summary>
+    public int SceneScheduleMinSupport { get; set; } = 4;
+
+    /// <summary>Max spread (minutes, population std-dev) of activation times for them to count as "the same time of
+    /// day" — above this the timing is too scattered to schedule.</summary>
+    public double SceneScheduleMaxSpreadMinutes { get; set; } = 45;
+
+    // --- Intervention mining / living rules (roadmap Epic 3J) ---
+
+    /// <summary>Max seconds after an automated (rule-driven) action within which a human touch on the same
+    /// device+capability counts as overriding that rule ("you undid what the rule did").</summary>
+    public int InterventionWindowSeconds { get; set; } = 300;
+
+    /// <summary>Minimum times a rule must have fired in the window before its override-rate is judged (a rule
+    /// that ran twice is too little evidence to call it dead).</summary>
+    public int DeadRuleMinFirings { get; set; } = 5;
+
+    /// <summary>Minimum fraction of a rule's firings the user overrode before proposing to retire it. High on
+    /// purpose — retiring a rule is a big suggestion, so only a rule fought most of the time qualifies.</summary>
+    public double DeadRuleMinOverrideRate { get; set; } = 0.6;
+
     // --- Composite control blocks (roadmap Epic 1H E2) ---
 
     /// <summary>

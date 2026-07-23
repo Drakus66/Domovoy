@@ -69,12 +69,17 @@ internal static class Program
             });
             builder.Services.AddSingleton<SiteContext>();     // 2L: site timezone for the Sun/Time sensors' local times
             builder.Services.AddSingleton<CalendarContext>(); // 2L: weekend/holiday config for the Calendar sensor
+            builder.Services.AddSingleton<TariffContext>();   // 3C: live tariff for the tariff device + cheap-hours block
             builder.Services.AddSingleton<RuleStore>();
             builder.Services.AddSingleton<SceneStore>();      // 3B: scenes the `scene` action activates
             builder.Services.AddSingleton<RuleEvaluator>();
+            builder.Services.AddSingleton<DeviceEventBroker>();          // 3E: live capability-change fan-out (WaitForEvent + required-expression gate)
+            builder.Services.AddSingleton<RequiredExpressionEvaluator>(); // 3E: "Required Expression" live gate
             builder.Services.AddSingleton<ActionExecutor>();
             builder.Services.AddSingleton<RuleRunner>();
             builder.Services.AddSingleton<HomeModeState>();
+            builder.Services.AddSingleton<PowerSourceState>(); // 3C-LM: live power_source signal for LoadManager
+            builder.Services.AddSingleton<Ml.MlRuntimeState>(); // 3I: live ML-layer switches (RefreshLoop syncs ml_settings)
             builder.Services.AddSingleton<ReplayService>();   // 1F: dry-run a rule over history
             // 2I: registry of model templates; the trainer selects the best applicable cell by holdout.
             builder.Services.AddSingleton<IModelTemplate, ScheduleRegressionTemplate>();
@@ -87,6 +92,7 @@ internal static class Program
             builder.Services.AddSingleton<BlockCatalog>();    // 1H: built-in control-block types (incl. ml_setpoint)
             builder.Services.AddSingleton<BlockStore>();
             builder.Services.AddSingleton<BlockStateStore>(); // 2Q: persist block state across restarts
+            builder.Services.AddSingleton<VariableStore>();   // 3E: global variable configs + live values
 
             // Order matters only loosely: RefreshLoop seeds rules/devices/mode, the engine + scheduler fire them.
             builder.Services.AddHostedService<RefreshLoop>();
@@ -98,8 +104,15 @@ internal static class Program
             builder.Services.AddSingleton<BlockRuntime>();          // 1H: tick control blocks as virtual devices
             builder.Services.AddHostedService(sp => sp.GetRequiredService<BlockRuntime>()); // + expose runtime health
             builder.Services.AddHostedService<SystemSensorService>(); // 2L: virtual sensors (Sun/Time/Calendar/Home)
+            builder.Services.AddHostedService<VariableRuntimeService>(); // 3E: global variables as virtual capability devices
+            builder.Services.AddHostedService<TariffService>();       // 3C: tariff virtual device (price/tariff_zone)
+            builder.Services.AddSingleton<LoadManager>();           // 3C-LM: load-shedding coordinator
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<LoadManager>()); // + expose to RefreshLoop.Sync
+            builder.Services.AddSingleton<DeviceEnergyService>();   // 3C-D: per-device power estimate + kWh integration
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<DeviceEnergyService>()); // + expose to RefreshLoop.Sync
             builder.Services.AddSingleton<MlTrainingService>();     // 2A: train + keep the model loaded
             builder.Services.AddHostedService(sp => sp.GetRequiredService<MlTrainingService>());
+            builder.Services.AddSingleton<Ml.MlProposerGate>();    // 3I: shared proposer gate (maturity/toggles/journal/notify)
             builder.Services.AddSingleton<RuleSuggester>();         // 2C: heuristic rule proposer (stub-precursor to 2F)
             builder.Services.AddHostedService(sp => sp.GetRequiredService<RuleSuggester>());
             builder.Services.AddSingleton<Ml.MlTaskSuggester>();    // 2P: propose training tasks for consumable targets
@@ -188,8 +201,10 @@ internal static class Program
             app.MapPost("/api/notifications/test",
                 async (Services.Notifications.NotificationDispatcher dispatcher, CancellationToken ct) =>
                 {
+                    // "warning" so the test still pops a banner under the WebUI's important-only threshold
+                    // (info-level notifications are journal-only) — it stays a useful end-to-end smoke test.
                     var delivered = await dispatcher.DispatchAsync(
-                        new Services.Notifications.NotificationMessage("Domovoy", "Test notification", "info"), ct);
+                        new Services.Notifications.NotificationMessage("Domovoy", "Test notification", "warning"), ct);
                     return Results.Ok(new { delivered, enabled = dispatcher.EnabledChannels });
                 });
 

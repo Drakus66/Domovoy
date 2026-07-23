@@ -256,6 +256,8 @@ internal static class Program
             app.MapHealthChecks("/health").AllowAnonymous();
             app.MapControllers();
             app.MapHub<Hubs.DeviceHub>("/hub/devices");
+            // 2M.2: notifications ride their own hub so banner clients don't receive the device-state firehose.
+            app.MapHub<Hubs.NotificationHub>("/hub/notifications");
 
             await app.RunAsync();
         }

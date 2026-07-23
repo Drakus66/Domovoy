@@ -53,6 +53,20 @@ public static class WellKnownCapabilities
     public static Capability Power() =>
         Number(CapabilityIds.Power, "W", 0, null, writable: false);
 
+    public static Capability Energy() =>
+        Number(CapabilityIds.Energy, "kWh", 0, null, writable: false);
+
+    // --- Energy domain (roadmap Epic 3C) — read-only, platform/tariff-reported ---
+
+    /// <summary>Current price per kWh (read-only). No min — dynamic tariffs allow negative (plunge) prices;
+    /// <paramref name="unit"/> is the deployment's currency-per-kWh label (e.g. "₽/kWh").</summary>
+    public static Capability Price(string? unit = null) =>
+        Number(CapabilityIds.Price, unit, writable: false);
+
+    /// <summary>Current tariff zone as an enum over the configured zone names (peak/day/night…), read-only.</summary>
+    public static Capability TariffZone(IReadOnlyList<string> zones) =>
+        Enum(CapabilityIds.TariffZone, zones, writable: false);
+
     // --- System virtual sensors (roadmap Epic 2L) — all read-only, platform-reported ---
 
     public static Capability SunElevation() =>
@@ -99,6 +113,12 @@ public static class WellKnownCapabilities
     /// commanding it is THE way blocks/rules change the mode. Open set — well-known values listed.</summary>
     public static Capability HomeMode() =>
         Enum(CapabilityIds.HomeMode, Home.WellKnownModes.All, writable: true);
+
+    /// <summary>Current power-source signal as a writable enum on the Power virtual device (Epic 3C-LM):
+    /// commanding it is how a rule/user tells LoadManager which budget tier applies. Open set — well-known
+    /// values listed (grid/grid_peak/battery/solar/off).</summary>
+    public static Capability PowerSourceCap() =>
+        Enum(CapabilityIds.PowerSource, Home.WellKnownPowerSources.All, writable: true);
 
     public static Capability Color(bool writable = true) =>
         new(CapabilityIds.Color, CapabilityKind.Color,

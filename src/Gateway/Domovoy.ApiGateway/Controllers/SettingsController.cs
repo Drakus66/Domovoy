@@ -53,6 +53,31 @@ public class SettingsController : ControllerBase
     public Task<IActionResult> ImportHolidays(CancellationToken ct)
         => Forward(HttpMethod.Post, "api/settings/calendar/import" + Request.QueryString.Value, ct);
 
+    [HttpGet("tariff")]
+    public Task<IActionResult> GetTariff(CancellationToken ct)
+        => Forward(HttpMethod.Get, "api/settings/tariff", ct);
+
+    [HttpPut("tariff")]
+    public Task<IActionResult> PutTariff(CancellationToken ct)
+        => Forward(HttpMethod.Put, "api/settings/tariff", ct);
+
+    [HttpGet("load-management")]
+    public Task<IActionResult> GetLoadManagement(CancellationToken ct)
+        => Forward(HttpMethod.Get, "api/settings/load-management", ct);
+
+    [HttpPut("load-management")]
+    public Task<IActionResult> PutLoadManagement(CancellationToken ct)
+        => Forward(HttpMethod.Put, "api/settings/load-management", ct);
+
+    // Intelligence-layer switches (roadmap Epic 3I) — read by the Settings page and the ML page banner.
+    [HttpGet("ml")]
+    public Task<IActionResult> GetMl(CancellationToken ct)
+        => Forward(HttpMethod.Get, "api/settings/ml", ct);
+
+    [HttpPut("ml")]
+    public Task<IActionResult> PutMl(CancellationToken ct)
+        => Forward(HttpMethod.Put, "api/settings/ml", ct);
+
     private async Task<IActionResult> Forward(HttpMethod method, string relativePath, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient("db-gateway");

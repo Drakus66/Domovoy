@@ -24,6 +24,10 @@ vi.mock('../api/ml', async (importOriginal) => ({
     deleteModel: vi.fn(),
     pruneModels: vi.fn(),
     classifyArchetypes: vi.fn(),
+    // Epic 3I: the Models page renders MlLayerControls (getSettings) + a Journal tab (getActivity).
+    getActivity: vi.fn().mockResolvedValue([]),
+    getSettings: vi.fn().mockResolvedValue({ enabled: true, proposalsEnabled: true, minHistoryDays: 7 }),
+    saveSettings: vi.fn(),
   },
 }));
 vi.mock('../api/blocks', async (importOriginal) => ({
@@ -140,7 +144,8 @@ describe('ML hub (Models page, Epic 2P)', () => {
     await screen.findAllByText('temperature');
     mockedMl.updateTask.mockResolvedValue(task);
 
-    fireEvent.click(screen.getByRole('checkbox'));
+    // The task card's enable switch (scoped by its aria-label — the ML pulse panel adds its own switches).
+    fireEvent.click(screen.getByRole('checkbox', { name: /обучение/ }));
 
     await waitFor(() => expect(mockedMl.updateTask).toHaveBeenCalledWith(
       'default', expect.objectContaining({ enabled: false })));
@@ -167,5 +172,17 @@ describe('ML hub (Models page, Epic 2P)', () => {
     render(<Models />);
 
     expect(await screen.findByText('Задач обучения пока нет.')).toBeInTheDocument();
+  });
+
+  it('shows the activity feed on the Journal tab (Epic 3I)', async () => {
+    mockedMl.getActivity.mockResolvedValue([
+      { id: '1', timestamp: new Date().toISOString(), source: 'discovery', outcome: 'ok', reason: 'created', metrics: { created: 2 } },
+    ]);
+    render(<Models />);
+    await screen.findAllByText('temperature');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Журнал' }));
+
+    expect(await screen.findByText('Добавлено предложений: 2')).toBeInTheDocument();
   });
 });
