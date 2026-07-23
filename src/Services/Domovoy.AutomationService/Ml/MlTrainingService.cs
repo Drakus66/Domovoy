@@ -27,6 +27,7 @@ public sealed class MlTrainingService : BackgroundService
     private readonly ModelTemplateRegistry _templates;
     private readonly MlModelService _models;
     private readonly ZoneCache _zones;
+    private readonly MlRuntimeState _runtime;
     private readonly AutomationOptions _options;
     private readonly ILogger<MlTrainingService> _logger;
 
@@ -37,12 +38,13 @@ public sealed class MlTrainingService : BackgroundService
 
     public MlTrainingService(
         DbGatewayClient db, ModelTemplateRegistry templates, MlModelService models, ZoneCache zones,
-        IOptions<AutomationOptions> options, ILogger<MlTrainingService> logger)
+        MlRuntimeState runtime, IOptions<AutomationOptions> options, ILogger<MlTrainingService> logger)
     {
         _db = db;
         _templates = templates;
         _models = models;
         _zones = zones;
+        _runtime = runtime;
         _options = options.Value;
         _logger = logger;
     }
@@ -88,10 +90,15 @@ public sealed class MlTrainingService : BackgroundService
         using var timer = new PeriodicTimer(refresh);
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await TrainDueTasksAsync(stoppingToken); }
-            catch (Exception ex) { _logger.LogError(ex, "Scheduled training cycle failed"); }
+            // Epic 3I: the master switch pauses training AND model (re)loading. Serving is already gated in
+            // MlModelService, so a disabled layer simply stops all ML work until re-enabled — no restart needed.
+            if (_runtime.LayerEnabled)
+            {
+                try { await TrainDueTasksAsync(stoppingToken); }
+                catch (Exception ex) { _logger.LogError(ex, "Scheduled training cycle failed"); }
 
-            await _models.RefreshAsync(stoppingToken);
+                await _models.RefreshAsync(stoppingToken);
+            }
             if (!await timer.WaitForNextTickAsync(stoppingToken)) break;
         }
     }
@@ -104,13 +111,32 @@ public sealed class MlTrainingService : BackgroundService
         if (tasks is null) return;
 
         var now = DateTime.UtcNow;
+        var trained = 0;
         foreach (var task in tasks.Where(t => t.Enabled))
         {
             var last = task.Status?.LastTrainAt ?? DateTime.MinValue;
             if ((now - last).TotalHours < task.TrainIntervalHours) continue;
 
-            try { await TrainTaskAsync(task, ct); }
+            try
+            {
+                var result = await TrainTaskAsync(task, ct);
+                if (result.Trained) trained++;
+            }
             catch (Exception ex) { _logger.LogError(ex, "Training task {Target} failed", task.TargetCapability); }
+        }
+
+        // Epic 3I: give the ML journal a "trainer ran" pulse — only on cycles that actually trained a due task,
+        // so the every-10-minutes tick that finds nothing due stays silent. Per-task detail lives on the task card.
+        if (trained > 0)
+        {
+            await _db.WriteMlActivityAsync(new MlActivityEntry
+            {
+                Source = MlActivitySources.Trainer,
+                Outcome = MlActivityOutcomes.Ok,
+                Reason = "trained",
+                Note = $"retrained {trained} task(s)",
+                Metrics = new Dictionary<string, double> { ["tasks"] = trained },
+            }, ct);
         }
     }
 

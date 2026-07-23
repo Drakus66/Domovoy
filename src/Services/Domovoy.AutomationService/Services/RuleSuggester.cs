@@ -5,8 +5,10 @@
 using System.Text.Json;
 
 using Domovoy.AutomationService.Configuration;
+using Domovoy.AutomationService.Ml;
 using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Capabilities;
+using Domovoy.Contracts.Ml;
 using Domovoy.Contracts.Proposals;
 
 using Microsoft.Extensions.Options;
@@ -29,16 +31,20 @@ namespace Domovoy.AutomationService.Services;
 /// </summary>
 public sealed class RuleSuggester : BackgroundService
 {
+    private const string Source = MlActivitySources.RuleSuggester;
+
     private readonly DbGatewayClient _db;
+    private readonly MlProposerGate _gate;
     private readonly AutomationOptions _options;
     private readonly ILogger<RuleSuggester> _logger;
 
     // The event-log endpoint caps a single response; the proposer works off recent history, so one page is enough.
     private const int MaxEvents = 20000;
 
-    public RuleSuggester(DbGatewayClient db, IOptions<AutomationOptions> options, ILogger<RuleSuggester> logger)
+    public RuleSuggester(DbGatewayClient db, MlProposerGate gate, IOptions<AutomationOptions> options, ILogger<RuleSuggester> logger)
     {
         _db = db;
+        _gate = gate;
         _options = options.Value;
         _logger = logger;
     }
@@ -53,7 +59,14 @@ public sealed class RuleSuggester : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await SuggestOnceAsync(stoppingToken); }
+            try
+            {
+                // Epic 3I: gate the periodic scan (layer + proposers on, history mature). Manual "scan now"
+                // bypasses the gate via SuggestOnceAsync — an explicit human action is never spam.
+                var gate = await _gate.EvaluateAsync(stoppingToken);
+                if (gate.Allowed) await SuggestOnceAsync(stoppingToken);
+                else await _gate.WriteSkippedAsync(Source, gate, stoppingToken);
+            }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception ex) { _logger.LogError(ex, "Rule proposer scan failed"); }
 
@@ -69,14 +82,26 @@ public sealed class RuleSuggester : BackgroundService
         var from = to.AddDays(-Math.Max(1, _options.ProposalWindowDays));
 
         var events = await _db.GetStateEventsAsync(from, to, MaxEvents, ct);
-        if (events is null) return new SuggestResult(0, 0, "event-log unavailable");
+        if (events is null)
+        {
+            await _gate.WriteErrorAsync(Source, "event-log unavailable", ct);
+            return new SuggestResult(0, 0, "event-log unavailable");
+        }
 
         var candidates = Mine(events, _options);
-        if (candidates.Count == 0) return new SuggestResult(0, 0, "no candidates");
+        if (candidates.Count == 0)
+        {
+            await _gate.WriteScanAsync(Source, 0, 0, "no co-occurrence patterns found", null, ct);
+            return new SuggestResult(0, 0, "no candidates");
+        }
 
-        // De-dup against what already exists: any rule already wiring this pair, or an open proposal for it.
+        // De-dup against what already exists: any rule already wiring this pair, or a proposal (open or already
+        // rejected — Epic 3I rejection memory: a declined suggestion must not return next scan) for it.
         var rules = await _db.GetUserRulesAsync(ct) ?? new List<AutomationRule>();
         var openProposals = await _db.GetProposalsAsync(ct, nameof(ProposalStatus.Proposed)) ?? new List<Proposal>();
+        var rejected = await _db.GetProposalsAsync(ct, nameof(ProposalStatus.Rejected)) ?? new List<Proposal>();
+        var knownTitles = new HashSet<string>(
+            openProposals.Concat(rejected).Select(p => p.Title), StringComparer.Ordinal);
         var devices = await _db.GetDevicesAsync(ct) ?? new List<DbGatewayClient.DeviceSnapshot>();
         var nameById = devices.ToDictionary(d => d.Id, d => string.IsNullOrEmpty(d.Name) ? d.Id : d.Name);
 
@@ -86,7 +111,7 @@ public sealed class RuleSuggester : BackgroundService
             if (RuleAlreadyWires(rules, c)) continue;
 
             var title = TitleFor(c, nameById);
-            if (openProposals.Any(p => string.Equals(p.Title, title, StringComparison.Ordinal))) continue;
+            if (!knownTitles.Add(title)) continue;
 
             var rule = new AutomationRule
             {
@@ -140,12 +165,17 @@ public sealed class RuleSuggester : BackgroundService
                 continue;
             }
 
-            // Track locally so two candidates that resolve to the same title in one scan don't double-create.
-            openProposals.Add(savedProposal);
+            // knownTitles.Add above already reserved this title, so a duplicate in the same scan won't re-create.
             created++;
         }
 
         _logger.LogInformation("Rule proposer: {Created} new candidate(s) from {Events} events", created, events.Count);
+
+        // Epic 3I: journal the outcome and raise one notification if it queued anything.
+        var note = created > 0 ? "queued rule proposal(s)" : "all candidates already known";
+        await _gate.WriteScanAsync(Source, candidates.Count, created, note, null, ct);
+        await _gate.NotifyFindingsAsync(created, ct);
+
         return new SuggestResult(candidates.Count, created, created == 0 ? "all candidates already known" : "ok");
     }
 

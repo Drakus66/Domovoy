@@ -173,6 +173,7 @@ export default function MlTaskCard({
             </Tooltip>
             <Tooltip title={t(task.enabled ? 'actions.disable' : 'actions.enable')}>
               <Switch size="small" checked={task.enabled}
+                inputProps={{ 'aria-label': t(task.enabled ? 'actions.disable' : 'actions.enable') }}
                 onChange={(e) => onToggleEnabled(task, e.target.checked)} />
             </Tooltip>
             <IconButton

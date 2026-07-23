@@ -110,6 +110,13 @@ public class MlController : ControllerBase
     public Task<IActionResult> ClassifyArchetypes(CancellationToken ct)
         => Forward("automation-service", HttpMethod.Post, "api/ml/classify-archetypes", ct);
 
+    // ===== ML-activity journal (Epic 3I) =====
+
+    /// <summary>The ML-activity journal (the proactive layer's "pulse"), newest-first; <c>?source=</c>/<c>?limit=</c>.</summary>
+    [HttpGet("activity")]
+    public Task<IActionResult> Activity(CancellationToken ct)
+        => Forward("db-gateway", HttpMethod.Get, "api/ml/activity" + Request.QueryString.Value, ct);
+
     // forwardBody streams the incoming request body + content type upstream (POST/PUT payloads); without it
     // the upstream call is body-less (GET/DELETE and body-free POSTs).
     private async Task<IActionResult> Forward(

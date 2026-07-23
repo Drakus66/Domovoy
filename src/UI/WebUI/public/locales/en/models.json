@@ -3,6 +3,40 @@
   "caption": "Training tasks: what the house learns, from which data, and where it is applied. The model proposes — the deterministic loop executes — the safety floor clamps.",
   "empty": "No training tasks yet.",
   "emptyHint": "Create a task: pick which quantity to predict (e.g. temperature) and the house starts learning from its history.",
+  "tabs": {
+    "tasks": "Tasks",
+    "journal": "Journal"
+  },
+  "layer": {
+    "title": "Intelligence layer",
+    "caption": "Learning, model-driven control and proactive suggestions.",
+    "enabled": "Layer",
+    "proposals": "Suggestions",
+    "disabledAlert": "The intelligence layer is off — no training, no model-driven control and no suggestions.",
+    "enable": "Enable",
+    "settingsLink": "Advanced"
+  },
+  "journal": {
+    "title": "Journal",
+    "caption": "what the intelligence layer has been doing",
+    "empty": "No activity yet. Each training run and scan is recorded here.",
+    "source": {
+      "trainer": "Training",
+      "discovery": "Discovery",
+      "rule_suggester": "Rule scan",
+      "ml_task_suggester": "Learning scan"
+    },
+    "reason": {
+      "trained": "Retrained {{tasks}} task(s)",
+      "created": "Queued {{created}} new suggestion(s)",
+      "all_known": "Checked {{candidates}} pattern(s) — nothing new",
+      "no_patterns": "Analysed history — no reliable patterns yet",
+      "history_immature": "Accumulating history — {{historyDays}} of {{requiredDays}} day(s)",
+      "proposals_disabled": "Suggestions are turned off",
+      "layer_disabled": "The layer is turned off",
+      "error": "Cycle failed — see logs"
+    }
+  },
   "actions": {
     "trainAll": "Train all",
     "newTask": "New task",

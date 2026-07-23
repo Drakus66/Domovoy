@@ -5,6 +5,7 @@
 using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Blocks;
 using Domovoy.Contracts.Proposals;
+using Domovoy.Contracts.Scenes;
 
 using MongoDB.Driver;
 
@@ -52,6 +53,10 @@ public static class ProposalsEndpoints
             if (string.IsNullOrWhiteSpace(proposal.Title))
                 return Results.BadRequest(new { error = "proposal title is required" });
 
+            // HTTP binding leaves a scene draft's target values as JsonElement, which the Mongo ObjectSerializer
+            // refuses; flatten to BCL primitives at the boundary (same fix as SceneEndpoints/AutomationEndpoints).
+            if (proposal.SceneDraft is not null) SceneEndpoints.NormalizeJsonValues(proposal.SceneDraft);
+
             proposal.Id = Guid.NewGuid().ToString();
             proposal.Status = ProposalStatus.Proposed;
             proposal.DecisionId = string.Empty;
@@ -89,12 +94,27 @@ public static class ProposalsEndpoints
 
         group.MapPost("/{id}/reject", async (string id, IMongoDatabase db) =>
         {
+            var p = await Proposals(db).Find(x => x.Id == id && x.Status == ProposalStatus.Proposed).FirstOrDefaultAsync();
+            if (p is null) return Results.NotFound();
+
             var update = Builders<Proposal>.Update
                 .Set(x => x.Status, ProposalStatus.Rejected)
                 .Set(x => x.DecidedAt, DateTime.UtcNow);
-            var result = await Proposals(db).UpdateOneAsync(
-                x => x.Id == id && x.Status == ProposalStatus.Proposed, update);
-            return result.MatchedCount == 0 ? Results.NotFound() : Results.NoContent();
+            var result = await Proposals(db).UpdateOneAsync(x => x.Id == id && x.Status == ProposalStatus.Proposed, update);
+            if (result.MatchedCount == 0) return Results.NotFound();
+
+            // Epic 3I: a Rule-kind proposal carries a candidate rule created as Proposed (by the 2C/2F proposers).
+            // Rejecting the proposal must remove that orphan so it neither lingers in `automations` nor silently
+            // suppresses re-discovery via the RuleAlreadyWires dedup. Only ever deletes a still-Proposed rule —
+            // an approved (Active) rule is never touched. The rejection itself is remembered on the proposal
+            // (its title/target dedups future scans).
+            if (p.Kind == ProposalKind.Rule && !string.IsNullOrEmpty(p.RuleId))
+            {
+                await db.GetCollection<AutomationRule>(AutomationEndpoints.Collection)
+                    .DeleteOneAsync(x => x.Id == p.RuleId && x.Status == RuleStatus.Proposed);
+            }
+
+            return Results.NoContent();
         });
     }
 
@@ -116,8 +136,42 @@ public static class ProposalApplication
         ProposalKind.BlockPromotion => ApplyBlockParamAsync(db, p, "stage", p.ToStage),
         ProposalKind.ModelSelection => ApplyBlockParamAsync(db, p, "model_version", p.ModelVersion),
         ProposalKind.MlTask => ApplyMlTaskAsync(db, p),
+        ProposalKind.Scene => ApplySceneAsync(db, p),
+        ProposalKind.RuleAmendment => ApplyRuleAmendmentAsync(db, p),
         _ => Task.FromResult<(bool, string?)>((false, "unknown proposal kind")),
     };
+
+    // Scene proposal (Epic 2F × 3B): approving materializes the discovered scene in the scenes collection and,
+    // when the proposal carries a schedule cron, also stands up an Active rule that activates it daily. The scene
+    // did not exist before approval (like an ML task) — so nothing showed up on /scenes or a dashboard prematurely.
+    private static async Task<(bool Ok, string? Error)> ApplySceneAsync(IMongoDatabase db, Proposal p)
+    {
+        if (p.SceneDraft is null || p.SceneDraft.Targets.Count == 0) return (false, "proposal has no scene draft");
+
+        var scene = p.SceneDraft;
+        SceneEndpoints.NormalizeJsonValues(scene); // defensive: values are already primitives once read from BSON
+        scene.Id = Guid.NewGuid().ToString();
+        scene.CreatedAt = scene.UpdatedAt = DateTime.UtcNow;
+        if (string.IsNullOrWhiteSpace(scene.Name)) scene.Name = "Scene";
+        await db.GetCollection<Scene>(SceneEndpoints.Collection).InsertOneAsync(scene);
+
+        if (!string.IsNullOrWhiteSpace(p.SceneScheduleCron))
+        {
+            var rule = new AutomationRule
+            {
+                Id = Guid.NewGuid().ToString(),
+                Name = $"{scene.Name} (scheduled)",
+                Description = "Created alongside a discovered scene (Epic 2F × 3B).",
+                Status = RuleStatus.Active,
+                Triggers = { new RuleTrigger { Type = TriggerType.Time, Cron = p.SceneScheduleCron } },
+                Actions = { new RuleAction { Type = ActionType.Scene, SceneId = scene.Id } },
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await db.GetCollection<AutomationRule>(AutomationEndpoints.Collection).InsertOneAsync(rule);
+        }
+        return (true, null);
+    }
 
     // ML-task proposal (Epic 2P): approving creates the training task with defaults — the user tunes window/
     // clamps later on the ML hub. One task per target: an already-existing task fails the approve with a reason.
@@ -150,6 +204,23 @@ public static class ProposalApplication
         var rules = db.GetCollection<AutomationRule>(AutomationEndpoints.Collection);
         var update = Builders<AutomationRule>.Update
             .Set(x => x.Status, RuleStatus.Active)
+            .Set(x => x.UpdatedAt, DateTime.UtcNow);
+        var result = await rules.UpdateOneAsync(x => x.Id == p.RuleId, update);
+        return result.MatchedCount == 0 ? (false, "target rule not found") : (true, null);
+    }
+
+    // Rule-amendment proposal (Epic 3J "living rules"): apply a change to an existing rule the household keeps
+    // overriding. v1 supports "disable" — retire a rule the user overrode in most of its firings. Only ever
+    // touches an Active/Bounded/Shadow rule; a rule already disabled/gone is a harmless no-op reported as an error.
+    private static async Task<(bool Ok, string? Error)> ApplyRuleAmendmentAsync(IMongoDatabase db, Proposal p)
+    {
+        if (string.IsNullOrEmpty(p.RuleId)) return (false, "proposal has no ruleId");
+        if (!string.Equals(p.AmendmentAction, "disable", StringComparison.OrdinalIgnoreCase))
+            return (false, $"unsupported amendment action '{p.AmendmentAction}'");
+
+        var rules = db.GetCollection<AutomationRule>(AutomationEndpoints.Collection);
+        var update = Builders<AutomationRule>.Update
+            .Set(x => x.Status, RuleStatus.Disabled)
             .Set(x => x.UpdatedAt, DateTime.UtcNow);
         var result = await rules.UpdateOneAsync(x => x.Id == p.RuleId, update);
         return result.MatchedCount == 0 ? (false, "target rule not found") : (true, null);

@@ -34,7 +34,13 @@
     "save": "Save calendar",
     "saved": "Calendar saved.",
     "days": {
-      "mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri", "sat": "Sat", "sun": "Sun"
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
     }
   },
   "backups": {
@@ -78,5 +84,17 @@
     "caption": "For the activity log: commands from this browser will be attributed to the selected resident. This is not a login — real authentication comes in Phase 3.",
     "label": "User",
     "anonymous": "Not set (anonymous)"
+  },
+  "intelligence": {
+    "title": "Intelligence layer",
+    "caption": "Control learning, model-driven governance and proactive suggestions.",
+    "enabled": "Intelligence layer",
+    "enabledHint": "Off pauses everything: training, model-driven control (governors fall back to Shadow) and all suggestions. Nothing is lost — turn it back on to resume.",
+    "proposals": "Proactive suggestions",
+    "proposalsHint": "Off keeps learning and control running but stops the system proposing new rules, scenes and models on its own. The manual scan buttons still work.",
+    "minHistoryDays": "History before suggesting, days",
+    "minHistoryDaysHint": "On a fresh install the suggesters stay quiet until this much history has accrued — the ML page shows the progress.",
+    "save": "Save",
+    "saved": "Settings saved"
   }
 }

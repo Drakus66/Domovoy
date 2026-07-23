@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Container, Box, Typography, Stack, Button, LinearProgress, Alert,
+  Container, Box, Typography, Stack, Button, LinearProgress, Alert, Tabs, Tab,
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import ModelTrainingRoundedIcon from '@mui/icons-material/ModelTrainingRounded';
@@ -18,6 +18,8 @@ import { consumerBlocksFor, governorTypesFor } from '../components/ml/mlHub';
 import MlTaskCard from '../components/ml/MlTaskCard';
 import MlTaskWizard from '../components/ml/MlTaskWizard';
 import MlApplyWizard from '../components/ml/MlApplyWizard';
+import MlLayerControls from '../components/ml/MlLayerControls';
+import MlJournal from '../components/ml/MlJournal';
 
 /**
  * The ML hub (Epic 2P): one card per training task — WHAT the house learns, whether it trained (and why not),
@@ -40,6 +42,7 @@ export default function Models() {
 
   const [wizard, setWizard] = useState<{ open: boolean; task?: MlTask | null; prefillTarget?: string }>({ open: false });
   const [apply, setApply] = useState<MlTask | null>(null);
+  const [tab, setTab] = useState(0); // 0 = tasks, 1 = journal (Epic 3I: journal is its own tab, not inline)
 
   const load = useCallback(async () => {
     setError(null);
@@ -130,39 +133,54 @@ export default function Models() {
         {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
         {info && <Alert severity="info" sx={{ mb: 2 }} onClose={() => setInfo(null)}>{info}</Alert>}
 
-        {tasks.length === 0 && !loading ? (
-          <Box textAlign="center" py={8}>
-            <PsychologyRoundedIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-            <Typography color="text.secondary" mb={0.5}>{t('empty')}</Typography>
-            <Typography variant="caption" color="text.secondary" display="block" mb={2}>
-              {t('emptyHint')}
-            </Typography>
-            <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setWizard({ open: true })}>
-              {t('actions.newTask')}
-            </Button>
-          </Box>
+        {/* Epic 3I: the activity journal ("pulse") is its own tab so it never clutters the task list. */}
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+          <Tab label={t('tabs.tasks')} />
+          <Tab label={t('tabs.journal')} />
+        </Tabs>
+
+        {tab === 0 ? (
+          <>
+            {/* Layer switches gate training, so they live with the tasks (a prominent alert when off). */}
+            <MlLayerControls />
+
+            {tasks.length === 0 && !loading ? (
+              <Box textAlign="center" py={8}>
+                <PsychologyRoundedIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+                <Typography color="text.secondary" mb={0.5}>{t('empty')}</Typography>
+                <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+                  {t('emptyHint')}
+                </Typography>
+                <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setWizard({ open: true })}>
+                  {t('actions.newTask')}
+                </Button>
+              </Box>
+            ) : (
+              <Stack spacing={1.5}>
+                {tasks.map((task) => {
+                  const consumerTypes = governorTypesFor(catalog, task.targetCapability);
+                  return (
+                    <MlTaskCard
+                      key={task.id}
+                      task={task}
+                      models={modelsByTarget.get(task.targetCapability.toLowerCase()) ?? []}
+                      consumerTypes={consumerTypes}
+                      consumerBlocks={consumerBlocksFor(blocks, consumerTypes)}
+                      training={training === task.id || training === '*'}
+                      onToggleEnabled={toggleEnabled}
+                      onTrain={(x) => train(x)}
+                      onEdit={(x) => setWizard({ open: true, task: x })}
+                      onDelete={removeTask}
+                      onApply={setApply}
+                      onChanged={load}
+                    />
+                  );
+                })}
+              </Stack>
+            )}
+          </>
         ) : (
-          <Stack spacing={1.5}>
-            {tasks.map((task) => {
-              const consumerTypes = governorTypesFor(catalog, task.targetCapability);
-              return (
-                <MlTaskCard
-                  key={task.id}
-                  task={task}
-                  models={modelsByTarget.get(task.targetCapability.toLowerCase()) ?? []}
-                  consumerTypes={consumerTypes}
-                  consumerBlocks={consumerBlocksFor(blocks, consumerTypes)}
-                  training={training === task.id || training === '*'}
-                  onToggleEnabled={toggleEnabled}
-                  onTrain={(x) => train(x)}
-                  onEdit={(x) => setWizard({ open: true, task: x })}
-                  onDelete={removeTask}
-                  onApply={setApply}
-                  onChanged={load}
-                />
-              );
-            })}
-          </Stack>
+          <MlJournal />
         )}
       </Box>
 

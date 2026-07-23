@@ -77,6 +77,7 @@ internal static class Program
             builder.Services.AddSingleton<ActionExecutor>();
             builder.Services.AddSingleton<RuleRunner>();
             builder.Services.AddSingleton<HomeModeState>();
+            builder.Services.AddSingleton<Ml.MlRuntimeState>(); // 3I: live ML-layer switches (RefreshLoop syncs ml_settings)
             builder.Services.AddSingleton<ReplayService>();   // 1F: dry-run a rule over history
             // 2I: registry of model templates; the trainer selects the best applicable cell by holdout.
             builder.Services.AddSingleton<IModelTemplate, ScheduleRegressionTemplate>();
@@ -104,6 +105,7 @@ internal static class Program
             builder.Services.AddHostedService<VariableRuntimeService>(); // 3E: global variables as virtual capability devices
             builder.Services.AddSingleton<MlTrainingService>();     // 2A: train + keep the model loaded
             builder.Services.AddHostedService(sp => sp.GetRequiredService<MlTrainingService>());
+            builder.Services.AddSingleton<Ml.MlProposerGate>();    // 3I: shared proposer gate (maturity/toggles/journal/notify)
             builder.Services.AddSingleton<RuleSuggester>();         // 2C: heuristic rule proposer (stub-precursor to 2F)
             builder.Services.AddHostedService(sp => sp.GetRequiredService<RuleSuggester>());
             builder.Services.AddSingleton<Ml.MlTaskSuggester>();    // 2P: propose training tasks for consumable targets

@@ -635,6 +635,10 @@ public class EventInterceptor : BackgroundService
         // Control-block actuation is published as source "block:{id}" (Epic 1H BlockRuntime). Attribute it
         // to the block, not the user, so a thermostat/sequencer loop is distinguishable from manual actions.
         if (s.StartsWith("block")) return (TriggerSources.Block, id);
+        // A scene activation is published as source "scene:{id}" (Epic 3B ScenesController). Attribute it to
+        // the scene (id = scene id) so scene-schedule discovery (Epic 2F) can see "which scene was activated
+        // when" instead of it collapsing into an anonymous user change.
+        if (s.StartsWith("scene")) return (TriggerSources.Scene, id);
         if (s.Contains("automation") || s.Contains("rule")) return (TriggerSources.Rule, id);
         if (s.StartsWith("user")) return (TriggerSources.User, id);
         if (s.Contains("ml")) return (TriggerSources.Ml, id);
