@@ -111,14 +111,30 @@ public static class AutomationEndpoints
     {
         foreach (var t in rule.Triggers) t.Value = ToPlain(t.Value);
         foreach (var c in rule.Conditions) c.Value = ToPlain(c.Value);
-        foreach (var a in rule.Actions)
-        {
-            if (a.Set is null) continue;
-            foreach (var key in a.Set.Keys.ToList()) a.Set[key] = ToPlain(a.Set[key]);
-        }
+        // Required-expression gate (Epic 3E) reuses the RuleCondition shape — same JsonElement risk.
+        if (rule.RequiredExpression is not null)
+            foreach (var c in rule.RequiredExpression.Conditions) c.Value = ToPlain(c.Value);
+        foreach (var a in rule.Actions) NormalizeAction(a);
     }
 
-    private static object? ToPlain(object? value) => value switch
+    // Epic 3E: an action's Set dict and WaitValue both need flattening, and so do the actions nested in its
+    // OnTimeout/OnError branches — a JsonElement inside a branch is exactly as unsafe for Mongo as one at
+    // the top level, so this recurses instead of only walking the flat top-level Actions list.
+    private static void NormalizeAction(RuleAction a)
+    {
+        if (a.Set is not null)
+            foreach (var key in a.Set.Keys.ToList()) a.Set[key] = ToPlain(a.Set[key]);
+        a.WaitValue = ToPlain(a.WaitValue);
+
+        if (a.OnTimeout is not null)
+            foreach (var branch in a.OnTimeout) NormalizeAction(branch);
+        if (a.OnError is not null)
+            foreach (var branch in a.OnError) NormalizeAction(branch);
+    }
+
+    /// <summary>Public so <see cref="VariableEndpoints"/> reuses the identical JsonElement-flattening logic and
+    /// tests can exercise the exact endpoint normalization (same rationale as <see cref="NormalizeJsonValues"/>).</summary>
+    public static object? ToPlain(object? value) => value switch
     {
         JsonElement e => e.ValueKind switch
         {

@@ -72,6 +72,8 @@ internal static class Program
             builder.Services.AddSingleton<RuleStore>();
             builder.Services.AddSingleton<SceneStore>();      // 3B: scenes the `scene` action activates
             builder.Services.AddSingleton<RuleEvaluator>();
+            builder.Services.AddSingleton<DeviceEventBroker>();          // 3E: live capability-change fan-out (WaitForEvent + required-expression gate)
+            builder.Services.AddSingleton<RequiredExpressionEvaluator>(); // 3E: "Required Expression" live gate
             builder.Services.AddSingleton<ActionExecutor>();
             builder.Services.AddSingleton<RuleRunner>();
             builder.Services.AddSingleton<HomeModeState>();
@@ -87,6 +89,7 @@ internal static class Program
             builder.Services.AddSingleton<BlockCatalog>();    // 1H: built-in control-block types (incl. ml_setpoint)
             builder.Services.AddSingleton<BlockStore>();
             builder.Services.AddSingleton<BlockStateStore>(); // 2Q: persist block state across restarts
+            builder.Services.AddSingleton<VariableStore>();   // 3E: global variable configs + live values
 
             // Order matters only loosely: RefreshLoop seeds rules/devices/mode, the engine + scheduler fire them.
             builder.Services.AddHostedService<RefreshLoop>();
@@ -98,6 +101,7 @@ internal static class Program
             builder.Services.AddSingleton<BlockRuntime>();          // 1H: tick control blocks as virtual devices
             builder.Services.AddHostedService(sp => sp.GetRequiredService<BlockRuntime>()); // + expose runtime health
             builder.Services.AddHostedService<SystemSensorService>(); // 2L: virtual sensors (Sun/Time/Calendar/Home)
+            builder.Services.AddHostedService<VariableRuntimeService>(); // 3E: global variables as virtual capability devices
             builder.Services.AddSingleton<MlTrainingService>();     // 2A: train + keep the model loaded
             builder.Services.AddHostedService(sp => sp.GetRequiredService<MlTrainingService>());
             builder.Services.AddSingleton<RuleSuggester>();         // 2C: heuristic rule proposer (stub-precursor to 2F)

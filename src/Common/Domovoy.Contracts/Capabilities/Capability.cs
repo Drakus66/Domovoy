@@ -72,6 +72,9 @@ public static class CapabilityIds
     public const string IsHoliday = "is_holiday";                  // bool — today is a configured holiday
     public const string CalendarDate = "date";                     // text, local yyyy-MM-dd
     public const string HomeMode = "home_mode";                    // enum (writable) — Home/Away/Night/Vacation (open set, Epic 1G)
+
+    // --- Global variables (roadmap Epic 3E) ---
+    public const string VariableValue = "value";                   // writable — kind depends on GlobalVariable.Type (number/bool/text)
 }
 
 /// <summary>

@@ -1,0 +1,42 @@
+{
+  "title": "Variables",
+  "subtitle": "Named, persistent values a rule can read or write — each also acts as its own device",
+  "actions": {
+    "newVariable": "New variable",
+    "edit": "Edit",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "create": "Create",
+    "save": "Save"
+  },
+  "errors": {
+    "load": "Failed to load variables",
+    "create": "Failed to create variable",
+    "update": "Failed to save changes",
+    "delete": "Failed to delete variable"
+  },
+  "confirm": {
+    "delete": "Delete variable \"{{name}}\"?"
+  },
+  "empty": {
+    "none": "No variables yet. Create one to hold a value your rules can read and write — a counter, a mode flag, a threshold.",
+    "noValue": "—"
+  },
+  "types": {
+    "Number": "Number",
+    "Boolean": "Boolean",
+    "String": "Text",
+    "DateTime": "Date/time",
+    "List": "List"
+  },
+  "dialog": {
+    "createTitle": "New variable",
+    "editTitle": "Edit variable",
+    "name": "Name",
+    "type": "Type",
+    "description": "Description",
+    "value": "Current value",
+    "dateTimeHint": "ISO date, e.g. 2026-07-20T10:00:00",
+    "listHint": "JSON, e.g. [1, 2, 3]"
+  }
+}

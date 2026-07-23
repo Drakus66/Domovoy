@@ -126,6 +126,7 @@ internal static class Program
             app.MapZoneEndpoints();
             app.MapHistoryEndpoints();
             app.MapAutomationEndpoints();
+            app.MapVariableEndpoints();
             app.MapSceneEndpoints();
             app.MapModeEndpoints();
             app.MapBlockEndpoints();

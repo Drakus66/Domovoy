@@ -18,6 +18,7 @@ import Zones from './pages/Zones';
 import Modes from './pages/Modes';
 import Automations from './pages/Automations';
 import Scenes from './pages/Scenes';
+import Variables from './pages/Variables';
 import Blocks from './pages/Blocks';
 import Plugins from './pages/Plugins';
 import Models from './pages/Models';
@@ -53,6 +54,7 @@ function App() {
               <Route path="modes" element={<Modes />} />
               <Route path="automations" element={<Automations />} />
               <Route path="scenes" element={<Scenes />} />
+              <Route path="variables" element={<Variables />} />
               <Route path="blocks" element={<Blocks />} />
               <Route path="models" element={<Models />} />
               <Route path="proposals" element={<Proposals />} />
