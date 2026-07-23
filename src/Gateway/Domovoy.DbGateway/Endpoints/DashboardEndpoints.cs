@@ -20,10 +20,11 @@ public static class DashboardEndpoints
     public const string Collection = "dashboards";
     public const string PrefsCollection = "dashboard_prefs";
 
-    /// <summary>Item types the WebUI knows how to render.</summary>
+    /// <summary>Item types the WebUI knows how to render. (<c>scene</c> the WebUI already emits; <c>energy</c>
+    /// is the Epic 3C energy widget. Neither is device-scoped, so <see cref="Normalize"/> requires no deviceId.)</summary>
     public static readonly HashSet<string> ItemTypes = new(StringComparer.Ordinal)
     {
-        "device", "capability", "chart", "modes",
+        "device", "capability", "chart", "modes", "scene", "energy",
     };
 
     /// <summary>Sphere category keys as produced by the WebUI's archetype→category mapping.</summary>

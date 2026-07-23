@@ -8,6 +8,7 @@ import type { CommandFn } from '../../devices/CapabilityControls';
 import {
   asBool, capabilityIcon, capabilityLabel, deviceCategory, formatCapabilityValue, CATEGORY_ACCENT,
 } from '../../devices/deviceVisuals';
+import { deviceLabel } from '../../devices/deviceNaming';
 
 /**
  * A tile for ONE capability of a device — the "pick exactly what the remote shows" widget
@@ -68,8 +69,8 @@ export default function CapabilityTile({
           </Stack>
 
           <Box flex={1} minWidth={0}>
-            <Typography variant="subtitle1" fontWeight={700} noWrap title={device.name}>
-              {device.name}
+            <Typography variant="subtitle1" fontWeight={700} noWrap title={deviceLabel(device)}>
+              {deviceLabel(device)}
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap display="block">
               {capabilityLabel(cap.id)}

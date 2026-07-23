@@ -34,7 +34,8 @@
     "loadDevices": "Failed to load devices. Check ApiGateway / DbGateway connection.",
     "command": "Command failed",
     "assignZone": "Failed to assign zone",
-    "setArchetype": "Failed to set device type"
+    "setArchetype": "Failed to set device type",
+    "setAlias": "Failed to rename device"
   },
   "empty": {
     "noDevices": "The house feels empty — no devices have moved in yet. Pair a Zigbee device or start the emulator.",
@@ -42,6 +43,44 @@
   },
   "zone": "Zone",
   "unassigned": "Unassigned",
+  "alias": {
+    "label": "Custom name",
+    "hint": "A friendly name for this device. Empty falls back to a type-based name.",
+    "clear": "Reset to type name"
+  },
+  "autoName": {
+    "device": "Device",
+    "zoneConnector": "in",
+    "inZone": "{{name}} in {{zone}}",
+    "light": "Light",
+    "switch": "Switch",
+    "thermostat": "Thermostat",
+    "climate_sensor": "Climate sensor",
+    "motion": "Motion sensor",
+    "contact": "Contact sensor",
+    "lock": "Lock",
+    "valve": "Valve",
+    "energy_meter": "Energy meter",
+    "sensor": "Sensor",
+    "control_block": "Control block",
+    "sun": "Sun",
+    "clock": "Clock",
+    "calendar": "Calendar"
+  },
+  "rename": {
+    "title": "Rename device?",
+    "titleMany": "Rename devices ({{count}})?",
+    "subtitleMany": "Choose which devices to rename with the zone pointer.",
+    "approveAll": "Approve all",
+    "rejectAll": "Reject all",
+    "confirm": "Confirm",
+    "confirmOne": "Rename",
+    "cancel": "Cancel",
+    "columns": {
+      "current": "Current name",
+      "proposed": "New name"
+    }
+  },
   "registry": {
     "title": "Device registry",
     "subtitle": "Everything the house knows — physical, virtual and service devices.",
@@ -71,11 +110,25 @@
     "auto": "Auto · {{value}}",
     "unknown": "unknown"
   },
+  "tabs": {
+    "overview": "Overview",
+    "history": "History",
+    "settings": "Settings"
+  },
   "sections": {
     "controls": "Controls",
     "sensors": "Sensors",
     "trends": "Trends · last 24h",
-    "history": "History"
+    "history": "History",
+    "identity": "Name & placement",
+    "tech": "Technical details"
+  },
+  "tech": {
+    "source": "Source",
+    "model": "Model",
+    "rawName": "Source name",
+    "id": "Identifier",
+    "updated": "Updated"
   },
   "blockIo": {
     "title": "Block wiring",
@@ -87,7 +140,6 @@
   "historyVia": "via {{rule}}",
   "historyCausedBy": "Caused by rule: {{rule}}",
   "aRule": "a rule",
-  "updated": "Updated {{when}}",
   "capabilities": {
     "on_off": "Power",
     "brightness": "Brightness",
@@ -139,7 +191,11 @@
     "title": "ML governance",
     "connect": "Connect a model",
     "hint": "A trained model can govern this device — connect it and the block starts in Shadow.",
-    "stage": { "shadow": "Shadow", "bounded": "Bounded", "full": "Full" }
+    "stage": {
+      "shadow": "Shadow",
+      "bounded": "Bounded",
+      "full": "Full"
+    }
   },
   "classify": {
     "action": "Check types",
@@ -163,5 +219,67 @@
     "ruleNamed": "Rule · {{name}}",
     "block": "Block",
     "blockNamed": "Block · {{name}}"
+  },
+  "energyProfile": {
+    "title": "Energy consumption",
+    "track": "Count toward consumption",
+    "source": {
+      "metered": "The device counts energy itself — consumption comes from its own meter.",
+      "integrated": "The device measures power — energy is integrated from those watts.",
+      "estimated": "The device measures nothing — consumption is estimated from its power rating and state."
+    },
+    "maxPower": "Power",
+    "maxPowerHint": "Nameplate draw at full load.",
+    "maxPowerRequired": "Required to estimate consumption — without it the device counts as 0 W.",
+    "useMeasured": "Use measured",
+    "noMeasurement": "No power measurements in the last week.",
+    "minPower": "Power at minimum",
+    "minPowerHint": "Draw while on with the regulator at zero.",
+    "standbyPower": "Standby",
+    "standbyPowerHint": "Draw while switched off.",
+    "regulator": "Power regulator",
+    "regulatorHint": "Power scales linearly between the minimum and the maximum by the regulator's value.",
+    "regulatorAuto": "Automatic ({{value}})",
+    "regulatorNone": "None — full power when on",
+    "circuit": "Circuit",
+    "circuitHint": "A circuit from the electrical topology (Settings → Electrical topology) — the phase is inherited from it.",
+    "noCircuit": "Not attached",
+    "role": "Energy role",
+    "roleHint": "Mains is shown separately and not added to the per-device sum, so nothing is counted twice.",
+    "roles": {
+      "consumer": "Normal consumer",
+      "mains": "Mains (aggregate meter)"
+    },
+    "save": "Save",
+    "saved": "Saved",
+    "saveError": "Could not save the energy profile"
+  },
+  "loadShedding": {
+    "title": "Load management",
+    "hint": "Marks this device for the load coordinator (Settings → Load management). Does nothing until enabled there and a budget is set.",
+    "enabled": "Manage this load",
+    "protected": "Protected device",
+    "protectedHint": "Never shed regardless of mode (anti-freeze, CO2, smoke, etc.).",
+    "powerFromProfile": "Watts come from the Energy consumption section above — the curtailed estimate is derived from it too.",
+    "curtailable": "Can be curtailed (not just switched off)",
+    "controlCapability": "Curtail capability",
+    "curtailedValue": "Curtailed value",
+    "restoreValue": "Restore value",
+    "modeMatrix": "Priority by mode",
+    "modes": {
+      "Home": "Home",
+      "Away": "Away",
+      "Night": "Night",
+      "Vacation": "Vacation"
+    },
+    "tiers": {
+      "critical": "Critical",
+      "sheddable": "Sheddable",
+      "unmanaged": "Unmanaged"
+    },
+    "priority": "Priority",
+    "save": "Save profile",
+    "saved": "Profile saved",
+    "saveError": "Could not save. Please try again."
   }
 }

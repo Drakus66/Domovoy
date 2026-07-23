@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 
 using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Blocks;
+using Domovoy.Contracts.Capabilities;
 using Domovoy.Contracts.Ml;
 using Domovoy.Contracts.Proposals;
 using Domovoy.Contracts.Scenes;
@@ -44,6 +45,40 @@ public sealed class DbGatewayClient
             return null;
         }
     }
+
+    /// <summary>Global variables (roadmap Epic 3E), or null if the gateway is unreachable.</summary>
+    public async Task<List<GlobalVariable>?> GetVariablesAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<List<GlobalVariable>>("api/variables", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load global variables from DbGateway");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Persist a variable's value (Epic 3E) — durable, since (unlike the Power device's live signal) a
+    /// variable's whole point is surviving a restart. Best-effort: a failure just delays persistence,
+    /// matching <see cref="SaveBlockStateAsync"/>.
+    /// </summary>
+    public async Task SetVariableValueAsync(string id, object? value, CancellationToken ct)
+    {
+        try
+        {
+            await _http.PutAsJsonAsync($"api/variables/{Uri.EscapeDataString(id)}/value",
+                new VariableValueUpdate(value), Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not persist value for variable {VariableId}", id);
+        }
+    }
+
+    private sealed record VariableValueUpdate(object? Value);
 
     /// <summary>Stored scenes (Epic 3B) so the <c>scene</c> rule action can resolve targets; null if unreachable.</summary>
     public async Task<List<Scene>?> GetScenesAsync(CancellationToken ct)
@@ -182,6 +217,50 @@ public sealed class DbGatewayClient
         }
     }
 
+    /// <summary>Tariff settings (roadmap Epic 3C) for the tariff device / cheap-hours block; null if unreachable.</summary>
+    public async Task<Domovoy.Contracts.Home.TariffSettings?> GetTariffSettingsAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<Domovoy.Contracts.Home.TariffSettings>("api/settings/tariff", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load tariff settings from DbGateway");
+            return null;
+        }
+    }
+
+    /// <summary>Load-management settings (roadmap Epic 3C-LM) for <see cref="LoadManager"/>; null if unreachable
+    /// (the coordinator keeps its last-known config, offline-first).</summary>
+    public async Task<Domovoy.Contracts.Home.LoadManagementSettings?> GetLoadManagementSettingsAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<Domovoy.Contracts.Home.LoadManagementSettings>("api/settings/load-management", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load load-management settings from DbGateway");
+            return null;
+        }
+    }
+
+    /// <summary>Electrical topology (roadmap Epic 3C-D) — supplies/panels/circuits with phase + breaker
+    /// rating, so LoadManager can budget per phase and per line. Null if unreachable (keep last-known).</summary>
+    public async Task<List<PowerNodeSnapshot>?> GetPowerTopologyAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<List<PowerNodeSnapshot>>("api/power-topology", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load the power topology from DbGateway");
+            return null;
+        }
+    }
+
     public async Task<List<DeviceSnapshot>?> GetDevicesAsync(CancellationToken ct)
     {
         try
@@ -194,6 +273,55 @@ public sealed class DbGatewayClient
             return null;
         }
     }
+
+    // ===== Intelligence layer settings + journal (Epic 3I) =====
+
+    /// <summary>Live ML-layer switches (Epic 3I); null if the gateway is unreachable (keep last-known, offline-first).</summary>
+    public async Task<Domovoy.Contracts.Ml.MlSettings?> GetMlSettingsAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<Domovoy.Contracts.Ml.MlSettings>("api/settings/ml", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load ML settings from DbGateway");
+            return null;
+        }
+    }
+
+    /// <summary>Append one entry to the ML-activity journal (Epic 3I). Best-effort — a failure just drops the entry.</summary>
+    public async Task WriteMlActivityAsync(Domovoy.Contracts.Ml.MlActivityEntry entry, CancellationToken ct)
+    {
+        try
+        {
+            await _http.PostAsJsonAsync("api/ml/activity", entry, Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not write ML-activity entry ({Source})", entry.Source);
+        }
+    }
+
+    /// <summary>
+    /// Timestamp of the earliest recorded event (Epic 3I cold-start gate) — how old the history is. Null when the
+    /// gateway is unreachable OR the log is empty (the caller treats both as "not mature yet").
+    /// </summary>
+    public async Task<DateTime?> GetEarliestEventAsync(CancellationToken ct)
+    {
+        try
+        {
+            var dto = await _http.GetFromJsonAsync<EarliestDto>("api/events/earliest", Json, ct);
+            return dto?.Earliest;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load earliest event timestamp from DbGateway");
+            return null;
+        }
+    }
+
+    private sealed record EarliestDto(DateTime? Earliest);
 
     /// <summary>
     /// Fetch device-state deltas from the P0-5 event-log for replay/simulation (roadmap Epic 1F).
@@ -549,6 +677,10 @@ public sealed class DbGatewayClient
         public string ZoneId { get; set; } = string.Empty;
         public Dictionary<string, JsonElement> State { get; set; } = new();
 
+        /// <summary>Reachability from the read-model — the energy estimator pauses on an offline device
+        /// (unknown state is not the same as zero consumption).</summary>
+        public bool IsOnline { get; set; }
+
         // Epic 2D: semantic archetype + capability signature (for archetype-aware proposals + ML classifier).
         public List<CapabilitySnapshot> Capabilities { get; set; } = new();
         public string AutoArchetype { get; set; } = Contracts.Devices.DeviceArchetypes.Unknown;
@@ -557,6 +689,62 @@ public sealed class DbGatewayClient
         /// <summary>User override wins over the auto-inferred archetype (mirrors the WebUI/read-model rule).</summary>
         [JsonIgnore]
         public string EffectiveArchetype => string.IsNullOrWhiteSpace(Archetype) ? AutoArchetype : Archetype!;
+
+        /// <summary>Epic 3C-D energy profile — accounting toggle, role and nameplate watts; null ⇒ defaults.</summary>
+        public EnergyProfileSnapshot? EnergyProfile { get; set; }
+
+        /// <summary>Epic 3C-LM load-shedding profile; null ⇒ the device is unmanaged by LoadManager.</summary>
+        public LoadSheddingProfileSnapshot? LoadShedding { get; set; }
+
+        /// <summary>True when the device carries a cumulative <c>energy</c> series (its adapter's or the
+        /// platform's synthetic one) — the accounting default for <see cref="TracksEnergy"/>.</summary>
+        [JsonIgnore]
+        public bool IsMetered => Capabilities.Any(c => c.Id == CapabilityIds.Energy);
+
+        /// <summary>Whether this device counts toward energy totals: the explicit toggle, else metered-by-default
+        /// (mirrors DbGateway <c>EnergyEndpoints.CountsTowardTotals</c>).</summary>
+        [JsonIgnore]
+        public bool TracksEnergy => EnergyProfile?.Track ?? IsMetered;
+    }
+
+    /// <summary>One node of the electrical topology (Epic 3C-D) — mirrors DbGateway's <c>PowerNode</c>.</summary>
+    public sealed class PowerNodeSnapshot
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Kind { get; set; } = string.Empty;
+        public string? ParentId { get; set; }
+        public string? Phase { get; set; }
+        public double? BreakerAmps { get; set; }
+        public double? Voltage { get; set; }
+        public string? MeterDeviceId { get; set; }
+    }
+
+    /// <summary>Per-device energy accounting (Epic 3C-D) — mirrors DbGateway's <c>EnergyProfile</c> document
+    /// shape (not shared: the read-model duplicates DTOs by convention, see <see cref="CapabilitySnapshot"/>).</summary>
+    public sealed class EnergyProfileSnapshot
+    {
+        public bool? Track { get; set; }
+        public string? Role { get; set; }
+        public double? MaxPowerW { get; set; }
+        public double? MinPowerW { get; set; }
+        public double? StandbyPowerW { get; set; }
+        public string? ScaleCapabilityId { get; set; }
+        public string? CircuitId { get; set; }
+    }
+
+    /// <summary>Per-device load-shedding configuration (Epic 3C-LM) — mirrors DbGateway's
+    /// <c>LoadSheddingProfile</c> document shape (not shared: the read-model duplicates DTOs by convention,
+    /// see <see cref="CapabilitySnapshot"/>).</summary>
+    public sealed class LoadSheddingProfileSnapshot
+    {
+        public bool Enabled { get; set; }
+        public bool Protected { get; set; }
+        public string ControlCapabilityId { get; set; } = "on_off";
+        public bool Curtailable { get; set; }
+        public double? CurtailedValue { get; set; }
+        public double? RestoreValue { get; set; }
+        public Dictionary<string, string> ModeTier { get; set; } = new();
+        public Dictionary<string, int> ModePriority { get; set; } = new();
     }
 
     /// <summary>One capability of a device (id + writability) from the read-model.</summary>
@@ -564,6 +752,10 @@ public sealed class DbGatewayClient
     {
         public string Id { get; set; } = string.Empty;
         public bool Writable { get; set; }
+
+        /// <summary>True for a series the platform maintains rather than the adapter reporting it (Epic 3C-D)
+        /// — the estimator must not treat its own output as a measurement.</summary>
+        public bool Synthetic { get; set; }
     }
 
     /// <summary>One event-log delta as served by <c>GET /api/events</c> (mirrors DbGateway EventLogDto).</summary>
@@ -577,6 +769,11 @@ public sealed class DbGatewayClient
         public JsonElement? OldValue { get; set; }
         public JsonElement? NewValue { get; set; }
         public string TriggerSource { get; set; } = string.Empty;
+
+        /// <summary>Concrete initiator id behind <see cref="TriggerSource"/> — e.g. the scene id for a
+        /// <c>scene</c>-sourced change (Epic 2F scene-schedule discovery keys off this).</summary>
+        public string? TriggerId { get; set; }
+
         public string? Mode { get; set; }
     }
 }

@@ -51,6 +51,9 @@ public static class CapabilityIds
     public const string Valve = "valve";                           // number, 0..100 (%) — irrigation/heating
     public const string Power = "power";                           // number, W
     public const string Energy = "energy";                         // number, kWh
+    public const string Price = "price";                           // number, currency/kWh — current tariff price (Epic 3C); may be negative (plunge)
+    public const string TariffZone = "tariff_zone";                // enum — current tariff zone (peak/day/night…) (Epic 3C)
+    public const string PowerSource = "power_source";               // enum (writable) — grid/grid_peak/battery/solar/off (Epic 3C-LM)
     public const string Battery = "battery";                       // number, %
     public const string Illuminance = "illuminance";               // number, lux
     public const string LinkQuality = "link_quality";              // number, 0..255

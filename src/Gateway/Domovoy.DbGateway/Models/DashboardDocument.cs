@@ -45,7 +45,8 @@ public class DashboardSection
 /// <summary>
 /// One tile/widget on a custom dashboard. <see cref="Type"/> is one of
 /// <c>device</c> (whole-device tile), <c>capability</c> (single capability of a device),
-/// <c>chart</c> (telemetry chart for a device capability), <c>modes</c> (home-mode switcher).
+/// <c>chart</c> (telemetry chart for a device capability), <c>modes</c> (home-mode switcher),
+/// <c>scene</c> (activates a scene, id in <see cref="Params"/>), <c>energy</c> (energy dashboard widget, Epic 3C).
 /// </summary>
 public class DashboardItem
 {

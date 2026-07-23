@@ -18,6 +18,7 @@ import type { CapabilityDevice } from '../../../api/capabilityDevices';
 import type { Dashboard, DashboardInput, DashboardItem, DashboardSection } from '../../../api/dashboards';
 import { useDashboardStore } from '../../../store/dashboardStore';
 import { capabilityIcon, capabilityLabel } from '../../devices/deviceVisuals';
+import { deviceLabel } from '../../devices/deviceNaming';
 import { DASHBOARD_ICONS, dashboardIcon } from '../dashboardIcons';
 import AddItemDialog from './AddItemDialog';
 
@@ -74,8 +75,10 @@ export default function DashboardEditorDialog({
       sections: d.sections.map((s, i) => (i === index ? { ...s, ...patch } : s)),
     }));
 
-  const deviceName = (id?: string | null) =>
-    (id && devices.find((d) => d.id === id)?.name) || id || '';
+  const deviceName = (id?: string | null) => {
+    const d = id ? devices.find((x) => x.id === id) : null;
+    return d ? deviceLabel(d) : (id || '');
+  };
 
   const itemPrimary = (item: DashboardItem) =>
     item.type === 'modes'

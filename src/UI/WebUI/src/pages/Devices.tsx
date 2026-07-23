@@ -20,6 +20,8 @@ import { buildDeviceHubConnection, startDeviceHub } from '../api/deviceHub';
 import DeviceDetailDrawer from '../components/devices/DeviceDetailDrawer';
 import type { CommandFn } from '../components/devices/CapabilityControls';
 import { asBool, asNum } from '../components/devices/deviceVisuals';
+import { deviceLabel, proposeZoneName } from '../components/devices/deviceNaming';
+import { useDeviceRename } from '../components/devices/useDeviceRename';
 import HomeStateBand from '../components/dashboard/HomeStateBand';
 import DomovoyRail from '../components/dashboard/DomovoyRail';
 import OverviewTab from '../components/dashboard/OverviewTab';
@@ -70,7 +72,7 @@ export default function Devices() {
       if (known) {
         for (const d of list) {
           if (!known.has(d.id)) {
-            useUIStore.getState().showNotification('info', i18n.t('newResident', { name: d.name }));
+            useUIStore.getState().showNotification('info', i18n.t('newResident', { name: deviceLabel(d) }));
           }
         }
       }
@@ -155,10 +157,27 @@ export default function Devices() {
     capabilityDevicesApi.sendCommand(deviceId, set).catch(() => setError(t('errors.command')));
   }, [t]);
 
+  // Rename-on-zone flow (Epic 3G): applied aliases are reflected in local state.
+  const { dialog: renameDialog, requestRename } = useDeviceRename((updates) => {
+    setDevices((prev) => prev.map((d) => (d.id in updates ? { ...d, alias: updates[d.id] } : d)));
+  });
+
   const handleAssignZone = useCallback((deviceId: string, zoneId: string | null) => {
     const normalized = zoneId ?? '';
+    const device = devices.find((d) => d.id === deviceId);
     setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, zoneId: normalized } : d)));
     capabilityDevicesApi.assignZone(deviceId, zoneId).catch(() => setError(t('errors.assignZone')));
+    // Offer to fold the zone into the device's name ("Люстра" → "Люстра в Гостиная").
+    if (device) {
+      const newZoneName = zoneId ? (zones.find((z) => z.id === zoneId)?.name ?? null) : null;
+      const current = deviceLabel(device);
+      requestRename([{ device, current, proposed: proposeZoneName(current, newZoneName, zones.map((z) => z.name)) }]);
+    }
+  }, [devices, zones, requestRename, t]);
+
+  const handleSetAlias = useCallback((deviceId: string, alias: string | null) => {
+    setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, alias } : d)));
+    capabilityDevicesApi.setAlias(deviceId, alias).catch(() => setError(t('errors.setAlias')));
   }, [t]);
 
   const handleSetArchetype = useCallback((deviceId: string, archetype: string | null) => {
@@ -335,7 +354,10 @@ export default function Devices() {
         onCommand={handleCommand}
         onAssignZone={handleAssignZone}
         onSetArchetype={handleSetArchetype}
+        onSetAlias={handleSetAlias}
       />
+
+      {renameDialog}
     </Container>
   );
 }

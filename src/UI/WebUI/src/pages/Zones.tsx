@@ -15,18 +15,44 @@ import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import RoomRoundedIcon from '@mui/icons-material/RoomRounded';
 import { zonesApi, Zone, ZoneInput } from '../api/zones';
+import { capabilityDevicesApi } from '../api/capabilityDevices';
+import { deviceLabel, hasZonePointer, stripZonePointer, withZonePointer } from '../components/devices/deviceNaming';
+import { useDeviceRename } from '../components/devices/useDeviceRename';
+import type { RenameProposal } from '../components/devices/DeviceRenameDialog';
 
 const KIND_OPTIONS = ['floor', 'room', 'outdoor', 'lawn', 'bed', 'gate'];
 
 const EMPTY: ZoneInput = { name: '', description: '', parentZoneId: '', kind: '', order: 0 };
 
 export default function Zones() {
-  const { t } = useTranslation('zones');
+  // The `devices` namespace is loaded so the shared device-naming helpers (autoName / zone pointer)
+  // resolve their labels when proposing device renames after a zone rename (Epic 3G, point 4).
+  const { t } = useTranslation(['zones', 'devices']);
   const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Zone | null>(null);
   const [draft, setDraft] = useState<ZoneInput | null>(null);
+
+  // Renaming a zone offers to update the "… в <Zone>" pointer in its devices' names (Epic 3G, point 4).
+  const { dialog: renameDialog, requestRename } = useDeviceRename();
+
+  const proposeZoneRename = useCallback(async (zoneId: string, oldName: string, newName: string) => {
+    try {
+      const devices = await capabilityDevicesApi.getDevices();
+      const proposals = devices
+        .filter((d) => d.zoneId === zoneId)
+        .map((device): RenameProposal | null => {
+          const current = deviceLabel(device);
+          if (!hasZonePointer(current, oldName)) return null;
+          return { device, current, proposed: withZonePointer(stripZonePointer(current, [oldName]), newName) };
+        })
+        .filter((p): p is RenameProposal => p !== null);
+      if (proposals.length > 0) requestRename(proposals);
+    } catch {
+      // Non-fatal: the zone was renamed; we just couldn't offer to update device names.
+    }
+  }, [requestRename]);
 
   const fetchZones = useCallback(async () => {
     setError(null);
@@ -58,11 +84,17 @@ export default function Zones() {
 
   const save = async () => {
     if (!draft || !draft.name.trim()) return;
+    const newName = draft.name.trim();
+    // Capture a rename before close() clears `editing`, so we can offer to update device pointers.
+    const renamed = editing && editing.name.trim() !== newName
+      ? { id: editing.id, oldName: editing.name }
+      : null;
     try {
       if (editing) await zonesApi.updateZone(editing.id, draft);
       else await zonesApi.createZone(draft);
       close();
       await fetchZones();
+      if (renamed) await proposeZoneRename(renamed.id, renamed.oldName, newName);
     } catch {
       setError(t('errors.save'));
     }
@@ -180,6 +212,8 @@ export default function Zones() {
           <Button variant="contained" onClick={save} disabled={!draft?.name.trim()}>{t('actions.save')}</Button>
         </DialogActions>
       </Dialog>
+
+      {renameDialog}
     </Container>
   );
 }

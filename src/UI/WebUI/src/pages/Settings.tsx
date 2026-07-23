@@ -23,11 +23,17 @@ import RestoreRoundedIcon from '@mui/icons-material/RestoreRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import TabletMacRoundedIcon from '@mui/icons-material/TabletMacRounded';
+import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
+import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded';
+import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
 import { settingsApi, GeocodeResult } from '../api/settings';
 import { securityApi, User } from '../api/security';
 import { backupsApi, BackupListItem, BackupSettings } from '../api/backups';
 import { getCurrentUserId, setCurrentUserId } from '../api/currentUser';
 import KioskSettings from '../components/kiosk/KioskSettings';
+import TariffEditor from '../components/settings/TariffEditor';
+import LoadManagementEditor from '../components/settings/LoadManagementEditor';
+import PowerTopologyEditor from '../components/settings/PowerTopologyEditor';
 
 // A collapsible settings card. Collapsed by default so a long section (e.g. the location
 // map) doesn't dominate the page — the header stays a compact, clickable summary row.
@@ -657,6 +663,25 @@ export default function Settings() {
               ))}
             </List>
           )}
+        </Section>
+
+        {/* ── Tariff (Epic 3C) ─────────────────────────────────────── */}
+        <Section icon={<BoltRoundedIcon color="primary" />} title={t('tariff.title')} caption={t('tariff.caption')}>
+          <TariffEditor />
+        </Section>
+
+        {/* ── Electrical topology (Epic 3C-D) ─────────────────────── */}
+        <Section
+          icon={<AccountTreeRoundedIcon color="primary" />}
+          title={t('powerTopology.title')}
+          caption={t('powerTopology.caption')}
+        >
+          <PowerTopologyEditor />
+        </Section>
+
+        {/* ── Load management (Epic 3C-LM) ────────────────────────── */}
+        <Section icon={<SpeedRoundedIcon color="primary" />} title={t('loadManagement.title')} caption={t('loadManagement.caption')}>
+          <LoadManagementEditor />
         </Section>
 
         {/* ── Who am I (self-declared attribution, not auth) ────────── */}

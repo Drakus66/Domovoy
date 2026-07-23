@@ -62,6 +62,9 @@ public sealed class EmulatorEngine : IHostedService
     private double _externalCenter;
     private double _externalTemp;
     private readonly List<ThermalZone> _thermalZones;
+    private readonly List<Co2Zone> _co2Zones;
+    private readonly List<PressureZone> _pressureZones;
+    private readonly List<PowerMeter> _powerMeters;
 
     /// <summary>One resolved heater→sensor coupling with its live room temperature.</summary>
     private sealed class ThermalZone
@@ -77,6 +80,55 @@ public sealed class EmulatorEngine : IHostedService
         public double Temp { get; set; }
     }
 
+    /// <summary>One resolved ventilation→CO₂ coupling. The live reading lives in the sensor's state, so a UI drag sticks.</summary>
+    private sealed class Co2Zone
+    {
+        public required string Name { get; init; }
+        public required VirtualDevice Vent { get; init; }
+        public required string FanCapability { get; init; }
+        public required string? VentSwitchCapability { get; init; }
+        public required VirtualDevice Sensor { get; init; }
+        public required string Co2Capability { get; init; }
+        public required double Generation { get; init; }
+        public required double EquilibriumFraction { get; init; }
+        public required double Min { get; init; }
+        public required double Max { get; init; }
+        public required double Noise { get; init; }
+        public VirtualDevice? Presence { get; init; }
+        public required string PresenceCapability { get; init; }
+        public required double IdleDecay { get; init; }
+    }
+
+    /// <summary>One resolved pump-relay→pressure coupling.</summary>
+    private sealed class PressureZone
+    {
+        public required string Name { get; init; }
+        public required VirtualDevice Pump { get; init; }
+        public required string PumpCapability { get; init; }
+        public required VirtualDevice Sensor { get; init; }
+        public required string PressureCapability { get; init; }
+        public required double FillRate { get; init; }
+        public required double DrainRate { get; init; }
+        public required double Min { get; init; }
+        public required double Max { get; init; }
+        public required double Noise { get; init; }
+    }
+
+    /// <summary>One resolved electrical meter: live draw is derived from the device's own state and integrated into kWh.</summary>
+    private sealed class PowerMeter
+    {
+        public required VirtualDevice Device { get; init; }
+        public required double RatedWatts { get; init; }
+        public required string? SwitchCapability { get; init; }
+        public required string? LevelCapability { get; init; }
+        public required double LevelMax { get; init; }
+        public required double StandbyWatts { get; init; }
+        public required bool ExposePower { get; init; }
+        public required string PowerCapability { get; init; }
+        public required string EnergyCapability { get; init; }
+        public required double NoiseWatts { get; init; }
+    }
+
     /// <summary>Raised on any device state change / log line; the web layer forwards it to WebSocket clients.</summary>
     public event Action<EmulatorUpdate>? Updated;
 
@@ -84,6 +136,9 @@ public sealed class EmulatorEngine : IHostedService
     {
         _config = config;
         _logger = logger;
+        // Give every metered device its energy (+ optional live power) capability before the VirtualDevices are
+        // built, so the meters ride along the normal announce/state path without being spelled out in `devices`.
+        AugmentMeteredDeviceConfigs(config);
         _devices = config.Devices.Select(d => new VirtualDevice(d)).ToList();
         _hubId = MakeHubId(config.HomeName);
 
@@ -92,14 +147,77 @@ public sealed class EmulatorEngine : IHostedService
         {
             _externalCenter = _externalConfig.Initial;
             _externalTemp = _externalConfig.Initial;
-            _externalDevice = _devices.FirstOrDefault(d => d.Id == _externalConfig.DeviceId);
-            if (_externalDevice is null)
+            // An empty device_id means the outdoor temperature drives the physics only (heat-loss term) without
+            // being exposed as a device — the rooms still cool toward a realistic outdoors with nothing to clutter
+            // the device list. A non-empty id that can't be resolved is a genuine misconfiguration, so warn there.
+            _externalDevice = string.IsNullOrEmpty(_externalConfig.DeviceId)
+                ? null
+                : _devices.FirstOrDefault(d => d.Id == _externalConfig.DeviceId);
+            if (_externalDevice is null && !string.IsNullOrEmpty(_externalConfig.DeviceId))
                 _logger.LogWarning("external_temperature references unknown device '{Id}'", _externalConfig.DeviceId);
             else
-                _externalDevice.SetValue(_externalConfig.Capability, Math.Round(_externalTemp, 1));
+                _externalDevice?.SetValue(_externalConfig.Capability, Math.Round(_externalTemp, 1));
         }
 
         _thermalZones = BuildThermalZones(config);
+        _co2Zones = BuildCo2Zones(config);
+        _pressureZones = BuildPressureZones(config);
+        _powerMeters = BuildPowerMeters(config);
+    }
+
+    /// <summary>
+    /// Appends the read-only <c>energy</c> (kWh) — and, unless it collides with a control dial, live <c>power</c>
+    /// (W) — capability to each metered device's config so they are announced and seeded like any other capability.
+    /// A convector already owns <c>power</c> as its % dial, so its meter runs with <c>expose_power = false</c>.
+    /// </summary>
+    private static void AugmentMeteredDeviceConfigs(HomeConfiguration config)
+    {
+        foreach (var m in config.PowerMeters)
+        {
+            var dev = config.Devices.FirstOrDefault(d => d.Id == m.DeviceId);
+            if (dev is null) continue;
+
+            if (dev.Capabilities.All(c => c.Id != m.EnergyCapability))
+                dev.Capabilities.Add(new CapabilityConfiguration
+                {
+                    Id = m.EnergyCapability, Kind = "Number", Unit = "kWh", Min = 0, Writable = false
+                });
+
+            if (m.ExposePower && dev.Capabilities.All(c => c.Id != m.PowerCapability))
+                dev.Capabilities.Add(new CapabilityConfiguration
+                {
+                    Id = m.PowerCapability, Kind = "Number", Unit = "W", Min = 0, Writable = false
+                });
+        }
+    }
+
+    /// <summary>Resolves each power meter to its device; the energy accumulator lives in the device's seeded (0) state.</summary>
+    private List<PowerMeter> BuildPowerMeters(HomeConfiguration config)
+    {
+        var meters = new List<PowerMeter>();
+        foreach (var m in config.PowerMeters)
+        {
+            var device = _devices.FirstOrDefault(d => d.Id == m.DeviceId);
+            if (device is null)
+            {
+                _logger.LogWarning("power_meter references unknown device '{Id}' — skipped", m.DeviceId);
+                continue;
+            }
+            meters.Add(new PowerMeter
+            {
+                Device = device,
+                RatedWatts = m.RatedWatts,
+                SwitchCapability = m.SwitchCapability,
+                LevelCapability = m.LevelCapability,
+                LevelMax = m.LevelMax > 0 ? m.LevelMax : 100,
+                StandbyWatts = m.StandbyWatts,
+                ExposePower = m.ExposePower,
+                PowerCapability = m.PowerCapability,
+                EnergyCapability = m.EnergyCapability,
+                NoiseWatts = m.NoiseWatts,
+            });
+        }
+        return meters;
     }
 
     /// <summary>Resolves each configured zone to its heater/sensor devices and seeds the sensor with the start temp.</summary>
@@ -128,6 +246,81 @@ public sealed class EmulatorEngine : IHostedService
                 AmbientCoupling = z.AmbientCoupling,
                 Noise = z.Noise,
                 Temp = z.InitialTemp,
+            });
+        }
+        return zones;
+    }
+
+    /// <summary>Resolves each CO₂ zone to its ventilation/sensor (and optional presence) devices and seeds the reading.</summary>
+    private List<Co2Zone> BuildCo2Zones(HomeConfiguration config)
+    {
+        var zones = new List<Co2Zone>();
+        foreach (var z in config.Co2Zones)
+        {
+            var vent = _devices.FirstOrDefault(d => d.Id == z.VentDevice);
+            var sensor = _devices.FirstOrDefault(d => d.Id == z.SensorDevice);
+            if (vent is null || sensor is null)
+            {
+                _logger.LogWarning("co2_zone '{Name}' references missing device(s) vent='{V}' sensor='{S}' — skipped",
+                    z.Name, z.VentDevice, z.SensorDevice);
+                continue;
+            }
+            var presence = string.IsNullOrEmpty(z.PresenceDevice)
+                ? null
+                : _devices.FirstOrDefault(d => d.Id == z.PresenceDevice);
+            if (presence is null && !string.IsNullOrEmpty(z.PresenceDevice))
+                _logger.LogWarning("co2_zone '{Name}' references unknown presence device '{P}' — gate disabled", z.Name, z.PresenceDevice);
+
+            var equilibrium = z.EquilibriumFraction is > 0 and <= 1 ? z.EquilibriumFraction : 0.5;
+            sensor.SetValue(z.SensorCapability, Math.Round(Math.Clamp(z.Initial, z.Min, z.Max)));
+            zones.Add(new Co2Zone
+            {
+                Name = z.Name,
+                Vent = vent,
+                FanCapability = z.VentCapability,
+                VentSwitchCapability = z.VentSwitchCapability,
+                Sensor = sensor,
+                Co2Capability = z.SensorCapability,
+                Generation = z.Generation,
+                EquilibriumFraction = equilibrium,
+                Min = z.Min,
+                Max = z.Max,
+                Noise = z.Noise,
+                Presence = presence,
+                PresenceCapability = z.PresenceCapability,
+                IdleDecay = Math.Clamp(z.IdleDecay, 0, 1),
+            });
+        }
+        return zones;
+    }
+
+    /// <summary>Resolves each pressure zone to its pump/sensor devices and seeds the starting pressure.</summary>
+    private List<PressureZone> BuildPressureZones(HomeConfiguration config)
+    {
+        var zones = new List<PressureZone>();
+        foreach (var z in config.PressureZones)
+        {
+            var pump = _devices.FirstOrDefault(d => d.Id == z.PumpDevice);
+            var sensor = _devices.FirstOrDefault(d => d.Id == z.SensorDevice);
+            if (pump is null || sensor is null)
+            {
+                _logger.LogWarning("pressure_zone '{Name}' references missing device(s) pump='{P}' sensor='{S}' — skipped",
+                    z.Name, z.PumpDevice, z.SensorDevice);
+                continue;
+            }
+            sensor.SetValue(z.SensorCapability, Math.Round(Math.Clamp(z.Initial, z.Min, z.Max), 2));
+            zones.Add(new PressureZone
+            {
+                Name = z.Name,
+                Pump = pump,
+                PumpCapability = z.PumpCapability,
+                Sensor = sensor,
+                PressureCapability = z.SensorCapability,
+                FillRate = z.FillRate,
+                DrainRate = z.DrainRate,
+                Min = z.Min,
+                Max = z.Max,
+                Noise = z.Noise,
             });
         }
         return zones;
@@ -405,6 +598,9 @@ public sealed class EmulatorEngine : IHostedService
                         await PublishAvailabilityAsync(device, online: true);
 
                 await StepThermalAsync(tick);
+                await StepCo2Async();
+                await StepPressureAsync();
+                await StepPowerAsync();
 
                 foreach (var device in _devices.Where(d => d.Simulate))
                 {
@@ -481,6 +677,119 @@ public sealed class EmulatorEngine : IHostedService
         var periodSeconds = Math.Max(1, _externalConfig.DriftPeriodMinutes) * 60.0;
         var phase = 2 * Math.PI * (tick * TickSeconds) / periodSeconds;
         return _externalCenter + _externalConfig.DriftAmplitude * Math.Sin(phase);
+    }
+
+    // ---- CO₂ physics (ventilation ⇄ sensor coupling, hidden from the server) ----
+
+    /// <summary>
+    /// Advances every CO₂ reading one tick. The reading integrates the room's occupant load against the shared
+    /// fan's scrubbing, so it holds at the fan's equilibrium speed, climbs when the fan slows and drops when it
+    /// speeds up. A presence-gated room (the bathroom) makes no CO₂ while empty and instead decays to its floor.
+    /// The current value is read back from the sensor's state so a manual UI drag carries into the next tick.
+    /// </summary>
+    private async Task StepCo2Async()
+    {
+        foreach (var zone in _co2Zones)
+        {
+            var fan = FanFraction(zone.Vent, zone.FanCapability, zone.VentSwitchCapability);
+            var current = TryToDouble(zone.Sensor.State.GetValueOrDefault(zone.Co2Capability), out var c) ? c : zone.Min;
+
+            double next;
+            var occupied = zone.Presence is null
+                           || zone.Presence.State.GetValueOrDefault(zone.PresenceCapability) is true;
+            if (zone.Presence is not null && !occupied)
+            {
+                // Empty gated room: no occupant load, and the reading settles back toward its floor ("held at min").
+                next = current - zone.IdleDecay * (current - zone.Min);
+            }
+            else
+            {
+                // generation vs fan scrubbing: net zero at equilibrium_fraction, positive below it, negative above.
+                var removal = zone.Generation / zone.EquilibriumFraction * fan;
+                next = current + zone.Generation - removal;
+            }
+
+            next += (_rng.NextDouble() - 0.5) * 2 * zone.Noise;
+            next = Math.Clamp(next, zone.Min, zone.Max);
+            zone.Sensor.SetValue(zone.Co2Capability, Math.Round(next));
+            await PublishStateAsync(zone.Sensor);
+            RaiseState(zone.Sensor);
+        }
+    }
+
+    // ---- Water-tank pressure physics (pump relay ⇄ sensor coupling, hidden from the server) ----
+
+    /// <summary>
+    /// Advances every tank-pressure reading one tick: pressure bleeds off while the pump relay is idle and climbs
+    /// while it runs, clamped to the zone's cap (the relief-valve limit). Read back from state so a UI drag sticks.
+    /// </summary>
+    private async Task StepPressureAsync()
+    {
+        foreach (var zone in _pressureZones)
+        {
+            var pumpOn = zone.Pump.State.GetValueOrDefault(zone.PumpCapability) is true;
+            var current = TryToDouble(zone.Sensor.State.GetValueOrDefault(zone.PressureCapability), out var p) ? p : zone.Min;
+
+            var next = current + (pumpOn ? zone.FillRate : -zone.DrainRate);
+            next += (_rng.NextDouble() - 0.5) * 2 * zone.Noise;
+            next = Math.Clamp(next, zone.Min, zone.Max);
+            zone.Sensor.SetValue(zone.PressureCapability, Math.Round(next, 2));
+            await PublishStateAsync(zone.Sensor);
+            RaiseState(zone.Sensor);
+        }
+    }
+
+    /// <summary>Effective fan speed 0–1: zero when an on/off switch capability is present and off, else the speed dial.</summary>
+    private static double FanFraction(VirtualDevice vent, string fanCapability, string? switchCapability)
+    {
+        if (switchCapability is not null && vent.HasCapability(switchCapability) && vent.State[switchCapability] is false)
+            return 0;
+        return TryToDouble(vent.State.GetValueOrDefault(fanCapability), out var f) ? Math.Clamp(f / 100.0, 0, 1) : 0;
+    }
+
+    // ---- Electrical metering (per-device draw → cumulative energy, consumed by Epic 3C accounting) ----
+
+    /// <summary>
+    /// Advances every meter one tick: derives the appliance's live draw (W) from its own state, publishes it as a
+    /// <c>power</c> reading when exposed, and integrates it into the cumulative <c>energy</c> (kWh) series the
+    /// server's energy accounting reads. Energy is read back from state so it is monotonic across ticks (and a UI
+    /// override just re-bases the counter).
+    /// </summary>
+    private async Task StepPowerAsync()
+    {
+        foreach (var m in _powerMeters)
+        {
+            var draw = MeterDraw(m);
+
+            if (m.ExposePower)
+            {
+                var shown = draw + (m.NoiseWatts > 0 ? (_rng.NextDouble() - 0.5) * 2 * m.NoiseWatts : 0);
+                m.Device.SetValue(m.PowerCapability, Math.Round(Math.Max(0, shown), 1));
+            }
+
+            var prev = TryToDouble(m.Device.State.GetValueOrDefault(m.EnergyCapability), out var e) ? e : 0;
+            var next = prev + draw * TickSeconds / 3600.0 / 1000.0; // W·s → kWh
+            m.Device.SetValue(m.EnergyCapability, Math.Round(next, 5));
+
+            await PublishStateAsync(m.Device);
+            RaiseState(m.Device);
+        }
+    }
+
+    /// <summary>Live draw (W): standby while off, else <c>rated · level</c> with the level dial (0–1) applied when present.</summary>
+    private static double MeterDraw(PowerMeter m)
+    {
+        var on = string.IsNullOrEmpty(m.SwitchCapability)
+                 || !m.Device.HasCapability(m.SwitchCapability)
+                 || m.Device.State[m.SwitchCapability] is not false;
+        if (!on) return m.StandbyWatts;
+
+        var level = 1.0;
+        if (!string.IsNullOrEmpty(m.LevelCapability)
+            && TryToDouble(m.Device.State.GetValueOrDefault(m.LevelCapability), out var lv))
+            level = Math.Clamp(lv / m.LevelMax, 0, 1);
+
+        return Math.Max(m.StandbyWatts, m.RatedWatts * level);
     }
 
     // ---- helpers ----------------------------------------------------------

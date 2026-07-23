@@ -41,10 +41,26 @@ public class CapabilityDevicesController : ControllerBase
     public Task<IActionResult> AssignZone(string id, CancellationToken ct)
         => Forward(HttpMethod.Put, $"api/capability-devices/{Uri.EscapeDataString(id)}/zone", ct);
 
+    /// <summary>Set/clear the user-set friendly name (Epic 3G-alias). Body: <c>{ "alias": "Chandelier" | null }</c>.</summary>
+    [HttpPut("{id}/alias")]
+    public Task<IActionResult> SetAlias(string id, CancellationToken ct)
+        => Forward(HttpMethod.Put, $"api/capability-devices/{Uri.EscapeDataString(id)}/alias", ct);
+
     /// <summary>Set/clear the manual archetype override (Epic 2D). Body: <c>{ "archetype": "light" | null }</c>.</summary>
     [HttpPut("{id}/archetype")]
     public Task<IActionResult> SetArchetype(string id, CancellationToken ct)
         => Forward(HttpMethod.Put, $"api/capability-devices/{Uri.EscapeDataString(id)}/archetype", ct);
+
+    /// <summary>Set/clear the device's energy profile (Epic 3C-D). Body:
+    /// <c>{ "energyProfile": { "track": true, "role": "mains", "maxPowerW": 60, ... } | null }</c>.</summary>
+    [HttpPut("{id}/energy-profile")]
+    public Task<IActionResult> SetEnergyProfile(string id, CancellationToken ct)
+        => Forward(HttpMethod.Put, $"api/capability-devices/{Uri.EscapeDataString(id)}/energy-profile", ct);
+
+    /// <summary>Set/clear the load-shedding profile (Epic 3C-LM). Body: <c>{ "loadShedding": {...} | null }</c>.</summary>
+    [HttpPut("{id}/load-shedding")]
+    public Task<IActionResult> SetLoadShedding(string id, CancellationToken ct)
+        => Forward(HttpMethod.Put, $"api/capability-devices/{Uri.EscapeDataString(id)}/load-shedding", ct);
 
     /// <summary>Delete an offline device from the registry (409 while online). A re-announce recreates it.</summary>
     [HttpDelete("{id}")]

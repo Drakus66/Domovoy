@@ -49,14 +49,16 @@
       "capability": "Single value",
       "chart": "Chart",
       "modes": "Home modes",
-      "scene": "Scene"
+      "scene": "Scene",
+      "energy": "Energy"
     },
     "typeHints": {
       "device": "A full device tile with its quick control.",
       "capability": "One value of a device — e.g. just the humidity of a multi-sensor.",
       "chart": "A telemetry trend for a numeric value.",
       "modes": "A switcher for Home / Away / Night / Vacation.",
-      "scene": "A one-tap button that activates a scene."
+      "scene": "A one-tap button that activates a scene.",
+      "energy": "Consumption, top consumers and money by tariff."
     },
     "pickDevices": "Pick devices",
     "pickDevice": "Pick a device",
@@ -86,7 +88,8 @@
   },
   "widgets": {
     "modes": "Home mode",
-    "scene": "Scene"
+    "scene": "Scene",
+    "energy": "Energy"
   },
   "band": {
     "mode": "Mode",
@@ -110,6 +113,35 @@
     "pending": "Awaiting decision",
     "approve": "Approve",
     "defer": "Later",
-    "empty": "Quiet so far — I haven't changed anything today."
+    "empty": "Quiet so far — I haven't changed anything today.",
+    "scenes": "Scenes",
+    "moreScenes": "All scenes →",
+    "energyToday": "Energy today",
+    "kwh": "kWh"
+  },
+  "energy": {
+    "title": "Energy",
+    "period": {
+      "24": "24h",
+      "168": "7d",
+      "720": "30d"
+    },
+    "cost": "Cost",
+    "consumption": "Consumption",
+    "topConsumers": "Top consumers",
+    "view": {
+      "devices": "Devices",
+      "circuits": "Circuits",
+      "phases": "Phases"
+    },
+    "rankTitle": {
+      "devices": "Top consumers",
+      "circuits": "Consumption by circuit",
+      "phases": "Consumption by phase"
+    },
+    "unaccounted": "Not attributed to devices: {{value}}",
+    "empty": "No devices with energy metering",
+    "mains": "mains",
+    "kwh": "kWh"
   }
 }

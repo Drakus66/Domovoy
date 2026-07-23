@@ -161,6 +161,17 @@ public static class HistoryEndpoints
             return Results.Ok(new { count });
         });
 
+        // GET /api/events/earliest → { earliest: <UTC | null> }. The timestamp of the oldest recorded event —
+        // "how old is the history" for the Epic 3I cold-start gate. Deliberately does NOT go through Window()
+        // (whose 24h default would hide the true start); a plain min over the whole time-series collection.
+        group.MapGet("/events/earliest", async (IMongoDatabase db) =>
+        {
+            var oldest = await db.GetCollection<DeviceEventLog>(TimeSeriesInitializer.DeviceEventsCollection)
+                .Find(FilterDefinition<DeviceEventLog>.Empty)
+                .SortBy(x => x.Timestamp).Limit(1).FirstOrDefaultAsync();
+            return Results.Ok(new { earliest = oldest?.Timestamp });
+        });
+
         // GET /api/events/count-by-zone?capabilityId=&from=&to= → [{ zoneId, count }]
         group.MapGet("/events/count-by-zone", async (
             string? capabilityId, DateTime? from, DateTime? to, IMongoDatabase db) =>
@@ -181,8 +192,8 @@ public static class HistoryEndpoints
                 return Results.BadRequest(new { error = "bucket must be minute, hour or day" });
 
             var which = (agg ?? "avg").ToLowerInvariant();
-            if (which is not ("avg" or "min" or "max"))
-                return Results.BadRequest(new { error = "agg must be avg, min or max" });
+            if (!AggAllowed(which))
+                return Results.BadRequest(new { error = AggError });
 
             var (lo, hi, _) = Window(from, to, null);
 
@@ -194,34 +205,19 @@ public static class HistoryEndpoints
             if (!string.IsNullOrEmpty(zoneId)) match["Meta.ZoneId"] = zoneId;
             if (!string.IsNullOrEmpty(capabilityId)) match["Meta.CapabilityId"] = capabilityId;
 
-            var pipeline = new[]
-            {
-                new BsonDocument("$match", match),
-                new BsonDocument("$group", new BsonDocument
-                {
-                    { "_id", new BsonDocument("$dateTrunc", new BsonDocument
-                        { { "date", "$Timestamp" }, { "unit", unit }, { "binSize", 1 } }) },
-                    { "avg", new BsonDocument("$avg", "$Value") },
-                    { "min", new BsonDocument("$min", "$Value") },
-                    { "max", new BsonDocument("$max", "$Value") },
-                    { "count", new BsonDocument("$sum", 1) },
-                }),
-                new BsonDocument("$sort", new BsonDocument("_id", 1)),
-                new BsonDocument("$limit", MaxLimit),
-            };
+            var stages = new List<BsonDocument> { new("$match", match) };
+            // delta reads first/last within each bucket → the samples must be time-ordered before $group.
+            if (which == "delta") stages.Add(new BsonDocument("$sort", new BsonDocument("Timestamp", 1)));
+            stages.Add(new BsonDocument("$group", GroupStage(new BsonDocument("$dateTrunc", new BsonDocument
+                { { "date", "$Timestamp" }, { "unit", unit }, { "binSize", 1 } }))));
+            stages.Add(new BsonDocument("$sort", new BsonDocument("_id", 1)));
+            stages.Add(new BsonDocument("$limit", MaxLimit));
 
             var rows = await db.GetCollection<SensorReading>(TimeSeriesInitializer.SensorReadingsCollection)
-                .Aggregate<BsonDocument>(pipeline)
+                .Aggregate<BsonDocument>(stages.ToArray())
                 .ToListAsync();
 
-            var buckets = rows.Select(r =>
-            {
-                var avg = r["avg"].ToDouble();
-                var min = r["min"].ToDouble();
-                var max = r["max"].ToDouble();
-                var value = which switch { "min" => min, "max" => max, _ => avg };
-                return new AggregateBucket(r["_id"].ToUniversalTime(), value, min, max, avg, r["count"].ToInt64());
-            });
+            var buckets = rows.Select(r => BucketOf(r, r["_id"].ToUniversalTime(), which));
 
             return Results.Ok(buckets);
         });
@@ -273,8 +269,8 @@ public static class HistoryEndpoints
             throw new ArgumentException("bucket must be minute, hour or day");
 
         var which = (agg ?? "avg").ToLowerInvariant();
-        if (which is not ("avg" or "min" or "max"))
-            throw new ArgumentException("agg must be avg, min or max");
+        if (!AggAllowed(which))
+            throw new ArgumentException(AggError);
 
         // De-duplicate and drop blanks so a repeated series doesn't skew the $or or the response.
         var specs = (series ?? Array.Empty<SeriesSpec>())
@@ -293,33 +289,28 @@ public static class HistoryEndpoints
             { "Meta.DeviceId", s.DeviceId }, { "Meta.CapabilityId", s.CapabilityId },
         }));
 
-        var pipeline = new[]
+        var stages = new List<BsonDocument>
         {
-            new BsonDocument("$match", new BsonDocument
+            new("$match", new BsonDocument
             {
                 { "Timestamp", new BsonDocument { { "$gte", lo }, { "$lte", hi } } },
                 { "$or", orConds },
             }),
-            new BsonDocument("$group", new BsonDocument
-            {
-                { "_id", new BsonDocument
-                    {
-                        { "d", "$Meta.DeviceId" },
-                        { "c", "$Meta.CapabilityId" },
-                        { "t", new BsonDocument("$dateTrunc", new BsonDocument
-                            { { "date", "$Timestamp" }, { "unit", unit }, { "binSize", 1 } }) },
-                    } },
-                { "avg", new BsonDocument("$avg", "$Value") },
-                { "min", new BsonDocument("$min", "$Value") },
-                { "max", new BsonDocument("$max", "$Value") },
-                { "count", new BsonDocument("$sum", 1) },
-            }),
-            new BsonDocument("$sort", new BsonDocument { { "_id.d", 1 }, { "_id.c", 1 }, { "_id.t", 1 } }),
-            new BsonDocument("$limit", MaxLimit),
         };
+        // delta reads first/last within each bucket → time-order the samples before $group.
+        if (which == "delta") stages.Add(new BsonDocument("$sort", new BsonDocument("Timestamp", 1)));
+        stages.Add(new BsonDocument("$group", GroupStage(new BsonDocument
+        {
+            { "d", "$Meta.DeviceId" },
+            { "c", "$Meta.CapabilityId" },
+            { "t", new BsonDocument("$dateTrunc", new BsonDocument
+                { { "date", "$Timestamp" }, { "unit", unit }, { "binSize", 1 } }) },
+        })));
+        stages.Add(new BsonDocument("$sort", new BsonDocument { { "_id.d", 1 }, { "_id.c", 1 }, { "_id.t", 1 } }));
+        stages.Add(new BsonDocument("$limit", MaxLimit));
 
         var rows = await db.GetCollection<SensorReading>(TimeSeriesInitializer.SensorReadingsCollection)
-            .Aggregate<BsonDocument>(pipeline)
+            .Aggregate<BsonDocument>(stages.ToArray())
             .ToListAsync();
 
         // Split the flat, time-sorted rows back into per-series bucket lists.
@@ -328,12 +319,8 @@ public static class HistoryEndpoints
         {
             var id = r["_id"].AsBsonDocument;
             var key = (id["d"].AsString, id["c"].AsString);
-            var avg = r["avg"].ToDouble();
-            var min = r["min"].ToDouble();
-            var max = r["max"].ToDouble();
-            var value = which switch { "min" => min, "max" => max, _ => avg };
             if (!byKey.TryGetValue(key, out var list)) byKey[key] = list = new List<AggregateBucket>();
-            list.Add(new AggregateBucket(id["t"].ToUniversalTime(), value, min, max, avg, r["count"].ToInt64()));
+            list.Add(BucketOf(r, id["t"].ToUniversalTime(), which));
         }
 
         // Return in the requested order; keep only the most-recent `cap` buckets of each series.
@@ -399,6 +386,45 @@ public static class HistoryEndpoints
             Str(r, "CorrelationId"),
             r.TryGetValue("NewValue", out var nv) && !nv.IsBsonNull ? BsonTypeMapper.MapToDotNetValue(nv) : null))
             .ToList();
+    }
+
+    /// <summary>Aggregations the rollup endpoints accept: avg/min/max = band stats; <c>sum</c> = total of the
+    /// bucket's samples; <c>delta</c> = last−first within the bucket — energy consumption from a cumulative
+    /// counter (Epic 3C). Closed allow-list (no injection into the pipeline).</summary>
+    private static bool AggAllowed(string agg) =>
+        agg is "avg" or "min" or "max" or "sum" or "delta";
+
+    private const string AggError = "agg must be avg, min, max, sum or delta";
+
+    /// <summary>Shared <c>$group</c> body for a rollup bucket keyed by <paramref name="id"/>. Carries every
+    /// accumulator the allowed aggs need; <c>first</c>/<c>last</c> drive <c>delta</c> and are only read on the
+    /// delta path, which sorts by time upstream so they are the earliest/latest sample of the bucket.</summary>
+    private static BsonDocument GroupStage(BsonValue id) => new()
+    {
+        { "_id", id },
+        { "avg", new BsonDocument("$avg", "$Value") },
+        { "min", new BsonDocument("$min", "$Value") },
+        { "max", new BsonDocument("$max", "$Value") },
+        { "sum", new BsonDocument("$sum", "$Value") },
+        { "first", new BsonDocument("$first", "$Value") },
+        { "last", new BsonDocument("$last", "$Value") },
+        { "count", new BsonDocument("$sum", 1) },
+    };
+
+    /// <summary>Project one grouped row into an <see cref="AggregateBucket"/>, picking <c>Value</c> per agg.
+    /// A counter reset within the bucket (<c>last &lt; first</c>) is read as "restarted then climbed to last",
+    /// so a spurious negative delta never surfaces.</summary>
+    private static AggregateBucket BucketOf(BsonDocument r, DateTime ts, string which)
+    {
+        var avg = r["avg"].ToDouble();
+        var min = r["min"].ToDouble();
+        var max = r["max"].ToDouble();
+        var sum = r["sum"].ToDouble();
+        var first = r["first"].ToDouble();
+        var last = r["last"].ToDouble();
+        var delta = last >= first ? last - first : last;
+        var value = which switch { "min" => min, "max" => max, "sum" => sum, "delta" => delta, _ => avg };
+        return new AggregateBucket(ts, value, min, max, avg, r["count"].ToInt64());
     }
 
     private static string ToCsv(IEnumerable<TelemetryDto> samples)

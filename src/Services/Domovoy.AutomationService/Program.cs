@@ -69,6 +69,7 @@ internal static class Program
             });
             builder.Services.AddSingleton<SiteContext>();     // 2L: site timezone for the Sun/Time sensors' local times
             builder.Services.AddSingleton<CalendarContext>(); // 2L: weekend/holiday config for the Calendar sensor
+            builder.Services.AddSingleton<TariffContext>();   // 3C: live tariff for the tariff device + cheap-hours block
             builder.Services.AddSingleton<RuleStore>();
             builder.Services.AddSingleton<SceneStore>();      // 3B: scenes the `scene` action activates
             builder.Services.AddSingleton<RuleEvaluator>();
@@ -77,6 +78,7 @@ internal static class Program
             builder.Services.AddSingleton<ActionExecutor>();
             builder.Services.AddSingleton<RuleRunner>();
             builder.Services.AddSingleton<HomeModeState>();
+            builder.Services.AddSingleton<PowerSourceState>(); // 3C-LM: live power_source signal for LoadManager
             builder.Services.AddSingleton<Ml.MlRuntimeState>(); // 3I: live ML-layer switches (RefreshLoop syncs ml_settings)
             builder.Services.AddSingleton<ReplayService>();   // 1F: dry-run a rule over history
             // 2I: registry of model templates; the trainer selects the best applicable cell by holdout.
@@ -103,6 +105,11 @@ internal static class Program
             builder.Services.AddHostedService(sp => sp.GetRequiredService<BlockRuntime>()); // + expose runtime health
             builder.Services.AddHostedService<SystemSensorService>(); // 2L: virtual sensors (Sun/Time/Calendar/Home)
             builder.Services.AddHostedService<VariableRuntimeService>(); // 3E: global variables as virtual capability devices
+            builder.Services.AddHostedService<TariffService>();       // 3C: tariff virtual device (price/tariff_zone)
+            builder.Services.AddSingleton<LoadManager>();           // 3C-LM: load-shedding coordinator
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<LoadManager>()); // + expose to RefreshLoop.Sync
+            builder.Services.AddSingleton<DeviceEnergyService>();   // 3C-D: per-device power estimate + kWh integration
+            builder.Services.AddHostedService(sp => sp.GetRequiredService<DeviceEnergyService>()); // + expose to RefreshLoop.Sync
             builder.Services.AddSingleton<MlTrainingService>();     // 2A: train + keep the model loaded
             builder.Services.AddHostedService(sp => sp.GetRequiredService<MlTrainingService>());
             builder.Services.AddSingleton<Ml.MlProposerGate>();    // 3I: shared proposer gate (maturity/toggles/journal/notify)

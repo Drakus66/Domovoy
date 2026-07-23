@@ -3,6 +3,7 @@
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
 import apiClient from './client';
+import type { LoadSheddingProfile } from './loadManagement';
 
 export type CapabilityKind = 'Boolean' | 'Number' | 'Enum' | 'Color' | 'Text' | 'Action';
 
@@ -20,12 +21,35 @@ export interface Capability {
   values?: string[] | null;
   /** UI editor hint for a writable value: 'geo' (map picker) | 'time' (time input). */
   editor?: string | null;
+  /** True for a series the platform derives rather than the device reporting it (Epic 3C-D power/energy). */
+  synthetic?: boolean;
+}
+
+/** Per-device energy accounting (matches DbGateway EnergyProfile, Epic 3C-D). */
+export interface EnergyProfile {
+  /** Count this device toward kWh totals; null ⇒ default (metered devices count, others don't). */
+  track?: boolean | null;
+  /** 'mains' (aggregate meter, grand total only) | 'consumer' | null (a normal load). */
+  role?: string | null;
+  /** Draw at full load, W — the nameplate figure; required to estimate a device with no meter. */
+  maxPowerW?: number | null;
+  /** Draw at the regulator's minimum while on, W. */
+  minPowerW?: number | null;
+  /** Draw while off, W (standby). */
+  standbyPowerW?: number | null;
+  /** Numeric capability (0..100) that scales the draw; null ⇒ auto-detected regulator or full load. */
+  scaleCapabilityId?: string | null;
+  /** Circuit of the power topology this device hangs on (Epic 3C-D stage 2). */
+  circuitId?: string | null;
 }
 
 /** Capability device read-model (matches DbGateway CapabilityDeviceDocument). */
 export interface CapabilityDevice {
   id: string;
+  /** Raw name reported by the adapter (a Zigbee IEEE address for paired Zigbee devices). */
   name: string;
+  /** User-set friendly name (Epic 3G-alias); null/absent ⇒ UI falls back to a type label / the raw name. */
+  alias?: string | null;
   adapterSource: string;
   model?: string | null;
   zoneId: string;
@@ -36,6 +60,10 @@ export interface CapabilityDevice {
   autoArchetype?: string;
   /** Manual override; null/absent ⇒ use autoArchetype. */
   archetype?: string | null;
+  /** Energy accounting for this device (Epic 3C-D); null/absent ⇒ defaults. */
+  energyProfile?: EnergyProfile | null;
+  /** Load-shedding profile (Epic 3C-LM); null/absent ⇒ unmanaged by LoadManager. */
+  loadShedding?: LoadSheddingProfile | null;
   lastUpdated: string;
 }
 
@@ -72,6 +100,12 @@ export const capabilityDevicesApi = {
   setArchetype: (deviceId: string, archetype: string | null): Promise<void> =>
     apiClient
       .put(`/api/capability-devices/${encodeURIComponent(deviceId)}/archetype`, { archetype })
+      .then(() => undefined),
+
+  /** Set the user-facing friendly name (Epic 3G-alias); pass null/'' to clear (revert to the type label). */
+  setAlias: (deviceId: string, alias: string | null): Promise<void> =>
+    apiClient
+      .put(`/api/capability-devices/${encodeURIComponent(deviceId)}/alias`, { alias })
       .then(() => undefined),
 
   /**

@@ -8,6 +8,7 @@ import CircleIcon from '@mui/icons-material/Circle';
 import type { CapabilityDevice } from '../../api/capabilityDevices';
 import type { CommandFn } from './CapabilityControls';
 import { asBool, asNum, describeDevice, primaryCapability, trendCapability } from './deviceVisuals';
+import { deviceLabel } from './deviceNaming';
 import { useTelemetryBatch } from '../charts/useTelemetryBatch';
 import Sparkline from '../charts/Sparkline';
 import { useDeviceProvenance } from './useDeviceProvenance';
@@ -91,8 +92,8 @@ export default function DeviceTile({
           </Stack>
 
           <Box flex={1} minWidth={0}>
-            <Typography variant="subtitle1" fontWeight={700} noWrap title={device.name}>
-              {device.name}
+            <Typography variant="subtitle1" fontWeight={700} noWrap title={deviceLabel(device)}>
+              {deviceLabel(device)}
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap display="block">
               {secondary}

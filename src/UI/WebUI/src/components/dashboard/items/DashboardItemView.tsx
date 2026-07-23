@@ -14,6 +14,7 @@ import CapabilityTile from './CapabilityTile';
 import ChartTile from './ChartTile';
 import ModesTile from './ModesTile';
 import SceneTile from './SceneTile';
+import EnergyTile from './EnergyTile';
 
 const asChartHours = (v: unknown): number => {
   const n = typeof v === 'number' ? v : Number(v);
@@ -40,6 +41,7 @@ export default function DashboardItemView({
 
   if (item.type === 'modes') return <ModesTile />;
   if (item.type === 'scene') return <SceneTile sceneId={(item.params?.sceneId as string) ?? ''} />;
+  if (item.type === 'energy') return <EnergyTile />;
 
   const device = item.deviceId ? deviceById.get(item.deviceId) : undefined;
   if (!device) return <PlaceholderCard text={t('placeholder.deviceGone')} moved />;
@@ -71,10 +73,11 @@ export default function DashboardItemView({
 }
 
 /** "Chart items want the wide slot" — grid width hint per item type. */
-export const itemGridWidth = (item: DashboardItem) =>
-  item.type === 'chart' || item.type === 'modes'
-    ? { xs: 12, md: 6 } as const
-    : { xs: 12, sm: 6, md: 4, lg: 3 } as const;
+export const itemGridWidth = (item: DashboardItem) => {
+  if (item.type === 'energy') return { xs: 12, md: 8, lg: 6 } as const; // consumption + Top Consumers need room
+  if (item.type === 'chart' || item.type === 'modes') return { xs: 12, md: 6 } as const;
+  return { xs: 12, sm: 6, md: 4, lg: 3 } as const;
+};
 
 function PlaceholderCard({ text, moved = false }: { text: string; moved?: boolean }) {
   const Icon = moved ? NightShelterRoundedIcon : HelpOutlineRoundedIcon;

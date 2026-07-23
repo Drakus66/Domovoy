@@ -88,6 +88,53 @@ public sealed class HistoryBatchTests
     }
 
     [Fact]
+    public async Task AggregateBatch_ComputesSumAndDelta_ForCumulativeCounter()
+    {
+        var d = Guid.NewGuid().ToString();
+        var now = DateTime.UtcNow;
+
+        // A cumulative energy counter climbing within one bucket (Epic 3C): consumption = last − first.
+        // Sub-10s spacing keeps all three in one clock-hour bucket regardless of when the test runs.
+        await Readings.InsertManyAsync(new[]
+        {
+            Reading(d, "energy", 10, now.AddSeconds(-6)),
+            Reading(d, "energy", 12, now.AddSeconds(-3)),
+            Reading(d, "energy", 15, now),
+        });
+
+        var delta = await HistoryEndpoints.AggregateBatchAsync(
+            _fx.Db, new[] { new HistoryEndpoints.SeriesSpec(d, "energy") },
+            from: null, to: null, bucket: "hour", agg: "delta", maxPoints: null);
+        Assert.Equal(5, Assert.Single(delta.Single().Buckets).Value, 3); // 15 − 10
+
+        var sum = await HistoryEndpoints.AggregateBatchAsync(
+            _fx.Db, new[] { new HistoryEndpoints.SeriesSpec(d, "energy") },
+            from: null, to: null, bucket: "hour", agg: "sum", maxPoints: null);
+        Assert.Equal(37, Assert.Single(sum.Single().Buckets).Value, 3); // 10 + 12 + 15
+    }
+
+    [Fact]
+    public async Task AggregateBatch_Delta_TreatsCounterResetAsRestart()
+    {
+        var d = Guid.NewGuid().ToString();
+        var now = DateTime.UtcNow;
+
+        // Counter reset mid-bucket (device reboot): last < first ⇒ delta reads as "restarted, then climbed
+        // to last" (never a spurious negative).
+        await Readings.InsertManyAsync(new[]
+        {
+            Reading(d, "energy", 40, now.AddSeconds(-6)),
+            Reading(d, "energy", 42, now.AddSeconds(-3)),
+            Reading(d, "energy", 3, now),
+        });
+
+        var delta = await HistoryEndpoints.AggregateBatchAsync(
+            _fx.Db, new[] { new HistoryEndpoints.SeriesSpec(d, "energy") },
+            from: null, to: null, bucket: "hour", agg: "delta", maxPoints: null);
+        Assert.Equal(3, Assert.Single(delta.Single().Buckets).Value, 3); // reset → last (3)
+    }
+
+    [Fact]
     public async Task AggregateBatch_RejectsBadBucket_AndEmptySeriesIsEmpty()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => HistoryEndpoints.AggregateBatchAsync(
