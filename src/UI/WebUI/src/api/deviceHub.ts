@@ -15,6 +15,10 @@ import { getAccessToken } from './auth';
 // (a '//…' URL is protocol-relative and would resolve the host as 'hub').
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
 export const HUB_URL = `${API_BASE}/hub/devices`;
+// Notifications ride a dedicated hub (2M.2): the device hub broadcasts the whole state firehose to every
+// connection, so a banner-only client on it would receive (and warn about) every device update. This hub
+// only ever pushes NotificationRaised, so the notification listener stays quiet.
+export const NOTIFICATION_HUB_URL = `${API_BASE}/hub/notifications`;
 
 // Capped backoff used both for the initial connect retry and for automatic reconnects:
 // 0s, 2s, 5s, then 10s forever. The dashboard must stay live across gateway restarts/blips,
@@ -26,16 +30,26 @@ const reconnectPolicy: IRetryPolicy = {
   nextRetryDelayInMilliseconds: (ctx: RetryContext) => backoffFor(ctx.previousRetryCount),
 };
 
-/** Build the device-hub connection with indefinite, capped-backoff automatic reconnect. */
-export function buildDeviceHubConnection(): HubConnection {
+/** Build a hub connection to <paramref name="url"/> with indefinite, capped-backoff automatic reconnect. */
+function buildHubConnection(url: string): HubConnection {
   return new HubConnectionBuilder()
     // A WebSocket can't carry an Authorization header, so SignalR sends the token as ?access_token= on /hub/*;
     // the gateway lifts it back out (JwtBearerEvents.OnMessageReceived). accessTokenFactory is re-invoked on each
     // (re)connect, so a token refreshed mid-session is picked up automatically. Empty when auth is off.
-    .withUrl(HUB_URL, { accessTokenFactory: () => getAccessToken() ?? '' })
+    .withUrl(url, { accessTokenFactory: () => getAccessToken() ?? '' })
     .withAutomaticReconnect(reconnectPolicy)
     .configureLogging(LogLevel.Warning)
     .build();
+}
+
+/** Build the device-state hub connection (real-time device/zigbee updates). */
+export function buildDeviceHubConnection(): HubConnection {
+  return buildHubConnection(HUB_URL);
+}
+
+/** Build the notifications-only hub connection (2M.2 in-app banners). */
+export function buildNotificationHubConnection(): HubConnection {
+  return buildHubConnection(NOTIFICATION_HUB_URL);
 }
 
 /**

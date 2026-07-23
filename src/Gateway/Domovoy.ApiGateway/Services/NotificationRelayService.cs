@@ -12,16 +12,18 @@ namespace Domovoy.ApiGateway.Services;
 /// <summary>
 /// Relays the first-party LAN notification channel (2M.2) to connected clients. The AutomationService's
 /// SignalRChannel publishes <see cref="NotificationRaisedV1"/> on the bus (it can't reach the hub, which lives
-/// here); this service subscribes and pushes each one to every connected client as a <c>NotificationRaised</c>
-/// hub event, which the WebUI turns into an in-app banner. Mirrors <see cref="EventRelayService"/>.
+/// here); this service subscribes and pushes each one to every client connected to the dedicated
+/// <see cref="NotificationHub"/> as a <c>NotificationRaised</c> event, which the WebUI turns into an in-app
+/// banner. Uses NotificationHub (not DeviceHub) so banner clients don't receive the device-state firehose.
+/// Mirrors <see cref="EventRelayService"/>.
 /// </summary>
 public sealed class NotificationRelayService : BackgroundService
 {
     private readonly IMessageBus _bus;
-    private readonly IHubContext<DeviceHub> _hub;
+    private readonly IHubContext<NotificationHub> _hub;
     private readonly ILogger<NotificationRelayService> _logger;
 
-    public NotificationRelayService(IMessageBus bus, IHubContext<DeviceHub> hub, ILogger<NotificationRelayService> logger)
+    public NotificationRelayService(IMessageBus bus, IHubContext<NotificationHub> hub, ILogger<NotificationRelayService> logger)
     {
         _bus = bus;
         _hub = hub;

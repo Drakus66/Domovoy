@@ -201,8 +201,10 @@ internal static class Program
             app.MapPost("/api/notifications/test",
                 async (Services.Notifications.NotificationDispatcher dispatcher, CancellationToken ct) =>
                 {
+                    // "warning" so the test still pops a banner under the WebUI's important-only threshold
+                    // (info-level notifications are journal-only) — it stays a useful end-to-end smoke test.
                     var delivered = await dispatcher.DispatchAsync(
-                        new Services.Notifications.NotificationMessage("Domovoy", "Test notification", "info"), ct);
+                        new Services.Notifications.NotificationMessage("Domovoy", "Test notification", "warning"), ct);
                     return Results.Ok(new { delivered, enabled = dispatcher.EnabledChannels });
                 });
 
