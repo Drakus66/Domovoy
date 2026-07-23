@@ -54,7 +54,8 @@
     "set": "set {{assignments}}",
     "wait": "wait {{seconds}}s",
     "notify": "notify \"{{message}}\"",
-    "scene": "activate scene \"{{name}}\""
+    "scene": "activate scene \"{{name}}\"",
+    "waitForEvent": "wait for {{capability}} {{op}} {{value}}, timeout {{seconds}}s"
   },
   "dialog": {
     "createTitle": "New automation",
@@ -110,7 +111,7 @@
     },
     "action": {
       "type": "Action type",
-      "types": { "Command": "Command a device", "Delay": "Delay", "Notify": "Notification", "Scene": "Activate a scene" },
+      "types": { "Command": "Command a device", "Delay": "Delay", "Notify": "Notification", "Scene": "Activate a scene", "WaitForEvent": "Wait for event" },
       "device": "Device",
       "capability": "Capability",
       "value": "Value",
@@ -119,7 +120,22 @@
       "messageHelper": "Shown in Activity and sent to enabled channels",
       "scene": "Scene",
       "sceneHelper": "The scene to activate when this rule runs",
-      "noScenes": "No scenes yet — create one on the Scenes page first"
+      "noScenes": "No scenes yet — create one on the Scenes page first",
+      "waitDevice": "Device",
+      "waitZone": "Zone",
+      "waitCapability": "Capability",
+      "waitOp": "Operator",
+      "waitValue": "Value",
+      "timeoutSeconds": "Timeout, seconds (default 300)",
+      "onTimeout": {
+        "title": "On timeout",
+        "hint": "Runs only if the wait timed out instead of matching. Ends the action sequence — it does not resume after this branch."
+      },
+      "onError": {
+        "title": "On error",
+        "hint": "Runs if this action fails at runtime, instead of aborting the whole rule run. Use {error} in a message to include the error text. Ends the action sequence."
+      },
+      "addBranchAction": "Add action"
     }
   },
   "templates": {
@@ -182,5 +198,44 @@
     "ran": "ran ({{count}})",
     "failed": "failed",
     "skipped": "skipped"
+  },
+  "requiredExpression": {
+    "add": "Add required expression",
+    "title": "Required expression (advanced)",
+    "hint": "Combine the guards below by index — C0, C1, … — with && (and), || (or), ! (not) and parentheses. Leave blank to require all of them (AND).",
+    "expression": "Expression",
+    "remove": "Remove required expression",
+    "gated": "Gated"
+  },
+  "target": {
+    "modeDevice": "Device",
+    "modeZone": "Zone",
+    "zone": "Zone",
+    "inZone": "Zone: {{zone}}",
+    "unassignedZone": "No zone",
+    "unknownZone": "Unknown zone",
+    "pickDevice": "device",
+    "deviceCount_one": "{{count}} device",
+    "deviceCount_other": "{{count}} devices",
+    "coverage_one": "Affects {{count}} device in the zone",
+    "coverage_other": "Affects {{count}} devices in the zone",
+    "coverageNone": "No device in this zone exposes this capability"
+  },
+  "readable": {
+    "on": "on",
+    "off": "off",
+    "op": {
+      "eq": "is",
+      "ne": "is not",
+      "gt": "above",
+      "lt": "below",
+      "gte": "at least",
+      "lte": "at most",
+      "changed": "changed"
+    },
+    "device": "{{capability}} on \"{{device}}\" {{op}} {{value}}",
+    "deviceChanged": "{{capability}} on \"{{device}}\" changed",
+    "zone": "in \"{{zone}}\" {{capability}} {{op}} {{value}}",
+    "zoneChanged": "in \"{{zone}}\" {{capability}} changed"
   }
 }
