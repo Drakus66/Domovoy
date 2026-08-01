@@ -5,6 +5,7 @@
 using Domovoy.Contracts.Capabilities;
 using Domovoy.Contracts.Home;
 using Domovoy.DbGateway.Models;
+using Domovoy.DbGateway.Stores;
 
 using MongoDB.Driver;
 
@@ -77,23 +78,23 @@ public static class EnergyEndpoints
         var group = app.MapGroup("/api/energy").WithTags("Energy").WithOpenApi();
 
         // GET /api/energy/consumption?from=&to=&bucket=hour — per-device kWh + totals for the window.
-        group.MapGet("/consumption", async (DateTime? from, DateTime? to, string? bucket, IMongoDatabase db) =>
+        group.MapGet("/consumption", async (DateTime? from, DateTime? to, string? bucket, IMongoDatabase db, ITelemetryStore store) =>
         {
-            try { return Results.Ok(await ConsumptionAsync(db, from, to, bucket)); }
+            try { return Results.Ok(await ConsumptionAsync(db, store, from, to, bucket)); }
             catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
         });
 
         // GET /api/energy/cost?from=&to= — total household kWh + money for the window, broken down by tariff zone.
-        group.MapGet("/cost", async (DateTime? from, DateTime? to, IMongoDatabase db) =>
+        group.MapGet("/cost", async (DateTime? from, DateTime? to, IMongoDatabase db, ITelemetryStore store) =>
         {
-            try { return Results.Ok(await CostAsync(db, from, to)); }
+            try { return Results.Ok(await CostAsync(db, store, from, to)); }
             catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
         });
 
         // GET /api/energy/breakdown?from=&to= — consumption/draw per topology node and per phase (Epic 3C-D).
-        group.MapGet("/breakdown", async (DateTime? from, DateTime? to, IMongoDatabase db) =>
+        group.MapGet("/breakdown", async (DateTime? from, DateTime? to, IMongoDatabase db, ITelemetryStore store) =>
         {
-            try { return Results.Ok(await BreakdownAsync(db, from, to)); }
+            try { return Results.Ok(await BreakdownAsync(db, store, from, to)); }
             catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
         });
     }
@@ -106,7 +107,7 @@ public static class EnergyEndpoints
     /// reaches this result at all. Extracted from the endpoint so it is integration-testable against the store.
     /// </summary>
     public static async Task<EnergyConsumptionResult> ConsumptionAsync(
-        IMongoDatabase db, DateTime? from, DateTime? to, string? bucket)
+        IMongoDatabase db, ITelemetryStore store, DateTime? from, DateTime? to, string? bucket)
     {
         var hi = to?.ToUniversalTime() ?? DateTime.UtcNow;
         var lo = from?.ToUniversalTime() ?? hi - DefaultWindow;
@@ -117,10 +118,10 @@ public static class EnergyEndpoints
         var kwhByDevice = new Dictionary<string, double>(StringComparer.Ordinal);
         if (devices.Count > 0)
         {
-            var specs = devices.Select(d => new HistoryEndpoints.SeriesSpec(d.Id, CapabilityIds.Energy)).ToList();
-            // maxPoints is clamped to the endpoint cap; the sum is over every bucket, so the whole window counts.
-            var series = await HistoryEndpoints.AggregateBatchAsync(
-                db, specs, lo, hi, bucketName, agg: "delta", maxPoints: int.MaxValue);
+            var specs = devices.Select(d => new SeriesSpec(d.Id, CapabilityIds.Energy)).ToList();
+            // maxPoints is clamped to the store cap; the sum is over every bucket, so the whole window counts.
+            var series = await store.AggregateBatchAsync(
+                specs, lo, hi, bucketName, "delta", int.MaxValue, default);
             foreach (var s in series)
                 kwhByDevice[s.DeviceId] = Math.Max(0, s.Buckets.Sum(b => b.Value));
         }
@@ -151,7 +152,7 @@ public static class EnergyEndpoints
     /// circuit are reported separately rather than silently folded into a line.
     /// Pure over the store → integration-testable, like <see cref="ConsumptionAsync"/>.
     /// </summary>
-    public static async Task<EnergyBreakdownResult> BreakdownAsync(IMongoDatabase db, DateTime? from, DateTime? to)
+    public static async Task<EnergyBreakdownResult> BreakdownAsync(IMongoDatabase db, ITelemetryStore store, DateTime? from, DateTime? to)
     {
         var hi = to?.ToUniversalTime() ?? DateTime.UtcNow;
         var lo = from?.ToUniversalTime() ?? hi - DefaultWindow;
@@ -169,9 +170,9 @@ public static class EnergyEndpoints
         var kwhById = new Dictionary<string, double>(StringComparer.Ordinal);
         if (seriesIds.Count > 0)
         {
-            var specs = seriesIds.Select(id => new HistoryEndpoints.SeriesSpec(id, CapabilityIds.Energy)).ToList();
-            var series = await HistoryEndpoints.AggregateBatchAsync(
-                db, specs, lo, hi, bucket: "hour", agg: "delta", maxPoints: int.MaxValue);
+            var specs = seriesIds.Select(id => new SeriesSpec(id, CapabilityIds.Energy)).ToList();
+            var series = await store.AggregateBatchAsync(
+                specs, lo, hi, "hour", "delta", int.MaxValue, default);
             foreach (var s in series)
                 kwhById[s.DeviceId] = Math.Max(0, s.Buckets.Sum(b => b.Value));
         }
@@ -367,7 +368,7 @@ public static class EnergyEndpoints
     /// the tariff zone active at that hour (in the site's local time), and breaks the money down by zone.
     /// Reuses the reset-aware hourly <c>delta</c> rollup; pure over the store → integration-testable.
     /// </summary>
-    public static async Task<EnergyCostResult> CostAsync(IMongoDatabase db, DateTime? from, DateTime? to)
+    public static async Task<EnergyCostResult> CostAsync(IMongoDatabase db, ITelemetryStore store, DateTime? from, DateTime? to)
     {
         var hi = to?.ToUniversalTime() ?? DateTime.UtcNow;
         var lo = from?.ToUniversalTime() ?? hi - DefaultWindow;
@@ -386,9 +387,9 @@ public static class EnergyEndpoints
 
         if (consumers.Count > 0)
         {
-            var specs = consumers.Select(d => new HistoryEndpoints.SeriesSpec(d.Id, CapabilityIds.Energy)).ToList();
-            var series = await HistoryEndpoints.AggregateBatchAsync(
-                db, specs, lo, hi, bucket: "hour", agg: "delta", maxPoints: int.MaxValue);
+            var specs = consumers.Select(d => new SeriesSpec(d.Id, CapabilityIds.Energy)).ToList();
+            var series = await store.AggregateBatchAsync(
+                specs, lo, hi, "hour", "delta", int.MaxValue, default);
 
             // Sum per-hour consumption across all consumer devices, then price each hour by its local tariff zone.
             var hourly = new Dictionary<DateTime, double>();

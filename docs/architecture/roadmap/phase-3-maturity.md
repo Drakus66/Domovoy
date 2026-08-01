@@ -347,7 +347,20 @@
 - **DoD:** при выборе цели виден контекст (зона/охват); триггеры формулируются человеко-читаемо поверх архетипов;
   backend (`AutomationRule`) не меняется. Закрывает «боль конкурентов» №5 (сложность HA) на уровне авторинга.
 
-### Эпик 3H. Абстракция хранилища: выбор БД (Mongo default + альтернативы) ⬜
+### Эпик 3H. Абстракция хранилища: выбор БД (Mongo default + альтернативы) 🚧 (Ф0 готово + Ф1 референс, 2026-08-01)
+
+> **Статус (2026-08-01).** **Ф0 (карта + ADR) — готово**, **Ф1 — референсная миграция готова**, остаток Ф1
+> инкрементальный. Введён слой доменных store-интерфейсов в DbGateway (`Stores/`) с железным правилом «наружу
+> не торчат `IMongoDatabase`/`FilterDefinition`/`BsonDocument`». Мигрирован **самый сцепленный** домен —
+> feature store: `ITelemetryStore` + `MongoTelemetryStore` (вся Mongo-специфика: time-series, `$dateTrunc`,
+> reset-aware delta, батч-`$or`), `HistoryEndpoints` стал тонким (парсинг/CSV/маппинг ошибок, без единого
+> `MongoDB.Driver`-типа), второй потребитель `EnergyEndpoints` (`Consumption`/`Breakdown`/`Cost`) переведён на
+> store; DI `AddSingleton<ITelemetryStore, MongoTelemetryStore>`. Тесты пишутся **против шва**: `HistoryBatchTests`/
+> `EnergyTests`/`PowerTopologyTests` дёргают `ITelemetryStore` (тот же тест пойдёт против будущего PostgreSQL).
+> Офлайн-набор .NET 447 + сборка зелёные (infra-тесты шва — в живом прогоне). ADR + полная карта ~24 доменов +
+> план миграции: [`docs/architecture/db_abstraction_ru.md`](../../db_abstraction_ru.md). **Остаток до ✅ (Ф1):**
+> провести по карте остальные домены (DoD Ф1 — «ни один эндпоинт/сервис DbGateway не использует MongoDB.Driver
+> напрямую»); **Ф2 (PostgreSQL) осознанно отложен** владельцем.
 
 > **Owner-решение 2026-07-19 (решение №8, дополнение к решению №2).** Mongo остаётся дефолтом, но продукт
 > должен дать **выбор БД** (как HA recorder: MariaDB/PostgreSQL — «пользователи это любят»), плюс это
