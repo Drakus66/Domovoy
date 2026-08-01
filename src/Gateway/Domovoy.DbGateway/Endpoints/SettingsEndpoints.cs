@@ -29,6 +29,7 @@ public static class SettingsEndpoints
     public const string TariffCollection = "tariff_settings";
     public const string LoadManagementCollection = "load_management_settings";
     public const string MlCollection = "ml_settings";
+    public const string PresenceCollection = "presence_settings";
 
     public record LocationUpdate(double Latitude, double Longitude, string? Label, string? TimeZoneId, bool TimeZoneAuto);
     public record CalendarUpdate(List<int>? WeekendDays, List<string>? Holidays);
@@ -37,6 +38,7 @@ public static class SettingsEndpoints
         bool Enabled, List<PowerBudget>? Budgets, double? RestoreMarginWatts, int? MinDwellSeconds,
         List<PhaseLimit>? PhaseLimits = null, List<CircuitLimit>? CircuitLimits = null);
     public record MlSettingsUpdate(bool Enabled, bool ProposalsEnabled, int? MinHistoryDays);
+    public record PresenceSettingsUpdate(double? HomeRadiusMeters, int? AwayGraceSeconds, string? OwnTracksToken);
 
     public static void MapSettingsEndpoints(this IEndpointRouteBuilder app)
     {
@@ -210,6 +212,26 @@ public static class SettingsEndpoints
                 x => x.Id == MlSettings.SingletonId, settings, new ReplaceOptions { IsUpsert = true });
             return Results.Ok(settings);
         });
+
+        // --- Presence-layer settings (roadmap Epic 3D) ---
+
+        // Current presence config (defaults: 150 m geofence, 180 s away-grace, no ingest token). The token is
+        // returned to the authenticated admin UI on purpose — the owner copies it into the OwnTracks app.
+        group.MapGet("/presence", async (IMongoDatabase db) => Results.Ok(await GetPresenceOrDefault(db)));
+
+        group.MapPut("/presence", async (PresenceSettingsUpdate body, IMongoDatabase db) =>
+        {
+            var settings = new PresenceSettings
+            {
+                HomeRadiusMeters = Math.Clamp(body.HomeRadiusMeters ?? 150, 10, 50_000),
+                AwayGraceSeconds = Math.Clamp(body.AwayGraceSeconds ?? 180, 0, 86_400),
+                OwnTracksToken = string.IsNullOrWhiteSpace(body.OwnTracksToken) ? null : body.OwnTracksToken.Trim(),
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await Presences(db).ReplaceOneAsync(
+                x => x.Id == PresenceSettings.SingletonId, settings, new ReplaceOptions { IsUpsert = true });
+            return Results.Ok(settings);
+        });
     }
 
     /// <summary>Derive the IANA timezone id for a coordinate, fully offline (GeoTimeZone's embedded shapes).</summary>
@@ -246,6 +268,12 @@ public static class SettingsEndpoints
         return settings ?? new MlSettings();
     }
 
+    private static async Task<PresenceSettings> GetPresenceOrDefault(IMongoDatabase db)
+    {
+        var settings = await Presences(db).Find(x => x.Id == PresenceSettings.SingletonId).FirstOrDefaultAsync();
+        return settings ?? new PresenceSettings();
+    }
+
     /// <summary>Strict <c>yyyy-MM-dd</c> check so a bad string can never poison the holiday list.</summary>
     private static bool IsIsoDate(string? s) =>
         DateOnly.TryParseExact(s, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
@@ -265,4 +293,7 @@ public static class SettingsEndpoints
 
     private static IMongoCollection<MlSettings> MlSettingsColl(IMongoDatabase db) =>
         db.GetCollection<MlSettings>(MlCollection);
+
+    private static IMongoCollection<PresenceSettings> Presences(IMongoDatabase db) =>
+        db.GetCollection<PresenceSettings>(PresenceCollection);
 }

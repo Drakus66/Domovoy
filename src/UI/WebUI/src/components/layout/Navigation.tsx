@@ -27,6 +27,7 @@ import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
 import RuleRoundedIcon from '@mui/icons-material/RuleRounded';
 import DataObjectRoundedIcon from '@mui/icons-material/DataObjectRounded';
 import GroupRoundedIcon from '@mui/icons-material/GroupRounded';
+import PeopleAltRoundedIcon from '@mui/icons-material/PeopleAltRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import ColorModeToggle from '../theme/ColorModeToggle';
 import ThemePicker from '../theme/ThemePicker';
@@ -71,6 +72,7 @@ const navGroups = [
     key: 'system',
     items: [
       { key: 'users', path: '/users', icon: <GroupRoundedIcon /> },
+      { key: 'presence', path: '/presence', icon: <PeopleAltRoundedIcon /> },
       { key: 'status', path: '/status', icon: <MonitorHeartRoundedIcon /> },
       { key: 'logs', path: '/logs', icon: <ArticleRoundedIcon /> },
       { key: 'settings', path: '/settings', icon: <SettingsRoundedIcon /> },

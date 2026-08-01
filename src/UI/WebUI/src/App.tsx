@@ -24,6 +24,7 @@ import Plugins from './pages/Plugins';
 import Models from './pages/Models';
 import Proposals from './pages/Proposals';
 import Users from './pages/Users';
+import Presence from './pages/Presence';
 import Logs from './pages/Logs';
 import SystemStatus from './pages/SystemStatus';
 import ZigbeeDevices from './pages/ZigbeeDevices';
@@ -59,6 +60,7 @@ function App() {
               <Route path="models" element={<Models />} />
               <Route path="proposals" element={<Proposals />} />
               <Route path="users" element={<Users />} />
+              <Route path="presence" element={<Presence />} />
               <Route path="plugins" element={<Plugins />} />
               <Route path="logs" element={<Logs />} />
               <Route path="status" element={<SystemStatus />} />

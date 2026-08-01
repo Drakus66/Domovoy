@@ -78,6 +78,15 @@ public class SettingsController : ControllerBase
     public Task<IActionResult> PutMl(CancellationToken ct)
         => Forward(HttpMethod.Put, "api/settings/ml", ct);
 
+    // Presence-layer settings (roadmap Epic 3D) — geofence radius, away-grace, OwnTracks ingest token.
+    [HttpGet("presence")]
+    public Task<IActionResult> GetPresence(CancellationToken ct)
+        => Forward(HttpMethod.Get, "api/settings/presence", ct);
+
+    [HttpPut("presence")]
+    public Task<IActionResult> PutPresence(CancellationToken ct)
+        => Forward(HttpMethod.Put, "api/settings/presence", ct);
+
     private async Task<IActionResult> Forward(HttpMethod method, string relativePath, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient("db-gateway");

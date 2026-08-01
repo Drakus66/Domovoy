@@ -203,6 +203,35 @@ public sealed class DbGatewayClient
         }
     }
 
+    /// <summary>Tracked residents (roadmap Epic 3D) so the presence layer can project one person device each;
+    /// null if the gateway is unreachable (the layer keeps its last-known roster, offline-first).</summary>
+    public async Task<List<Domovoy.Contracts.Home.Resident>?> GetResidentsAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<List<Domovoy.Contracts.Home.Resident>>("api/residents", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load residents from DbGateway");
+            return null;
+        }
+    }
+
+    /// <summary>Presence-layer settings (roadmap Epic 3D) — geofence radius + away-grace; null if unreachable.</summary>
+    public async Task<Domovoy.Contracts.Home.PresenceSettings?> GetPresenceSettingsAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<Domovoy.Contracts.Home.PresenceSettings>("api/settings/presence", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load presence settings from DbGateway");
+            return null;
+        }
+    }
+
     /// <summary>Calendar settings (roadmap Epic 2L) for the Calendar sensor; null if the gateway is unreachable.</summary>
     public async Task<Domovoy.Contracts.Home.CalendarSettings?> GetCalendarSettingsAsync(CancellationToken ct)
     {

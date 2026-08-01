@@ -169,7 +169,10 @@
     "day_of_week": "Day of week",
     "is_weekend": "Weekend",
     "is_holiday": "Holiday",
-    "date": "Date"
+    "date": "Date",
+    "presence": "Presence",
+    "anyone_home": "Anyone home",
+    "home_count": "People home"
   },
   "headline": {
     "on": "On",
@@ -181,7 +184,11 @@
     "motion": "Motion",
     "clear": "Clear",
     "open": "Open",
-    "closed": "Closed"
+    "closed": "Closed",
+    "home": "Home",
+    "away": "Away",
+    "someoneHome": "{{count}} home",
+    "nobodyHome": "Nobody home"
   },
   "value": {
     "yes": "Yes",

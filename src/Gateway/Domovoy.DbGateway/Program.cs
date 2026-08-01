@@ -149,6 +149,7 @@ internal static class Program
             app.MapProposalsEndpoints();
             app.MapRoleEndpoints();
             app.MapUserEndpoints();
+            app.MapResidentEndpoints();
             app.MapAuthEndpoints();
             app.MapSettingsEndpoints();
             app.MapDashboardEndpoints();

@@ -101,6 +101,25 @@ public sealed record NotificationRaisedV1(
     string? Category = null);
 
 /// <summary>
+/// A presence/location report from a geofencing source (roadmap Epic 3D) — chiefly the OwnTracks-compatible
+/// ingest in the ApiGateway, which normalizes OwnTracks <c>location</c>/<c>transition</c> payloads onto this.
+/// The AutomationService's presence layer resolves the resident from <see cref="ResidentKeys"/> (matched
+/// against each resident's <c>OwnTracksId</c>), applies the server-side geofence (distance from the site
+/// location vs the configured radius) or the <see cref="ExplicitPresent"/> transition, and republishes the
+/// resident's virtual person device + the occupancy aggregate. Kept source-agnostic: a room-level or mmWave
+/// source (later layers) can publish the same contract with <see cref="ExplicitPresent"/> set and no coords.
+/// </summary>
+/// <remarks>Envelope type: <see cref="MessageTypes.PresenceReported"/>.</remarks>
+public sealed record PresenceReportedV1(
+    IReadOnlyList<string> ResidentKeys,
+    double? Latitude,
+    double? Longitude,
+    double? AccuracyMeters,
+    int? BatteryPercent,
+    bool? ExplicitPresent,
+    DateTimeOffset ReportedAt);
+
+/// <summary>
 /// The home mode changed (roadmap Epic 1G). Published by the DbGateway (the persistence authority for
 /// the mode) after a manual or presence-driven switch. The AutomationService consumes it to feed
 /// <c>Mode</c> conditions, and the DbGateway's own EventInterceptor consumes it to stamp the current

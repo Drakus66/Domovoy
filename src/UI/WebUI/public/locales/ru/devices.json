@@ -169,7 +169,10 @@
     "day_of_week": "День недели",
     "is_weekend": "Выходной",
     "is_holiday": "Праздник",
-    "date": "Дата"
+    "date": "Дата",
+    "presence": "Присутствие",
+    "anyone_home": "Кто-то дома",
+    "home_count": "Людей дома"
   },
   "headline": {
     "on": "Вкл",
@@ -181,7 +184,11 @@
     "motion": "Движение",
     "clear": "Тихо",
     "open": "Открыто",
-    "closed": "Закрыто"
+    "closed": "Закрыто",
+    "home": "Дома",
+    "away": "Ушёл",
+    "someoneHome": "Дома: {{count}}",
+    "nobodyHome": "Никого нет"
   },
   "value": {
     "yes": "Да",

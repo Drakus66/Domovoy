@@ -61,6 +61,11 @@ public static class CapabilityIds
     public const string HvacMode = "hvac_mode";                    // enum — off/heat/cool/auto (climate)
     public const string FanSpeed = "fan_speed";                    // number, 0..100 (%) — fan speed
 
+    // --- Presence (roadmap Epic 3D) — per-person + aggregated occupancy signals ---
+    public const string Presence = "presence";                     // bool — a resident is home (per-person virtual device)
+    public const string AnyoneHome = "anyone_home";                // bool — at least one tracked resident is home (aggregate)
+    public const string HomeCount = "home_count";                  // number — how many tracked residents are home (aggregate)
+
     // --- System virtual sensors (roadmap Epic 2L) — reported by the platform, no physical device ---
     public const string SunElevation = "sun_elevation";            // number, ° above horizon (negative = below)
     public const string SunAzimuth = "sun_azimuth";                // number, ° clockwise from north (0=N, 90=E)
