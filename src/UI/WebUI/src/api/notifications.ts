@@ -16,9 +16,29 @@ export interface NotificationTestResult {
   enabled: string[];
 }
 
+/** An actionable-notification button (Epic 3F). Server-side kinds execute a command with actor attribution. */
+export interface NotificationAction {
+  id: string;
+  label: string;
+  kind: string;
+  params?: Record<string, string>;
+}
+
+/** The notification categories (Epic 3F taxonomy) — the rows of the routing matrix. */
+export const NOTIFICATION_CATEGORIES = ['reactive', 'proactive', 'optimization'] as const;
+export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
+
+/** Notification-discipline settings (Epic 3F): per-category channel routing (opt-out), rate-limit, safety floor. */
+export interface NotificationSettings {
+  mutedChannels: Record<string, string[]>;
+  minIntervalSeconds: Record<string, number>;
+  safetyFloorEnabled: boolean;
+}
+
 /**
- * Client for notification delivery channels (Epic 2G). Channels (telegram, webhook/push) are configured on
- * the server (env-gated, off by default); the UI can only show which are enabled and send a test message.
+ * Client for notifications. Channels (telegram, webhook/push) are configured on the server (env-gated, off by
+ * default); the UI shows which are enabled, sends a test message, edits the Epic 3F discipline settings, and
+ * executes an actionable button.
  */
 export const notificationsApi = {
   getChannels: (): Promise<NotificationChannels> =>
@@ -26,4 +46,13 @@ export const notificationsApi = {
 
   sendTest: (): Promise<NotificationTestResult> =>
     apiClient.post<NotificationTestResult>('/api/notifications/test').then((r) => r.data),
+
+  getSettings: (): Promise<NotificationSettings> =>
+    apiClient.get<NotificationSettings>('/api/settings/notifications').then((r) => r.data),
+
+  saveSettings: (settings: NotificationSettings): Promise<NotificationSettings> =>
+    apiClient.put<NotificationSettings>('/api/settings/notifications', settings).then((r) => r.data),
+
+  executeAction: (action: NotificationAction): Promise<void> =>
+    apiClient.post('/api/notifications/action', action).then(() => undefined),
 };

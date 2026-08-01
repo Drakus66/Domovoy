@@ -30,6 +30,8 @@ public sealed class WebhookChannel : INotificationChannel
 
     public string Name => "webhook";
 
+    public NotificationVisibility Visibility => NotificationVisibility.Prominent;
+
     public bool Enabled => _options.Enabled && !string.IsNullOrWhiteSpace(_options.Url);
 
     public async Task<bool> SendAsync(NotificationMessage message, CancellationToken ct)

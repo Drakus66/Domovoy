@@ -5,6 +5,7 @@
 namespace Domovoy.Contracts.Messaging;
 
 using Domovoy.Contracts.Devices;
+using Domovoy.Contracts.Notifications;
 
 /// <summary>
 /// Payloads carried inside <see cref="Envelope{T}.Data"/>. These are the wire contracts that the
@@ -98,7 +99,8 @@ public sealed record NotificationRaisedV1(
     string Body,
     string Severity,
     DateTimeOffset RaisedAt,
-    string? Category = null);
+    string? Category = null,
+    IReadOnlyList<NotificationAction>? Actions = null);
 
 /// <summary>
 /// A presence/location report from a geofencing source (roadmap Epic 3D) — chiefly the OwnTracks-compatible

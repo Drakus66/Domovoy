@@ -50,7 +50,7 @@ public sealed class MlProposerGateTests
             new HttpClient(new EarliestStub(earliest)) { BaseAddress = new Uri("http://stub") },
             NullLogger<DbGatewayClient>.Instance);
         var dispatcher = new NotificationDispatcher(
-            Array.Empty<INotificationChannel>(), NullLogger<NotificationDispatcher>.Instance);
+            Array.Empty<INotificationChannel>(), new NotificationRuntimeState(), NullLogger<NotificationDispatcher>.Instance);
         return new MlProposerGate(db, runtime, dispatcher);
     }
 

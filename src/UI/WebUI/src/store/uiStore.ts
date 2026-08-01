@@ -9,12 +9,22 @@ import { create } from 'zustand';
 
 export type NotificationType = 'success' | 'error' | 'info' | 'warning';
 
+/** An actionable button on a banner (roadmap Epic 3F). Server-side kinds post to /api/notifications/action; the
+ *  client-only `open`/`dismiss` are handled in the banner. Labels are server-provided (already localized). */
+export interface NotificationActionData {
+  id: string;
+  label: string;
+  kind: string;
+  params?: Record<string, string>;
+}
+
 export interface Notification {
   id: string;
   type: NotificationType;
   message: string;
   duration?: number; // milliseconds, undefined means no auto-dismiss
   timestamp: Date;
+  actions?: NotificationActionData[];
 }
 
 interface LoadingState {
@@ -31,7 +41,8 @@ interface UIStore {
   showNotification: (
     type: NotificationType,
     message: string,
-    duration?: number
+    duration?: number,
+    actions?: NotificationActionData[]
   ) => string;
   dismissNotification: (id: string) => void;
   clearAllNotifications: () => void;
@@ -55,7 +66,8 @@ export const useUIStore = create<UIStore>((set, get) => ({
   showNotification: (
     type: NotificationType,
     message: string,
-    duration: number = 5000 // Default 5 seconds
+    duration: number = 5000, // Default 5 seconds
+    actions?: NotificationActionData[]
   ): string => {
     const id = generateId();
     const notification: Notification = {
@@ -64,6 +76,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
       message,
       duration,
       timestamp: new Date(),
+      actions,
     };
 
     set((state) => ({

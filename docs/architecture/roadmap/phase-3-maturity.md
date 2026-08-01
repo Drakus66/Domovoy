@@ -280,7 +280,23 @@
 - **DoD:** правило умеет ждать событие с таймаутом и ветвиться по ошибке; required-expression гейтит и отменяет pending;
   глобальная переменная задаётся/читается правилами и блоками и переживает рестарт; всё выражается в редакторе правил.
 
-### Эпик 3F. Дисциплина уведомлений (таксономия, per-type каналы, rate-limit, actionable) ⬜
+### Эпик 3F. Дисциплина уведомлений (таксономия, per-type каналы, rate-limit, actionable) ✅ (v1 реализован + live-verified 2026-08-01)
+
+> **Статус v1 (2026-08-01, live-verified).** Реализовано по всему DoD поверх транспорта 2G/2M.2/2O.
+> **(1) Таксономия** `reactive`/`proactive`/`optimization` (`NotificationCategories`) + класс безопасности =
+> `critical` (`NotificationSeverities.IsSafety`), протянуты через `NotificationMessage` → `NotificationRaisedV1`.
+> **(2) Per-type маршрутизация** — opt-out матрица (категория×канал) в singleton `notification_settings`
+> (`SettingsEndpoints` + прокси; синк `RefreshLoop`→`NotificationRuntimeState`, без рестарта); **safety-floor**:
+> каналы объявляют видимость (`NotificationVisibility` Quiet=lan / Prominent=ntfy/telegram/webhook), критичное
+> всегда форсится на заметный канал (иначе предупреждение в лог). **(3) Rate-limit/dedup** — чистая
+> `NotificationPolicy` (окна reactive 60с/proactive 900с/optimization 3600с, `DedupKey`; safety не режется),
+> `NotificationDispatcher` держит дедуп-словарь. **(4) Actionable** — `NotificationAction[]` в payload →
+> кнопки в баннере → `POST /api/notifications/action` с **атрибуцией актора** (`user:{id}` как у ручной
+> команды): `approve_proposal`/`reject_proposal`/`device_command`/`set_mode`/`open`, маппинг = чистый
+> `NotificationActionRouter`. Проактивное «найдено N закономерностей» (3I) переведено в `proactive` + кнопка
+> «Открыть предложения». UI: редактор «Дисциплина уведомлений» на `/settings` + кнопки в баннере. Тесты:
+> `NotificationPolicyTests` (8) + `NotificationActionRouterTests` (11) офлайн; сборка + WebUI 231 зелёные.
+> Доки: [`docs/notifications_ru.md`](../../notifications_ru.md).
 
 > **NN/g 3-0:** таксономия reactive/proactive/optimization; выбор канала per-type пользователем; **safety-критичное —
 > никогда только через низковидимые каналы**; notification fatigue → эффект **«cry wolf»** (пример: алерты влажности

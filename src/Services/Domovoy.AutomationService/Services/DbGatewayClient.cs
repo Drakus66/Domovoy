@@ -232,6 +232,21 @@ public sealed class DbGatewayClient
         }
     }
 
+    /// <summary>Notification-discipline settings (roadmap Epic 3F) for the dispatcher — per-type routing, rate-limit,
+    /// safety floor; null if unreachable (the dispatcher keeps its last-known settings, offline-first).</summary>
+    public async Task<Domovoy.Contracts.Notifications.NotificationSettings?> GetNotificationSettingsAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<Domovoy.Contracts.Notifications.NotificationSettings>("api/settings/notifications", Json, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load notification settings from DbGateway");
+            return null;
+        }
+    }
+
     /// <summary>Calendar settings (roadmap Epic 2L) for the Calendar sensor; null if the gateway is unreachable.</summary>
     public async Task<Domovoy.Contracts.Home.CalendarSettings?> GetCalendarSettingsAsync(CancellationToken ct)
     {

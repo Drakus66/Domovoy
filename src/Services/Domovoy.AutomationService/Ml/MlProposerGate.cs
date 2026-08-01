@@ -5,6 +5,7 @@
 using Domovoy.AutomationService.Services;
 using Domovoy.AutomationService.Services.Notifications;
 using Domovoy.Contracts.Ml;
+using Domovoy.Contracts.Notifications;
 
 namespace Domovoy.AutomationService.Ml;
 
@@ -104,6 +105,13 @@ public sealed class MlProposerGate
         var body = created == 1
             ? "Found a new pattern — review it in Proposals."
             : $"Found {created} new patterns — review them in Proposals.";
-        await _notifications.DispatchAsync(new NotificationMessage("Domovoy", body, "info"), ct);
+        // Proactive (Epic 3F taxonomy): the always-on signal is the nav badge; this is the gentle poke that also
+        // reaches a push channel if one is configured, with a one-tap "open" action to the proposals queue.
+        var open = new NotificationAction("open", "Открыть предложения", NotificationActionKinds.Open,
+            new Dictionary<string, string> { ["route"] = "/proposals" });
+        await _notifications.DispatchAsync(
+            new NotificationMessage("Domovoy", body, NotificationSeverities.Info, NotificationCategories.Proactive,
+                Actions: new[] { open }, DedupKey: "discovery-findings"),
+            ct);
     }
 }

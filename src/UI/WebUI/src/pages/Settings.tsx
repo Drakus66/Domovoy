@@ -27,6 +27,7 @@ import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded';
 import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
 import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
+import NotificationsActiveRoundedIcon from '@mui/icons-material/NotificationsActiveRounded';
 import { settingsApi, GeocodeResult } from '../api/settings';
 import { securityApi, User } from '../api/security';
 import { backupsApi, BackupListItem, BackupSettings } from '../api/backups';
@@ -35,6 +36,7 @@ import KioskSettings from '../components/kiosk/KioskSettings';
 import TariffEditor from '../components/settings/TariffEditor';
 import LoadManagementEditor from '../components/settings/LoadManagementEditor';
 import IntelligenceEditor from '../components/settings/IntelligenceEditor';
+import NotificationSettingsEditor from '../components/settings/NotificationSettingsEditor';
 import PowerTopologyEditor from '../components/settings/PowerTopologyEditor';
 
 // A collapsible settings card. Collapsed by default so a long section (e.g. the location
@@ -689,6 +691,11 @@ export default function Settings() {
         {/* ── Intelligence layer (Epic 3I) ────────────────────────── */}
         <Section icon={<PsychologyRoundedIcon color="primary" />} title={t('intelligence.title')} caption={t('intelligence.caption')}>
           <IntelligenceEditor />
+        </Section>
+
+        {/* ── Notification discipline (Epic 3F) ────────────────────── */}
+        <Section icon={<NotificationsActiveRoundedIcon color="primary" />} title={t('notifications.title')} caption={t('notifications.caption')}>
+          <NotificationSettingsEditor />
         </Section>
 
         {/* ── Who am I (self-declared attribution, not auth) ────────── */}

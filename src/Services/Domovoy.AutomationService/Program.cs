@@ -51,6 +51,7 @@ internal static class Program
             builder.Services.AddSingleton<Services.Notifications.INotificationChannel, Services.Notifications.NtfyChannel>();
             builder.Services.AddSingleton<Services.Notifications.INotificationChannel, Services.Notifications.TelegramChannel>();
             builder.Services.AddSingleton<Services.Notifications.INotificationChannel, Services.Notifications.WebhookChannel>();
+            builder.Services.AddSingleton<Services.Notifications.NotificationRuntimeState>(); // 3F: live notification-discipline settings (RefreshLoop syncs notification_settings)
             builder.Services.AddSingleton<Services.Notifications.NotificationDispatcher>();
 
             // Typed HttpClient to the DbGateway (rules + device read-model + event-log for replay).

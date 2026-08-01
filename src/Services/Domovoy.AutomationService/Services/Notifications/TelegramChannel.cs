@@ -30,6 +30,8 @@ public sealed class TelegramChannel : INotificationChannel
 
     public string Name => "telegram";
 
+    public NotificationVisibility Visibility => NotificationVisibility.Prominent;
+
     public bool Enabled =>
         _options.Enabled && !string.IsNullOrWhiteSpace(_options.BotToken) && !string.IsNullOrWhiteSpace(_options.ChatId);
 

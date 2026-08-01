@@ -34,6 +34,9 @@ public sealed class SignalRChannel : INotificationChannel
 
     public bool Enabled => _options.Enabled;
 
+    // The in-app banner is quiet: it only exists while a browser is open (Epic 3F safety floor).
+    public NotificationVisibility Visibility => NotificationVisibility.Quiet;
+
     public async Task<bool> SendAsync(NotificationMessage message, CancellationToken ct)
     {
         try
@@ -45,7 +48,9 @@ public sealed class SignalRChannel : INotificationChannel
                     message.Title,
                     message.Body,
                     message.Severity,
-                    DateTimeOffset.UtcNow));
+                    DateTimeOffset.UtcNow,
+                    message.Category,
+                    message.Actions));
 
             await _bus.PublishAsync(
                 BusTopology.EventsExchange,

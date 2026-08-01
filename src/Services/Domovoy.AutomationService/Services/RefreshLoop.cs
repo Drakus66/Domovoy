@@ -5,6 +5,7 @@
 using Domovoy.AutomationService.Blocks;
 using Domovoy.AutomationService.Configuration;
 using Domovoy.AutomationService.Ml;
+using Domovoy.AutomationService.Services.Notifications;
 
 using Microsoft.Extensions.Options;
 
@@ -31,13 +32,14 @@ public sealed class RefreshLoop : BackgroundService
     private readonly LoadManager _loadManager;
     private readonly DeviceEnergyService _deviceEnergy;
     private readonly MlRuntimeState _mlRuntime;
+    private readonly NotificationRuntimeState _notifications;
     private readonly AutomationOptions _options;
     private readonly ILogger<RefreshLoop> _logger;
 
     public RefreshLoop(
         RuleStore store, SceneStore scenes, BlockStore blocks, VariableStore variables, DeviceRegistry registry, DbGatewayClient db, HomeModeState mode,
         SunCalculator sun, SiteContext site, CalendarContext calendar, TariffContext tariff, LoadManager loadManager,
-        DeviceEnergyService deviceEnergy, MlRuntimeState mlRuntime, IOptions<AutomationOptions> options,
+        DeviceEnergyService deviceEnergy, MlRuntimeState mlRuntime, NotificationRuntimeState notifications, IOptions<AutomationOptions> options,
         ILogger<RefreshLoop> logger)
     {
         _store = store;
@@ -54,6 +56,7 @@ public sealed class RefreshLoop : BackgroundService
         _loadManager = loadManager;
         _deviceEnergy = deviceEnergy;
         _mlRuntime = mlRuntime;
+        _notifications = notifications;
         _options = options.Value;
         _logger = logger;
     }
@@ -75,6 +78,7 @@ public sealed class RefreshLoop : BackgroundService
             await RefreshLoadManagement(devices, stoppingToken);
             if (devices is not null) _deviceEnergy.Sync(devices); // 3C-D: which devices the estimator maintains
             await RefreshMlSettings(stoppingToken);
+            await RefreshNotificationSettings(stoppingToken);
 
             try { await Task.Delay(period, stoppingToken); }
             catch (OperationCanceledException) { break; }
@@ -166,5 +170,14 @@ public sealed class RefreshLoop : BackgroundService
     {
         var settings = await _db.GetMlSettingsAsync(ct);
         _mlRuntime.Set(settings);
+    }
+
+    // Refresh the notification-discipline settings (3F) so muting a channel or changing a rate-limit from the UI
+    // takes effect within one cycle. Gateway unreachable → keep the last-known settings (offline-first: an outage
+    // must not silently change what notifications get delivered).
+    private async Task RefreshNotificationSettings(CancellationToken ct)
+    {
+        var settings = await _db.GetNotificationSettingsAsync(ct);
+        _notifications.Set(settings);
     }
 }

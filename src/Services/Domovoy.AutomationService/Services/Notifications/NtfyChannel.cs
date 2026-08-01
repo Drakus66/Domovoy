@@ -32,6 +32,8 @@ public sealed class NtfyChannel : INotificationChannel
 
     public string Name => "ntfy";
 
+    public NotificationVisibility Visibility => NotificationVisibility.Prominent;
+
     public bool Enabled =>
         _options.Enabled
         && !string.IsNullOrWhiteSpace(_options.ServerUrl)
