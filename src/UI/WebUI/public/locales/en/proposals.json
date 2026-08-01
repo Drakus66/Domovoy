@@ -73,7 +73,9 @@
     "mlTask": "a \"{{target}}\" training task appears — tune it on the ML page.",
     "scene": "a scene \"{{name}}\" is created from {{count}} devices — find and edit it on the Scenes page.",
     "sceneSchedule": "a scene \"{{name}}\" is created from {{count}} devices and activated automatically every day at {{time}}.",
-    "amendmentDisable": "the rule is disabled (re-enable it any time on the Automations page)."
+    "amendmentDisable": "the rule is disabled (re-enable it any time on the Automations page).",
+    "amendmentAddCondition": "a time-of-day exception is added — the rule runs only outside {{from}}–{{to}} (edit it any time on the Automations page).",
+    "amendmentSetThreshold": "the trigger threshold is changed to {{value}} (edit it any time on the Automations page)."
   },
   "rule": {
     "sentence": "If {{when}} — {{then}}",
@@ -103,11 +105,15 @@
     "mlSetpoint": "You changed this setpoint often ({{samples}} times, spread ±{{stdDev}}), and {{explained}}% of those changes track the time of day — too varied for one schedule, but a model can learn it.",
     "mlTask": "{{samples}} records accumulated over {{windowDays}} days (≥ {{required}} needed) — enough history, and a block exists that can consume the model.",
     "scene": "You arranged this set of {{devices}} devices by hand {{support}} times over the last {{windowDays}} days.",
-    "deadRule": "You overrode this rule in {{overrides}} of its {{firings}} runs ({{rate}}%) — it may no longer match how you use the home."
+    "deadRule": "You overrode this rule in {{overrides}} of its {{firings}} runs ({{rate}}%) — it may no longer match how you use the home.",
+    "refine": "You overrode this rule in {{overrides}} of its {{firings}} runs ({{rate}}%) between {{from}}–{{to}} — but it looks fine the rest of the day.",
+    "thresholdDrift": "When you overrode the rule, the sensor read about {{suggested}}, not its trigger value {{current}} ({{samples}} times) — the threshold may have drifted (season/habit)."
   },
   "mlTaskTitle": "Start learning: {{target}}",
   "sceneTitle": "New scene: {{name}}",
   "amendmentTitle": "Retire rule \"{{name}}\"?",
+  "amendmentTitleRefine": "Refine rule \"{{name}}\"?",
+  "amendmentTitleThreshold": "Adjust \"{{name}}\" threshold?",
   "meta": {
     "proposed": "proposed {{when}}",
     "decided": "decided {{when}}",

@@ -123,6 +123,7 @@ internal static class Program
             builder.Services.AddSingleton<Ml.ArchetypeAdvisor>();  // 2D: ML.NET archetype classifier (advisory)
             builder.Services.AddSingleton<Services.Discovery.DiscoveryEngine>(); // 2F: full MI/FDR pattern-discovery funnel
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Services.Discovery.DiscoveryEngine>());
+            builder.Services.AddHostedService<Services.Discovery.WeeklyDigestService>(); // 3J: weekly "living home" digest
             // 2H: natural-language assistant extension point — the shipped connector is a disabled stub.
             builder.Services.AddSingleton<Services.Assistant.IAssistantConnector, Services.Assistant.DisabledAssistantConnector>();
 

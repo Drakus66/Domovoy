@@ -33,8 +33,12 @@ export interface Proposal {
   sceneDraft?: SceneDraft | null;
   /** Scene: optional daily cron; when set, approve also creates a rule that activates the new scene. */
   sceneScheduleCron?: string | null;
-  /** RuleAmendment: what approve does to the rule ruleId points at — v1 "disable" (Epic 3J). */
+  /** RuleAmendment: what approve does to the rule ruleId points at — "disable" / "add_condition" / "set_threshold" (Epic 3J). */
   amendmentAction?: string | null;
+  /** RuleAmendment / set_threshold: the capability whose numeric trigger value drifts (Epic 3J tail 4). */
+  amendmentCapabilityId?: string | null;
+  /** RuleAmendment / set_threshold: the corrected numeric value to set (Epic 3J tail 4). */
+  amendmentValue?: number | null;
   modelId?: string | null;
   metric?: string | null;
   score?: number | null;

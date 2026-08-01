@@ -100,7 +100,11 @@ export const proposalTitle = (
   if (p.kind === 'MlTask' && p.mlTaskTarget)
     return t('mlTaskTitle', { target: capabilityLabel(p.mlTaskTarget) });
   if (p.kind === 'Scene' && p.sceneDraft) return t('sceneTitle', { name: p.sceneDraft.name });
-  if (p.kind === 'RuleAmendment' && rule) return t('amendmentTitle', { name: rule.name });
+  if (p.kind === 'RuleAmendment' && rule) {
+    if (p.amendmentAction === 'add_condition') return t('amendmentTitleRefine', { name: rule.name });
+    if (p.amendmentAction === 'set_threshold') return t('amendmentTitleThreshold', { name: rule.name });
+    return t('amendmentTitle', { name: rule.name });
+  }
   return p.title;
 };
 
@@ -123,12 +127,21 @@ export const effectText = (p: Proposal): string => {
         ? t('effect.sceneSchedule', { name, count, time })
         : t('effect.scene', { name, count });
     }
-    case 'RuleAmendment':
+    case 'RuleAmendment': {
+      const e = p.evidence;
+      if (p.amendmentAction === 'add_condition')
+        return t('effect.amendmentAddCondition', { from: hourLabel(e?.fromHour), to: hourLabel(e?.toHour) });
+      if (p.amendmentAction === 'set_threshold')
+        return t('effect.amendmentSetThreshold', { value: e?.suggestedThreshold ?? 0 });
       return t('effect.amendmentDisable');
+    }
     default:
       return '';
   }
 };
+
+/** "H" → "HH:00" for the exception-window effect line. */
+const hourLabel = (h: number | undefined): string => `${String(h ?? 0).padStart(2, '0')}:00`;
 
 /** Localized justification from the structured evidence; falls back to the raw server rationale. */
 export const evidenceText = (p: Proposal): string | null => {
@@ -154,13 +167,30 @@ export const evidenceText = (p: Proposal): string | null => {
       windowDays: e.windowDays ?? 0,
     });
 
-  // Dead-rule detection (Epic 3J): how often the household overrode the rule.
-  if (p.kind === 'RuleAmendment' && e.firings !== undefined)
+  // Threshold drift (Epic 3J tail 4): the sensor's lived-in value vs the rule's current trigger threshold.
+  if (p.kind === 'RuleAmendment' && p.amendmentAction === 'set_threshold' && e.suggestedThreshold !== undefined)
+    return t('evidence.thresholdDrift', {
+      current: e.currentThreshold ?? 0,
+      suggested: e.suggestedThreshold,
+      samples: e.samples ?? 0,
+    });
+
+  // Self-correcting / dead-rule detection (Epic 3J): how often the household overrode the rule (in a band, or overall).
+  if (p.kind === 'RuleAmendment' && e.firings !== undefined) {
+    if (p.amendmentAction === 'add_condition')
+      return t('evidence.refine', {
+        overrides: e.overrides ?? 0,
+        firings: e.firings,
+        rate: Math.round((e.overrideRate ?? 0) * 100),
+        from: `${String(e.fromHour ?? 0).padStart(2, '0')}:00`,
+        to: `${String(e.toHour ?? 0).padStart(2, '0')}:00`,
+      });
     return t('evidence.deadRule', {
       overrides: e.overrides ?? 0,
       firings: e.firings,
       rate: Math.round((e.overrideRate ?? 0) * 100),
     });
+  }
 
   // Setpoint-preference discovery (Epic 2F type B) carries the learned value + spread.
   if (e.value !== undefined && e.stdDev !== undefined)

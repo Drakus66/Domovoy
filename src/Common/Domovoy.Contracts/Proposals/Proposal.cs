@@ -6,6 +6,7 @@ namespace Domovoy.Contracts.Proposals;
 
 using System.Text.Json.Serialization;
 
+using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Scenes;
 
 /// <summary>
@@ -49,11 +50,23 @@ public class Proposal
     // --- kind: RuleAmendment (change an existing rule the household keeps overriding, Epic 3J) ---
 
     /// <summary>
-    /// RuleAmendment: what to do to the rule <see cref="RuleId"/> points at on approve. v1 supports
-    /// <c>disable</c> — retire a rule the household systematically overrides (the "living rules" signal, Epic 3J).
-    /// Null for every other kind.
+    /// RuleAmendment: what to do to the rule <see cref="RuleId"/> points at on approve (Epic 3J "living rules"):
+    /// <c>disable</c> — retire a rule the household systematically overrides; <c>add_condition</c> — add
+    /// <see cref="AmendmentCondition"/> as an exception so the rule stops firing in the one context it's fought in
+    /// (self-correcting, not retiring); <c>set_threshold</c> — shift the numeric value of the trigger/condition on
+    /// <see cref="AmendmentCapabilityId"/> to <see cref="AmendmentValue"/> (seasonal drift). Null for other kinds.
     /// </summary>
     public string? AmendmentAction { get; set; }
+
+    /// <summary>RuleAmendment / <c>add_condition</c>: the guard to append to the rule (e.g. a time-of-day window
+    /// that excludes the hours the household keeps overriding it). Null for other actions.</summary>
+    public RuleCondition? AmendmentCondition { get; set; }
+
+    /// <summary>RuleAmendment / <c>set_threshold</c>: the capability whose numeric trigger/condition value drifts.</summary>
+    public string? AmendmentCapabilityId { get; set; }
+
+    /// <summary>RuleAmendment / <c>set_threshold</c>: the corrected numeric value to set on that trigger/condition.</summary>
+    public double? AmendmentValue { get; set; }
 
     // --- kind: BlockPromotion / ModelSelection (both target a control block) ---
 
