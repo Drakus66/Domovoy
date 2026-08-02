@@ -5,16 +5,19 @@
 // Notification Component for WebUI
 // Validates: Requirements 8.2, 8.3, 8.5
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   AlertColor,
   IconButton,
   Box,
+  Button,
+  Stack,
 } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { useUIStore, Notification as NotificationData } from '../../store/uiStore';
+import { useUIStore, Notification as NotificationData, NotificationActionData } from '../../store/uiStore';
+import { notificationsApi } from '../../api/notifications';
 
 /**
  * Single notification item component. Rendered directly inside the fixed column container below (no MUI
@@ -29,7 +32,28 @@ interface NotificationItemProps {
 
 const NotificationItem: React.FC<NotificationItemProps> = ({ notification, onClose }) => {
   const { t } = useTranslation('common');
+  const [busy, setBusy] = useState(false);
   const handleClose = () => onClose(notification.id);
+
+  // Run an actionable button (Epic 3F). Client-only kinds are handled here; server-side kinds post to the action
+  // endpoint (which executes the command with actor attribution). The banner is dismissed once the action fires.
+  const runAction = async (action: NotificationActionData) => {
+    if (action.kind === 'dismiss') { handleClose(); return; }
+    if (action.kind === 'open') {
+      // The banner renders outside the router, so navigate the hard way.
+      window.location.assign(action.params?.route || '/');
+      return;
+    }
+    setBusy(true);
+    try {
+      await notificationsApi.executeAction(action);
+    } catch {
+      /* best-effort — the command endpoint logs failures; the banner just closes */
+    } finally {
+      setBusy(false);
+      handleClose();
+    }
+  };
 
   return (
     <Alert
@@ -52,6 +76,23 @@ const NotificationItem: React.FC<NotificationItemProps> = ({ notification, onClo
       }}
     >
       {notification.message}
+      {notification.actions && notification.actions.length > 0 && (
+        <Stack direction="row" spacing={1} mt={1} flexWrap="wrap" useFlexGap>
+          {notification.actions.map((action) => (
+            <Button
+              key={action.id}
+              size="small"
+              variant="outlined"
+              color="inherit"
+              disabled={busy}
+              onClick={() => runAction(action)}
+              sx={{ borderColor: 'currentColor' }}
+            >
+              {action.label}
+            </Button>
+          ))}
+        </Stack>
+      )}
     </Alert>
   );
 };

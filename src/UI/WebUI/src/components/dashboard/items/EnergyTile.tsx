@@ -4,11 +4,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link as RouterLink } from 'react-router-dom';
 import {
-  Box, Card, CardContent, Chip, LinearProgress, Skeleton, Stack,
-  ToggleButton, ToggleButtonGroup, Typography,
+  Box, Card, CardContent, Chip, IconButton, LinearProgress, Skeleton, Stack,
+  ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
+import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import {
   energyApi,
   type EnergyBreakdownResult, type EnergyConsumptionResult, type EnergyCostResult,
@@ -118,6 +120,11 @@ export default function EnergyTile() {
               </ToggleButton>
             ))}
           </ToggleButtonGroup>
+          <Tooltip title={t('energy.configure')}>
+            <IconButton size="small" component={RouterLink} to="/settings">
+              <SettingsRoundedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         </Stack>
 
         {loading ? (

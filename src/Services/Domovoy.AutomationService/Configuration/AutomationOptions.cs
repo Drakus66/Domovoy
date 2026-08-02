@@ -214,6 +214,35 @@ public class AutomationOptions
     /// purpose — retiring a rule is a big suggestion, so only a rule fought most of the time qualifies.</summary>
     public double DeadRuleMinOverrideRate { get; set; } = 0.6;
 
+    // --- Self-correcting rules (roadmap Epic 3J tail): amend, don't just retire ---
+
+    /// <summary>Minimum firings inside a single time-of-day band before its override-rate can flag that band as
+    /// the context the user keeps fighting (the "refine, don't retire" signal, Epic 3J).</summary>
+    public int RefineMinContextFirings { get; set; } = 4;
+
+    /// <summary>Override-rate inside a time band above which the band is proposed as an exception to add to the
+    /// rule — high enough that the rule is clearly wrong <i>there</i>, while it may be fine elsewhere.</summary>
+    public double RefineMinContextOverrideRate { get; set; } = 0.6;
+
+    /// <summary>Minimum overrides carrying a usable numeric correction value before proposing a threshold/value
+    /// drift amendment (Epic 3J seasonal drift) — too few corrections is noise, not drift.</summary>
+    public int DriftMinOverrides { get; set; } = 4;
+
+    /// <summary>Smallest absolute change between a rule's current numeric value and the household's corrected
+    /// value worth proposing — below this the drift is within noise and not worth a proposal.</summary>
+    public double DriftMinShift { get; set; } = 1.0;
+
+    // --- Weekly digest (roadmap Epic 3J tail 5, extends 2N) ---
+
+    /// <summary>Whether the weekly "living home" digest is composed and sent (tone of the diary). Off ⇒ no digest.</summary>
+    public bool WeeklyDigestEnabled { get; set; } = true;
+
+    /// <summary>Day of week the digest is sent (0=Sunday … 1=Monday). Sent once on this day after the hour below.</summary>
+    public int WeeklyDigestDayOfWeek { get; set; } = 1;
+
+    /// <summary>Local hour (0–23) after which the digest may be sent on its day — a gentle morning nudge, not 3am.</summary>
+    public int WeeklyDigestHour { get; set; } = 9;
+
     // --- Composite control blocks (roadmap Epic 1H E2) ---
 
     /// <summary>

@@ -181,5 +181,24 @@
     "minHistoryDaysHint": "On a fresh install the suggesters stay quiet until this much history has accrued — the ML page shows the progress.",
     "save": "Save",
     "saved": "Settings saved"
+  },
+  "notifications": {
+    "title": "Notification discipline",
+    "caption": "Where and how often notifications arrive; safety always gets through.",
+    "hint": "By default every enabled channel gets everything. Uncheck to mute a category on a channel. Safety (critical) notifications ignore the mute and the rate-limit.",
+    "routing": "Per-type routing",
+    "category": "Category",
+    "categories": {
+      "reactive": "Reactive",
+      "proactive": "Proactive",
+      "optimization": "Optimization"
+    },
+    "noChannels": "No delivery channels registered.",
+    "rateLimit": "Rate-limit (min repeat interval, s)",
+    "rateLimitHint": "A repeat of the same notification within the window is dropped — against \"cry wolf\". Safety is never rate-limited.",
+    "safetyFloor": "Safety floor",
+    "safetyFloorHint": "A critical (safety) notification always reaches at least one prominent channel, even if it's muted.",
+    "save": "Save",
+    "saved": "Settings saved"
   }
 }

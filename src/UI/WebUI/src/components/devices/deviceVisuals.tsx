@@ -32,6 +32,8 @@ import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import WeekendRoundedIcon from '@mui/icons-material/WeekendRounded';
 import CelebrationRoundedIcon from '@mui/icons-material/CelebrationRounded';
 import EventRoundedIcon from '@mui/icons-material/EventRounded';
+import PersonPinCircleRoundedIcon from '@mui/icons-material/PersonPinCircleRounded';
+import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
 import DevicesOtherRoundedIcon from '@mui/icons-material/DevicesOtherRounded';
 import i18n from 'i18next';
 import type { Capability, CapabilityDevice } from '../../api/capabilityDevices';
@@ -90,6 +92,9 @@ const CAPABILITY_ICONS: Record<string, SvgIconComponent> = {
   is_weekend: WeekendRoundedIcon,
   is_holiday: CelebrationRoundedIcon,
   date: EventRoundedIcon,
+  presence: PersonPinCircleRoundedIcon,
+  anyone_home: GroupsRoundedIcon,
+  home_count: GroupsRoundedIcon,
 };
 
 /** A readable label for a capability id (well-known or namespaced/custom). */
@@ -109,7 +114,7 @@ const writable = (device: CapabilityDevice, id: string) =>
 const ARCHETYPE_CATEGORY: Record<string, DeviceCategory> = {
   light: 'light', switch: 'switch', thermostat: 'climate', valve: 'climate',
   climate_sensor: 'sensor', motion: 'sensor', contact: 'sensor', sensor: 'sensor',
-  sun: 'sensor', clock: 'sensor', calendar: 'sensor',
+  sun: 'sensor', clock: 'sensor', calendar: 'sensor', person: 'sensor', presence: 'sensor',
   lock: 'security', energy_meter: 'energy', control_block: 'other',
 };
 
@@ -145,7 +150,7 @@ export function primaryCapability(device: CapabilityDevice): Capability | undefi
   const order = [
     'on_off', 'brightness', 'lock', 'temperature_setpoint', 'temperature',
     'occupancy', 'contact', 'humidity', 'co2', 'power', 'illuminance', 'battery',
-    'sun_elevation', 'clock', 'day_of_week',
+    'sun_elevation', 'clock', 'day_of_week', 'presence', 'anyone_home',
   ];
   for (const id of order) {
     const cap = device.capabilities.find((c) => c.id === id);
@@ -218,7 +223,8 @@ export function describeDevice(device: CapabilityDevice): DeviceVisual {
     case 'sensor':
     default: {
       primary = sensorHeadline(device, state);
-      isActive = asBool(state.occupancy) || asBool(state.contact);
+      isActive = asBool(state.occupancy) || asBool(state.contact)
+        || asBool(state.presence) || asBool(state.anyone_home);
       break;
     }
   }
@@ -235,6 +241,11 @@ function sensorHeadline(device: CapabilityDevice, state: Record<string, unknown>
   if ('occupancy' in state) return asBool(state.occupancy) ? t('headline.motion') : t('headline.clear');
   if ('contact' in state) return asBool(state.contact) ? t('headline.open') : t('headline.closed');
   if ('battery' in state) return fmtNum(state.battery, '%');
+  if ('presence' in state) return asBool(state.presence) ? t('headline.home') : t('headline.away');
+  if ('anyone_home' in state) {
+    const count = 'home_count' in state ? asNum(state.home_count) : (asBool(state.anyone_home) ? 1 : 0);
+    return asBool(state.anyone_home) ? t('headline.someoneHome', { count }) : t('headline.nobodyHome');
+  }
   if ('sun_elevation' in state) return fmtNum(state.sun_elevation, '°');
   if ('clock' in state) return String(state.clock);
   if ('day_of_week' in state) return String(state.day_of_week);

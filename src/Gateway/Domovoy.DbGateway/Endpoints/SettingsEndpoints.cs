@@ -4,6 +4,7 @@
 
 using Domovoy.Contracts.Home;
 using Domovoy.Contracts.Ml;
+using Domovoy.Contracts.Notifications;
 using Domovoy.DbGateway.Models;
 using Domovoy.DbGateway.Services;
 
@@ -29,6 +30,8 @@ public static class SettingsEndpoints
     public const string TariffCollection = "tariff_settings";
     public const string LoadManagementCollection = "load_management_settings";
     public const string MlCollection = "ml_settings";
+    public const string PresenceCollection = "presence_settings";
+    public const string NotificationCollection = "notification_settings";
 
     public record LocationUpdate(double Latitude, double Longitude, string? Label, string? TimeZoneId, bool TimeZoneAuto);
     public record CalendarUpdate(List<int>? WeekendDays, List<string>? Holidays);
@@ -37,6 +40,9 @@ public static class SettingsEndpoints
         bool Enabled, List<PowerBudget>? Budgets, double? RestoreMarginWatts, int? MinDwellSeconds,
         List<PhaseLimit>? PhaseLimits = null, List<CircuitLimit>? CircuitLimits = null);
     public record MlSettingsUpdate(bool Enabled, bool ProposalsEnabled, int? MinHistoryDays);
+    public record PresenceSettingsUpdate(double? HomeRadiusMeters, int? AwayGraceSeconds, string? OwnTracksToken);
+    public record NotificationSettingsUpdate(
+        Dictionary<string, List<string>>? MutedChannels, Dictionary<string, int>? MinIntervalSeconds, bool SafetyFloorEnabled);
 
     public static void MapSettingsEndpoints(this IEndpointRouteBuilder app)
     {
@@ -210,6 +216,55 @@ public static class SettingsEndpoints
                 x => x.Id == MlSettings.SingletonId, settings, new ReplaceOptions { IsUpsert = true });
             return Results.Ok(settings);
         });
+
+        // --- Presence-layer settings (roadmap Epic 3D) ---
+
+        // Current presence config (defaults: 150 m geofence, 180 s away-grace, no ingest token). The token is
+        // returned to the authenticated admin UI on purpose — the owner copies it into the OwnTracks app.
+        group.MapGet("/presence", async (IMongoDatabase db) => Results.Ok(await GetPresenceOrDefault(db)));
+
+        group.MapPut("/presence", async (PresenceSettingsUpdate body, IMongoDatabase db) =>
+        {
+            var settings = new PresenceSettings
+            {
+                HomeRadiusMeters = Math.Clamp(body.HomeRadiusMeters ?? 150, 10, 50_000),
+                AwayGraceSeconds = Math.Clamp(body.AwayGraceSeconds ?? 180, 0, 86_400),
+                OwnTracksToken = string.IsNullOrWhiteSpace(body.OwnTracksToken) ? null : body.OwnTracksToken.Trim(),
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await Presences(db).ReplaceOneAsync(
+                x => x.Id == PresenceSettings.SingletonId, settings, new ReplaceOptions { IsUpsert = true });
+            return Results.Ok(settings);
+        });
+
+        // --- Notification-discipline settings (roadmap Epic 3F) ---
+
+        // Current notification settings (defaults: nothing muted, safety floor on — the discipline is opt-out).
+        group.MapGet("/notifications", async (IMongoDatabase db) => Results.Ok(await GetNotificationOrDefault(db)));
+
+        group.MapPut("/notifications", async (NotificationSettingsUpdate body, IMongoDatabase db) =>
+        {
+            // Keep only known categories; drop blank channel names; clamp intervals to a sane [0, 24h].
+            var muted = (body.MutedChannels ?? new())
+                .Where(kv => NotificationCategories.IsKnown(kv.Key))
+                .ToDictionary(
+                    kv => kv.Key,
+                    kv => kv.Value.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).Distinct().ToList());
+            var intervals = (body.MinIntervalSeconds ?? new())
+                .Where(kv => NotificationCategories.IsKnown(kv.Key))
+                .ToDictionary(kv => kv.Key, kv => Math.Clamp(kv.Value, 0, 86_400));
+
+            var settings = new NotificationSettings
+            {
+                MutedChannels = muted,
+                MinIntervalSeconds = intervals,
+                SafetyFloorEnabled = body.SafetyFloorEnabled,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await Notifications(db).ReplaceOneAsync(
+                x => x.Id == NotificationSettings.SingletonId, settings, new ReplaceOptions { IsUpsert = true });
+            return Results.Ok(settings);
+        });
     }
 
     /// <summary>Derive the IANA timezone id for a coordinate, fully offline (GeoTimeZone's embedded shapes).</summary>
@@ -246,6 +301,18 @@ public static class SettingsEndpoints
         return settings ?? new MlSettings();
     }
 
+    private static async Task<PresenceSettings> GetPresenceOrDefault(IMongoDatabase db)
+    {
+        var settings = await Presences(db).Find(x => x.Id == PresenceSettings.SingletonId).FirstOrDefaultAsync();
+        return settings ?? new PresenceSettings();
+    }
+
+    private static async Task<NotificationSettings> GetNotificationOrDefault(IMongoDatabase db)
+    {
+        var settings = await Notifications(db).Find(x => x.Id == NotificationSettings.SingletonId).FirstOrDefaultAsync();
+        return settings ?? new NotificationSettings();
+    }
+
     /// <summary>Strict <c>yyyy-MM-dd</c> check so a bad string can never poison the holiday list.</summary>
     private static bool IsIsoDate(string? s) =>
         DateOnly.TryParseExact(s, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
@@ -265,4 +332,10 @@ public static class SettingsEndpoints
 
     private static IMongoCollection<MlSettings> MlSettingsColl(IMongoDatabase db) =>
         db.GetCollection<MlSettings>(MlCollection);
+
+    private static IMongoCollection<PresenceSettings> Presences(IMongoDatabase db) =>
+        db.GetCollection<PresenceSettings>(PresenceCollection);
+
+    private static IMongoCollection<NotificationSettings> Notifications(IMongoDatabase db) =>
+        db.GetCollection<NotificationSettings>(NotificationCollection);
 }

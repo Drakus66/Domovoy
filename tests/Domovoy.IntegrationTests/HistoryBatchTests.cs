@@ -2,9 +2,10 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-using Domovoy.DbGateway.Endpoints;
 using Domovoy.DbGateway.Models;
 using Domovoy.DbGateway.Services;
+using Domovoy.DbGateway.Stores;
+using Domovoy.DbGateway.Stores.Mongo;
 
 using MongoDB.Driver;
 
@@ -13,11 +14,11 @@ using Xunit;
 namespace Domovoy.IntegrationTests;
 
 /// <summary>
-/// Batch history read-path against real Mongo (dashboard fill): the multi-series telemetry aggregation
-/// (<c>POST /api/telemetry/aggregate/batch</c>) and per-device latest-event provenance
-/// (<c>POST /api/events/latest-by-device</c>). Verifies one round-trip returns correctly split-per-series
-/// buckets and the most-recent event per device — the primitive the sparklines / composed charts rely on.
-/// Unique device ids isolate this data from other tests sharing the infra fixture.
+/// Batch history read-path against real Mongo (dashboard fill), exercised through the Epic 3H storage-abstraction
+/// seam (<see cref="ITelemetryStore"/>): the multi-series telemetry aggregation and per-device latest-event
+/// provenance. Verifies one round-trip returns correctly split-per-series buckets and the most-recent event per
+/// device. Going through the store (not the endpoint's old statics) is exactly what Ф1 asks for — the same test
+/// will run against a future PostgreSQL store. Unique device ids isolate this data from other infra-fixture tests.
 /// </summary>
 [Collection("infra")]
 [Trait("Category", "Infra")]
@@ -25,6 +26,8 @@ public sealed class HistoryBatchTests
 {
     private readonly InfraFixture _fx;
     public HistoryBatchTests(InfraFixture fx) => _fx = fx;
+
+    private ITelemetryStore Store => new MongoTelemetryStore(_fx.Db);
 
     private IMongoCollection<SensorReading> Readings =>
         _fx.Db.GetCollection<SensorReading>(TimeSeriesInitializer.SensorReadingsCollection);
@@ -54,15 +57,14 @@ public sealed class HistoryBatchTests
             Reading(b, "power", 300, now.AddMinutes(-2)),
         });
 
-        var avg = await HistoryEndpoints.AggregateBatchAsync(
-            _fx.Db,
+        var avg = await Store.AggregateBatchAsync(
             new[]
             {
-                new HistoryEndpoints.SeriesSpec(a, "temperature"),
-                new HistoryEndpoints.SeriesSpec(b, "power"),
-                new HistoryEndpoints.SeriesSpec(a, "humidity"), // no samples → empty series
+                new SeriesSpec(a, "temperature"),
+                new SeriesSpec(b, "power"),
+                new SeriesSpec(a, "humidity"), // no samples → empty series
             },
-            from: null, to: null, bucket: "hour", agg: "avg", maxPoints: null);
+            null, null, "hour", "avg", null, default);
 
         Assert.Equal(3, avg.Count);
 
@@ -81,9 +83,8 @@ public sealed class HistoryBatchTests
         Assert.Empty(empty.Buckets);
 
         // agg=max returns the bucket max as Value.
-        var max = await HistoryEndpoints.AggregateBatchAsync(
-            _fx.Db, new[] { new HistoryEndpoints.SeriesSpec(a, "temperature") },
-            from: null, to: null, bucket: "hour", agg: "max", maxPoints: null);
+        var max = await Store.AggregateBatchAsync(
+            new[] { new SeriesSpec(a, "temperature") }, null, null, "hour", "max", null, default);
         Assert.Equal(24, max.Single().Buckets.Last().Value, 3);
     }
 
@@ -94,7 +95,6 @@ public sealed class HistoryBatchTests
         var now = DateTime.UtcNow;
 
         // A cumulative energy counter climbing within one bucket (Epic 3C): consumption = last − first.
-        // Sub-10s spacing keeps all three in one clock-hour bucket regardless of when the test runs.
         await Readings.InsertManyAsync(new[]
         {
             Reading(d, "energy", 10, now.AddSeconds(-6)),
@@ -102,14 +102,12 @@ public sealed class HistoryBatchTests
             Reading(d, "energy", 15, now),
         });
 
-        var delta = await HistoryEndpoints.AggregateBatchAsync(
-            _fx.Db, new[] { new HistoryEndpoints.SeriesSpec(d, "energy") },
-            from: null, to: null, bucket: "hour", agg: "delta", maxPoints: null);
+        var delta = await Store.AggregateBatchAsync(
+            new[] { new SeriesSpec(d, "energy") }, null, null, "hour", "delta", null, default);
         Assert.Equal(5, Assert.Single(delta.Single().Buckets).Value, 3); // 15 − 10
 
-        var sum = await HistoryEndpoints.AggregateBatchAsync(
-            _fx.Db, new[] { new HistoryEndpoints.SeriesSpec(d, "energy") },
-            from: null, to: null, bucket: "hour", agg: "sum", maxPoints: null);
+        var sum = await Store.AggregateBatchAsync(
+            new[] { new SeriesSpec(d, "energy") }, null, null, "hour", "sum", null, default);
         Assert.Equal(37, Assert.Single(sum.Single().Buckets).Value, 3); // 10 + 12 + 15
     }
 
@@ -128,22 +126,19 @@ public sealed class HistoryBatchTests
             Reading(d, "energy", 3, now),
         });
 
-        var delta = await HistoryEndpoints.AggregateBatchAsync(
-            _fx.Db, new[] { new HistoryEndpoints.SeriesSpec(d, "energy") },
-            from: null, to: null, bucket: "hour", agg: "delta", maxPoints: null);
+        var delta = await Store.AggregateBatchAsync(
+            new[] { new SeriesSpec(d, "energy") }, null, null, "hour", "delta", null, default);
         Assert.Equal(3, Assert.Single(delta.Single().Buckets).Value, 3); // reset → last (3)
     }
 
     [Fact]
     public async Task AggregateBatch_RejectsBadBucket_AndEmptySeriesIsEmpty()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => HistoryEndpoints.AggregateBatchAsync(
-            _fx.Db, new[] { new HistoryEndpoints.SeriesSpec("x", "y") },
-            from: null, to: null, bucket: "week", agg: "avg", maxPoints: null));
+        await Assert.ThrowsAsync<ArgumentException>(() => Store.AggregateBatchAsync(
+            new[] { new SeriesSpec("x", "y") }, null, null, "week", "avg", null, default));
 
-        var empty = await HistoryEndpoints.AggregateBatchAsync(
-            _fx.Db, Array.Empty<HistoryEndpoints.SeriesSpec>(),
-            from: null, to: null, bucket: "hour", agg: "avg", maxPoints: null);
+        var empty = await Store.AggregateBatchAsync(
+            Array.Empty<SeriesSpec>(), null, null, "hour", "avg", null, default);
         Assert.Empty(empty);
     }
 
@@ -176,8 +171,7 @@ public sealed class HistoryBatchTests
             },
         });
 
-        var rows = await HistoryEndpoints.LatestByDeviceAsync(
-            _fx.Db, new[] { a, b, Guid.NewGuid().ToString() }, from: null, to: null);
+        var rows = await Store.LatestByDeviceAsync(new[] { a, b, Guid.NewGuid().ToString() }, null, null, default);
 
         Assert.Equal(2, rows.Count); // the unknown id has no events
 

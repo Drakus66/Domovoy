@@ -51,6 +51,7 @@ internal static class Program
             builder.Services.AddSingleton<Services.Notifications.INotificationChannel, Services.Notifications.NtfyChannel>();
             builder.Services.AddSingleton<Services.Notifications.INotificationChannel, Services.Notifications.TelegramChannel>();
             builder.Services.AddSingleton<Services.Notifications.INotificationChannel, Services.Notifications.WebhookChannel>();
+            builder.Services.AddSingleton<Services.Notifications.NotificationRuntimeState>(); // 3F: live notification-discipline settings (RefreshLoop syncs notification_settings)
             builder.Services.AddSingleton<Services.Notifications.NotificationDispatcher>();
 
             // Typed HttpClient to the DbGateway (rules + device read-model + event-log for replay).
@@ -104,6 +105,8 @@ internal static class Program
             builder.Services.AddSingleton<BlockRuntime>();          // 1H: tick control blocks as virtual devices
             builder.Services.AddHostedService(sp => sp.GetRequiredService<BlockRuntime>()); // + expose runtime health
             builder.Services.AddHostedService<SystemSensorService>(); // 2L: virtual sensors (Sun/Time/Calendar/Home)
+            builder.Services.AddSingleton<PresenceState>();           // 3D: live resident presence + occupancy aggregate
+            builder.Services.AddHostedService<PresenceService>();     // 3D: person/occupancy virtual devices + geofence
             builder.Services.AddHostedService<VariableRuntimeService>(); // 3E: global variables as virtual capability devices
             builder.Services.AddHostedService<TariffService>();       // 3C: tariff virtual device (price/tariff_zone)
             builder.Services.AddSingleton<LoadManager>();           // 3C-LM: load-shedding coordinator
@@ -120,6 +123,7 @@ internal static class Program
             builder.Services.AddSingleton<Ml.ArchetypeAdvisor>();  // 2D: ML.NET archetype classifier (advisory)
             builder.Services.AddSingleton<Services.Discovery.DiscoveryEngine>(); // 2F: full MI/FDR pattern-discovery funnel
             builder.Services.AddHostedService(sp => sp.GetRequiredService<Services.Discovery.DiscoveryEngine>());
+            builder.Services.AddHostedService<Services.Discovery.WeeklyDigestService>(); // 3J: weekly "living home" digest
             // 2H: natural-language assistant extension point — the shipped connector is a disabled stub.
             builder.Services.AddSingleton<Services.Assistant.IAssistantConnector, Services.Assistant.DisabledAssistantConnector>();
 
@@ -207,6 +211,11 @@ internal static class Program
                         new Services.Notifications.NotificationMessage("Domovoy", "Test notification", "warning"), ct);
                     return Results.Ok(new { delivered, enabled = dispatcher.EnabledChannels });
                 });
+
+            // Presence layer status (roadmap Epic 3D): the resident roster joined with each one's live
+            // home/away + the occupancy aggregate. Owned here (the live signal lives in PresenceState),
+            // separate from the DbGateway resident CRUD.
+            app.MapGet("/api/presence/status", (PresenceState presence) => Results.Ok(presence.GetSnapshot()));
 
             // Control-block runtime health (roadmap Epic 1H): last-tick/error per loaded block so the UI can
             // tell a running block from a stalled or misconfigured one. Owned here (the runtime lives here),

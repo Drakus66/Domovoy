@@ -89,7 +89,8 @@ public sealed class PowerTopologyTests
             Energy(strayId, 1, now.AddSeconds(-6)), Energy(strayId, 3, now),      // 2 kWh, unmapped
         });
 
-        var res = await EnergyEndpoints.BreakdownAsync(_fx.Db, from: null, to: null);
+        var res = await EnergyEndpoints.BreakdownAsync(
+            _fx.Db, new Domovoy.DbGateway.Stores.Mongo.MongoTelemetryStore(_fx.Db), from: null, to: null);
 
         var circuit = res.Nodes.Single(n => n.NodeId == circuitId);
         Assert.Equal(3, circuit.Kwh, 3);              // only what the mapped devices explain
@@ -126,7 +127,8 @@ public sealed class PowerTopologyTests
             Energy(stoveId, 50, now.AddSeconds(-6)), Energy(stoveId, 56, now), // 6 kWh over three phases
         });
 
-        var res = await EnergyEndpoints.BreakdownAsync(_fx.Db, from: null, to: null);
+        var res = await EnergyEndpoints.BreakdownAsync(
+            _fx.Db, new Domovoy.DbGateway.Stores.Mongo.MongoTelemetryStore(_fx.Db), from: null, to: null);
 
         // Each phase carries a third of a three-phase load (v1 has no per-phase metering of one appliance).
         foreach (var phase in new[] { PowerPhases.L1, PowerPhases.L2, PowerPhases.L3 })

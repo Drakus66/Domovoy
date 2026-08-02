@@ -210,21 +210,63 @@ public static class ProposalApplication
     }
 
     // Rule-amendment proposal (Epic 3J "living rules"): apply a change to an existing rule the household keeps
-    // overriding. v1 supports "disable" — retire a rule the user overrode in most of its firings. Only ever
-    // touches an Active/Bounded/Shadow rule; a rule already disabled/gone is a harmless no-op reported as an error.
+    // overriding. Actions: "disable" (retire a rule fought everywhere), "add_condition" (add an exception so a
+    // rule fought in one context stops misfiring there — self-correcting), "set_threshold" (shift a drifted numeric
+    // trigger value). A rule already gone is a harmless error; nothing here activates without the approval itself.
     private static async Task<(bool Ok, string? Error)> ApplyRuleAmendmentAsync(IMongoDatabase db, Proposal p)
     {
         if (string.IsNullOrEmpty(p.RuleId)) return (false, "proposal has no ruleId");
-        if (!string.Equals(p.AmendmentAction, "disable", StringComparison.OrdinalIgnoreCase))
-            return (false, $"unsupported amendment action '{p.AmendmentAction}'");
-
         var rules = db.GetCollection<AutomationRule>(AutomationEndpoints.Collection);
-        var update = Builders<AutomationRule>.Update
-            .Set(x => x.Status, RuleStatus.Disabled)
-            .Set(x => x.UpdatedAt, DateTime.UtcNow);
-        var result = await rules.UpdateOneAsync(x => x.Id == p.RuleId, update);
-        return result.MatchedCount == 0 ? (false, "target rule not found") : (true, null);
+
+        switch ((p.AmendmentAction ?? string.Empty).ToLowerInvariant())
+        {
+            case "disable":
+            {
+                var update = Builders<AutomationRule>.Update
+                    .Set(x => x.Status, RuleStatus.Disabled)
+                    .Set(x => x.UpdatedAt, DateTime.UtcNow);
+                var result = await rules.UpdateOneAsync(x => x.Id == p.RuleId, update);
+                return result.MatchedCount == 0 ? (false, "target rule not found") : (true, null);
+            }
+
+            case "add_condition":
+            {
+                if (p.AmendmentCondition is null) return (false, "amendment has no condition");
+                var rule = await rules.Find(x => x.Id == p.RuleId).FirstOrDefaultAsync();
+                if (rule is null) return (false, "target rule not found");
+                rule.Conditions.Add(p.AmendmentCondition);
+                rule.UpdatedAt = DateTime.UtcNow;
+                await rules.ReplaceOneAsync(x => x.Id == p.RuleId, rule);
+                return (true, null);
+            }
+
+            case "set_threshold":
+            {
+                if (string.IsNullOrEmpty(p.AmendmentCapabilityId) || p.AmendmentValue is null)
+                    return (false, "amendment has no capability/value");
+                var rule = await rules.Find(x => x.Id == p.RuleId).FirstOrDefaultAsync();
+                if (rule is null) return (false, "target rule not found");
+
+                var changed = 0;
+                foreach (var trg in rule.Triggers)
+                    if (trg.Type == TriggerType.DeviceState
+                        && string.Equals(trg.CapabilityId, p.AmendmentCapabilityId, StringComparison.OrdinalIgnoreCase)
+                        && IsNumeric(trg.Value))
+                    { trg.Value = p.AmendmentValue.Value; changed++; }
+
+                if (changed == 0) return (false, "no matching numeric trigger threshold to set");
+                rule.UpdatedAt = DateTime.UtcNow;
+                await rules.ReplaceOneAsync(x => x.Id == p.RuleId, rule);
+                return (true, null);
+            }
+
+            default:
+                return (false, $"unsupported amendment action '{p.AmendmentAction}'");
+        }
     }
+
+    private static bool IsNumeric(object? value) =>
+        value is double or float or long or int or decimal;
 
     // Block-targeting proposals (promotion / model pin): patch one numeric param on the block. Params is
     // numeric-only by contract (Epic 1H), which is exactly what a stage index or a model version needs.

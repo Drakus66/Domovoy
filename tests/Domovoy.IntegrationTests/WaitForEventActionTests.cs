@@ -39,7 +39,7 @@ public sealed class WaitForEventActionTests
         public Harness()
         {
             var dispatcher = new NotificationDispatcher(
-                new INotificationChannel[] { Bus.Notifications }, NullLogger<NotificationDispatcher>.Instance);
+                new INotificationChannel[] { Bus.Notifications }, new NotificationRuntimeState(), NullLogger<NotificationDispatcher>.Instance);
             var scenes = new SceneStore(
                 new DbGatewayClient(new HttpClient(), NullLogger<DbGatewayClient>.Instance),
                 NullLogger<SceneStore>.Instance);
@@ -195,6 +195,7 @@ public sealed class WaitForEventActionTests
 
         public string Name => "recording";
         public bool Enabled => true;
+        public NotificationVisibility Visibility => NotificationVisibility.Quiet;
 
         public Task<bool> SendAsync(NotificationMessage message, CancellationToken ct)
         {

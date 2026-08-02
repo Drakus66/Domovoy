@@ -5,68 +5,29 @@
 using System.Globalization;
 using System.Text;
 
-using Domovoy.DbGateway.Models;
-using Domovoy.DbGateway.Services;
-
-using MongoDB.Bson;
-using MongoDB.Driver;
+using Domovoy.DbGateway.Stores;
 
 namespace Domovoy.DbGateway.Endpoints;
 
 /// <summary>
 /// Read endpoints over the append-only feature store (roadmap P0-5): the domain event-log
-/// (<c>/api/events</c>) and numeric telemetry (<c>/api/telemetry</c>). These let you export history
-/// for a period and reconstruct who/what changed a device's state — the basis for replay/explainability
-/// (Epic 1F) and ML features (Phase 2). The ApiGateway forwards to these via its HistoryController.
+/// (<c>/api/events</c>) and numeric telemetry (<c>/api/telemetry</c>). These let you export history for a period
+/// and reconstruct who/what changed a device's state — the basis for replay/explainability (Epic 1F) and ML
+/// features (Phase 2). The ApiGateway forwards to these via its HistoryController.
+///
+/// <para><b>Storage-abstraction seam (Epic 3H, Ф1 reference migration):</b> these endpoints are now thin HTTP
+/// adapters — parameter parsing, CSV formatting and error mapping only. Every read/aggregation goes through the
+/// <see cref="ITelemetryStore"/> domain interface, so no <c>MongoDB.Driver</c> type appears here. Swapping the
+/// backend (PostgreSQL, Ф2) is a new <see cref="ITelemetryStore"/> implementation; this file does not change.</para>
 /// </summary>
 public static class HistoryEndpoints
 {
-    private const int DefaultLimit = 500;
-    private const int MaxLimit = 5000;
-    private static readonly TimeSpan DefaultWindow = TimeSpan.FromHours(24);
-
-    /// <summary>Flattened event-log record for the client (Meta unpacked, no ObjectId).</summary>
-    public record EventLogDto(
-        DateTime Timestamp, string DeviceId, string ZoneId, string Kind, string CapabilityId,
-        object? OldValue, object? NewValue, string TriggerSource, string? TriggerId,
-        string? RuleId, string? DecisionId, string? Mode, string? CorrelationId);
-
-    /// <summary>Flattened telemetry sample for the client.</summary>
-    public record TelemetryDto(
-        DateTime Timestamp, string DeviceId, string ZoneId, string CapabilityId, string? Unit, double Value);
-
-    /// <summary>One time bucket of aggregated telemetry (roadmap Epic 1B). <c>Value</c> is the requested agg.</summary>
-    public record AggregateBucket(DateTime Timestamp, double Value, double Min, double Max, double Avg, long Count);
-
-    /// <summary>One (device, capability) series requested in a batch aggregation.</summary>
-    public record SeriesSpec(string DeviceId, string CapabilityId);
-
-    /// <summary>Aggregated buckets for one requested series (dashboard sparklines / composed charts).</summary>
-    public record SeriesResult(string DeviceId, string CapabilityId, IReadOnlyList<AggregateBucket> Buckets);
-
     /// <summary>Body of <c>POST /api/telemetry/aggregate/batch</c> — many series in one round-trip.</summary>
     public record AggregateBatchRequest(
         List<SeriesSpec> Series, DateTime? From, DateTime? To, string? Bucket, string? Agg, int? MaxPoints);
 
-    /// <summary>The latest event-log row for one device (batch provenance — "who changed it last").</summary>
-    public record LatestEventDto(
-        string DeviceId, DateTime Timestamp, string CapabilityId,
-        string TriggerSource, string? TriggerId, string? RuleId, string? CorrelationId, object? NewValue);
-
     /// <summary>Body of <c>POST /api/events/latest-by-device</c>.</summary>
     public record LatestByDeviceRequest(List<string> DeviceIds, DateTime? From, DateTime? To);
-
-    /// <summary>Cap on series/devices per batch request — bounds the fan-out of a single call.</summary>
-    private const int MaxBatchItems = 200;
-
-    /// <summary>Default points per sparkline series when the caller does not specify.</summary>
-    private const int DefaultMaxPoints = 48;
-
-    /// <summary>Bucket size → MongoDB <c>$dateTrunc</c> unit. Closed allow-list (no injection).</summary>
-    private static readonly Dictionary<string, string> Buckets = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["minute"] = "minute", ["hour"] = "hour", ["day"] = "day",
-    };
 
     public static void MapHistoryEndpoints(this IEndpointRouteBuilder app)
     {
@@ -75,359 +36,67 @@ public static class HistoryEndpoints
         // GET /api/events?deviceId=&capabilityId=&zoneId=&kind=&from=&to=&limit=
         group.MapGet("/events", async (
             string? deviceId, string? capabilityId, string? zoneId, string? kind,
-            DateTime? from, DateTime? to, int? limit, IMongoDatabase db) =>
-        {
-            var (lo, hi, take) = Window(from, to, limit);
-            var b = Builders<DeviceEventLog>.Filter;
-            var filters = new List<FilterDefinition<DeviceEventLog>>
-            {
-                b.Gte(x => x.Timestamp, lo), b.Lte(x => x.Timestamp, hi),
-            };
-            if (!string.IsNullOrEmpty(deviceId)) filters.Add(b.Eq(x => x.Meta.DeviceId, deviceId));
-            if (!string.IsNullOrEmpty(zoneId)) filters.Add(b.Eq(x => x.Meta.ZoneId, zoneId));
-            if (!string.IsNullOrEmpty(kind)) filters.Add(b.Eq(x => x.Meta.Kind, kind));
-            if (!string.IsNullOrEmpty(capabilityId)) filters.Add(b.Eq(x => x.CapabilityId, capabilityId));
-
-            var docs = await db.GetCollection<DeviceEventLog>(TimeSeriesInitializer.DeviceEventsCollection)
-                .Find(b.And(filters))
-                .SortByDescending(x => x.Timestamp)
-                .Limit(take)
-                .ToListAsync();
-
-            return Results.Ok(docs.Select(d => new EventLogDto(
-                d.Timestamp, d.Meta.DeviceId, d.Meta.ZoneId, d.Meta.Kind, d.CapabilityId,
-                d.OldValue, d.NewValue, d.TriggerSource, d.TriggerId, d.RuleId, d.DecisionId, d.Mode, d.CorrelationId)));
-        });
+            DateTime? from, DateTime? to, int? limit, ITelemetryStore store, CancellationToken ct) =>
+            Results.Ok(await store.QueryEventsAsync(deviceId, capabilityId, zoneId, kind, from, to, limit, ct)));
 
         // GET /api/telemetry?deviceId=&capabilityId=&zoneId=&from=&to=&limit=&format=json|csv
         group.MapGet("/telemetry", async (
             string? deviceId, string? capabilityId, string? zoneId,
-            DateTime? from, DateTime? to, int? limit, string? format, IMongoDatabase db) =>
+            DateTime? from, DateTime? to, int? limit, string? format, ITelemetryStore store, CancellationToken ct) =>
         {
-            var (lo, hi, take) = Window(from, to, limit);
-            var b = Builders<SensorReading>.Filter;
-            var filters = new List<FilterDefinition<SensorReading>>
-            {
-                b.Gte(x => x.Timestamp, lo), b.Lte(x => x.Timestamp, hi),
-            };
-            if (!string.IsNullOrEmpty(deviceId)) filters.Add(b.Eq(x => x.Meta.DeviceId, deviceId));
-            if (!string.IsNullOrEmpty(zoneId)) filters.Add(b.Eq(x => x.Meta.ZoneId, zoneId));
-            if (!string.IsNullOrEmpty(capabilityId)) filters.Add(b.Eq(x => x.Meta.CapabilityId, capabilityId));
-
-            var docs = await db.GetCollection<SensorReading>(TimeSeriesInitializer.SensorReadingsCollection)
-                .Find(b.And(filters))
-                .SortByDescending(x => x.Timestamp)
-                .Limit(take)
-                .ToListAsync();
-
-            var samples = docs.Select(d => new TelemetryDto(
-                d.Timestamp, d.Meta.DeviceId, d.Meta.ZoneId, d.Meta.CapabilityId, d.Meta.Unit, d.Value)).ToList();
-
+            var samples = await store.QueryTelemetryAsync(deviceId, capabilityId, zoneId, from, to, limit, ct);
             // Period export (Epic 1B): CSV for spreadsheets / external tools.
             if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
                 return Results.Text(ToCsv(samples), "text/csv", Encoding.UTF8);
-
             return Results.Ok(samples);
         });
 
-        // Lightweight sample counters for the ML data-sufficiency check (Epic 2P) — "is there enough history
-        // to train?" answered by Mongo counts/aggregation instead of paging the raw series to the caller.
-
-        // GET /api/telemetry/count?capabilityId=&zoneId=&from=&to=
+        // Lightweight sample counters for the ML data-sufficiency check (Epic 2P).
         group.MapGet("/telemetry/count", async (
-            string? capabilityId, string? zoneId, DateTime? from, DateTime? to, IMongoDatabase db) =>
-        {
-            var count = await db.GetCollection<SensorReading>(TimeSeriesInitializer.SensorReadingsCollection)
-                .CountDocumentsAsync(TelemetryFilter(capabilityId, zoneId, from, to));
-            return Results.Ok(new { count });
-        });
+            string? capabilityId, string? zoneId, DateTime? from, DateTime? to, ITelemetryStore store, CancellationToken ct) =>
+            Results.Ok(new { count = await store.CountTelemetryAsync(capabilityId, zoneId, from, to, ct) }));
 
-        // GET /api/telemetry/count-by-zone?capabilityId=&from=&to= → [{ zoneId, count }]
         group.MapGet("/telemetry/count-by-zone", async (
-            string? capabilityId, DateTime? from, DateTime? to, IMongoDatabase db) =>
-        {
-            var rows = await CountByZone(
-                db.GetCollection<SensorReading>(TimeSeriesInitializer.SensorReadingsCollection),
-                TelemetryFilter(capabilityId, null, from, to));
-            return Results.Ok(rows);
-        });
+            string? capabilityId, DateTime? from, DateTime? to, ITelemetryStore store, CancellationToken ct) =>
+            Results.Ok(await store.CountTelemetryByZoneAsync(capabilityId, from, to, ct)));
 
-        // GET /api/events/count?capabilityId=&zoneId=&from=&to=
         group.MapGet("/events/count", async (
-            string? capabilityId, string? zoneId, DateTime? from, DateTime? to, IMongoDatabase db) =>
-        {
-            var count = await db.GetCollection<DeviceEventLog>(TimeSeriesInitializer.DeviceEventsCollection)
-                .CountDocumentsAsync(EventFilter(capabilityId, zoneId, from, to));
-            return Results.Ok(new { count });
-        });
+            string? capabilityId, string? zoneId, DateTime? from, DateTime? to, ITelemetryStore store, CancellationToken ct) =>
+            Results.Ok(new { count = await store.CountEventsAsync(capabilityId, zoneId, from, to, ct) }));
 
-        // GET /api/events/earliest → { earliest: <UTC | null> }. The timestamp of the oldest recorded event —
-        // "how old is the history" for the Epic 3I cold-start gate. Deliberately does NOT go through Window()
-        // (whose 24h default would hide the true start); a plain min over the whole time-series collection.
-        group.MapGet("/events/earliest", async (IMongoDatabase db) =>
-        {
-            var oldest = await db.GetCollection<DeviceEventLog>(TimeSeriesInitializer.DeviceEventsCollection)
-                .Find(FilterDefinition<DeviceEventLog>.Empty)
-                .SortBy(x => x.Timestamp).Limit(1).FirstOrDefaultAsync();
-            return Results.Ok(new { earliest = oldest?.Timestamp });
-        });
+        // The timestamp of the oldest recorded event — "how old is the history" for the 3I cold-start gate.
+        group.MapGet("/events/earliest", async (ITelemetryStore store, CancellationToken ct) =>
+            Results.Ok(new { earliest = await store.EarliestEventAsync(ct) }));
 
-        // GET /api/events/count-by-zone?capabilityId=&from=&to= → [{ zoneId, count }]
         group.MapGet("/events/count-by-zone", async (
-            string? capabilityId, DateTime? from, DateTime? to, IMongoDatabase db) =>
-        {
-            var rows = await CountByZone(
-                db.GetCollection<DeviceEventLog>(TimeSeriesInitializer.DeviceEventsCollection),
-                EventFilter(capabilityId, null, from, to));
-            return Results.Ok(rows);
-        });
+            string? capabilityId, DateTime? from, DateTime? to, ITelemetryStore store, CancellationToken ct) =>
+            Results.Ok(await store.CountEventsByZoneAsync(capabilityId, from, to, ct)));
 
-        // GET /api/telemetry/aggregate?deviceId=&capabilityId=&zoneId=&from=&to=&bucket=hour&agg=avg
-        // Minute/hour/day rollups computed on the fly (roadmap Epic 1B) — e.g. "zone temperature per hour".
+        // GET /api/telemetry/aggregate — minute/hour/day rollups computed on the fly (roadmap Epic 1B).
         group.MapGet("/telemetry/aggregate", async (
             string? deviceId, string? capabilityId, string? zoneId,
-            DateTime? from, DateTime? to, string? bucket, string? agg, IMongoDatabase db) =>
+            DateTime? from, DateTime? to, string? bucket, string? agg, ITelemetryStore store, CancellationToken ct) =>
         {
-            if (!Buckets.TryGetValue(bucket ?? "hour", out var unit))
-                return Results.BadRequest(new { error = "bucket must be minute, hour or day" });
-
-            var which = (agg ?? "avg").ToLowerInvariant();
-            if (!AggAllowed(which))
-                return Results.BadRequest(new { error = AggError });
-
-            var (lo, hi, _) = Window(from, to, null);
-
-            var match = new BsonDocument
-            {
-                { "Timestamp", new BsonDocument { { "$gte", lo }, { "$lte", hi } } },
-            };
-            if (!string.IsNullOrEmpty(deviceId)) match["Meta.DeviceId"] = deviceId;
-            if (!string.IsNullOrEmpty(zoneId)) match["Meta.ZoneId"] = zoneId;
-            if (!string.IsNullOrEmpty(capabilityId)) match["Meta.CapabilityId"] = capabilityId;
-
-            var stages = new List<BsonDocument> { new("$match", match) };
-            // delta reads first/last within each bucket → the samples must be time-ordered before $group.
-            if (which == "delta") stages.Add(new BsonDocument("$sort", new BsonDocument("Timestamp", 1)));
-            stages.Add(new BsonDocument("$group", GroupStage(new BsonDocument("$dateTrunc", new BsonDocument
-                { { "date", "$Timestamp" }, { "unit", unit }, { "binSize", 1 } }))));
-            stages.Add(new BsonDocument("$sort", new BsonDocument("_id", 1)));
-            stages.Add(new BsonDocument("$limit", MaxLimit));
-
-            var rows = await db.GetCollection<SensorReading>(TimeSeriesInitializer.SensorReadingsCollection)
-                .Aggregate<BsonDocument>(stages.ToArray())
-                .ToListAsync();
-
-            var buckets = rows.Select(r => BucketOf(r, r["_id"].ToUniversalTime(), which));
-
-            return Results.Ok(buckets);
+            try { return Results.Ok(await store.AggregateTelemetryAsync(deviceId, capabilityId, zoneId, from, to, bucket, agg, ct)); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
         });
 
         // POST /api/telemetry/aggregate/batch — many (deviceId, capabilityId) series in ONE round-trip.
-        // The dashboard fill (sparklines per tile) and composed multi-series charts would otherwise fire
-        // one aggregate request per series; this coalesces them into a single Mongo aggregation.
-        group.MapPost("/telemetry/aggregate/batch", async (AggregateBatchRequest req, IMongoDatabase db) =>
+        group.MapPost("/telemetry/aggregate/batch", async (AggregateBatchRequest req, ITelemetryStore store, CancellationToken ct) =>
         {
-            try
-            {
-                var results = await AggregateBatchAsync(
-                    db, req.Series, req.From, req.To, req.Bucket, req.Agg, req.MaxPoints);
-                return Results.Ok(results);
-            }
-            catch (ArgumentException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+            try { return Results.Ok(await store.AggregateBatchAsync(req.Series, req.From, req.To, req.Bucket, req.Agg, req.MaxPoints, ct)); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
         });
 
         // POST /api/events/latest-by-device — the most recent event-log row per device in ONE round-trip.
-        // Feeds the per-tile "last changed by …" provenance chip without an N+1 of /api/events calls.
-        group.MapPost("/events/latest-by-device", async (LatestByDeviceRequest req, IMongoDatabase db) =>
+        group.MapPost("/events/latest-by-device", async (LatestByDeviceRequest req, ITelemetryStore store, CancellationToken ct) =>
         {
-            try
-            {
-                var rows = await LatestByDeviceAsync(db, req.DeviceIds, req.From, req.To);
-                return Results.Ok(rows);
-            }
-            catch (ArgumentException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
+            try { return Results.Ok(await store.LatestByDeviceAsync(req.DeviceIds, req.From, req.To, ct)); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
         });
     }
 
-    /// <summary>
-    /// Aggregate telemetry for many (device, capability) series at once (roadmap dashboard fill). One Mongo
-    /// aggregation with an <c>$or</c> over the requested pairs and a compound group key (device, capability,
-    /// truncated time); results are split back per series and capped to the most-recent <paramref name="maxPoints"/>.
-    /// Extracted from the endpoint so it can be integration-tested directly against the store.
-    /// </summary>
-    public static async Task<List<SeriesResult>> AggregateBatchAsync(
-        IMongoDatabase db, IReadOnlyList<SeriesSpec>? series,
-        DateTime? from, DateTime? to, string? bucket, string? agg, int? maxPoints)
-    {
-        if (!Buckets.TryGetValue(bucket ?? "hour", out var unit))
-            throw new ArgumentException("bucket must be minute, hour or day");
-
-        var which = (agg ?? "avg").ToLowerInvariant();
-        if (!AggAllowed(which))
-            throw new ArgumentException(AggError);
-
-        // De-duplicate and drop blanks so a repeated series doesn't skew the $or or the response.
-        var specs = (series ?? Array.Empty<SeriesSpec>())
-            .Where(s => !string.IsNullOrEmpty(s.DeviceId) && !string.IsNullOrEmpty(s.CapabilityId))
-            .Distinct()
-            .ToList();
-        if (specs.Count > MaxBatchItems)
-            throw new ArgumentException($"at most {MaxBatchItems} series per request");
-        if (specs.Count == 0) return new List<SeriesResult>();
-
-        var cap = Math.Clamp(maxPoints ?? DefaultMaxPoints, 1, MaxLimit);
-        var (lo, hi, _) = Window(from, to, null);
-
-        var orConds = new BsonArray(specs.Select(s => new BsonDocument
-        {
-            { "Meta.DeviceId", s.DeviceId }, { "Meta.CapabilityId", s.CapabilityId },
-        }));
-
-        var stages = new List<BsonDocument>
-        {
-            new("$match", new BsonDocument
-            {
-                { "Timestamp", new BsonDocument { { "$gte", lo }, { "$lte", hi } } },
-                { "$or", orConds },
-            }),
-        };
-        // delta reads first/last within each bucket → time-order the samples before $group.
-        if (which == "delta") stages.Add(new BsonDocument("$sort", new BsonDocument("Timestamp", 1)));
-        stages.Add(new BsonDocument("$group", GroupStage(new BsonDocument
-        {
-            { "d", "$Meta.DeviceId" },
-            { "c", "$Meta.CapabilityId" },
-            { "t", new BsonDocument("$dateTrunc", new BsonDocument
-                { { "date", "$Timestamp" }, { "unit", unit }, { "binSize", 1 } }) },
-        })));
-        stages.Add(new BsonDocument("$sort", new BsonDocument { { "_id.d", 1 }, { "_id.c", 1 }, { "_id.t", 1 } }));
-        stages.Add(new BsonDocument("$limit", MaxLimit));
-
-        var rows = await db.GetCollection<SensorReading>(TimeSeriesInitializer.SensorReadingsCollection)
-            .Aggregate<BsonDocument>(stages.ToArray())
-            .ToListAsync();
-
-        // Split the flat, time-sorted rows back into per-series bucket lists.
-        var byKey = new Dictionary<(string, string), List<AggregateBucket>>();
-        foreach (var r in rows)
-        {
-            var id = r["_id"].AsBsonDocument;
-            var key = (id["d"].AsString, id["c"].AsString);
-            if (!byKey.TryGetValue(key, out var list)) byKey[key] = list = new List<AggregateBucket>();
-            list.Add(BucketOf(r, id["t"].ToUniversalTime(), which));
-        }
-
-        // Return in the requested order; keep only the most-recent `cap` buckets of each series.
-        return specs.Select(s =>
-        {
-            var list = byKey.TryGetValue((s.DeviceId, s.CapabilityId), out var l)
-                ? (l.Count > cap ? l.GetRange(l.Count - cap, cap) : l)
-                : new List<AggregateBucket>();
-            return new SeriesResult(s.DeviceId, s.CapabilityId, list);
-        }).ToList();
-    }
-
-    /// <summary>
-    /// The most recent event-log row for each requested device in one aggregation (batch provenance).
-    /// Matches the device set within the window, sorts newest-first and takes <c>$first</c> per device.
-    /// Devices with no events in the window are simply absent from the result.
-    /// </summary>
-    public static async Task<List<LatestEventDto>> LatestByDeviceAsync(
-        IMongoDatabase db, IReadOnlyList<string>? deviceIds, DateTime? from, DateTime? to)
-    {
-        var ids = (deviceIds ?? Array.Empty<string>())
-            .Where(s => !string.IsNullOrEmpty(s)).Distinct().ToList();
-        if (ids.Count > MaxBatchItems)
-            throw new ArgumentException($"at most {MaxBatchItems} devices per request");
-        if (ids.Count == 0) return new List<LatestEventDto>();
-
-        var (lo, hi, _) = Window(from, to, null);
-
-        var pipeline = new[]
-        {
-            new BsonDocument("$match", new BsonDocument
-            {
-                { "Timestamp", new BsonDocument { { "$gte", lo }, { "$lte", hi } } },
-                { "Meta.DeviceId", new BsonDocument("$in", new BsonArray(ids)) },
-            }),
-            new BsonDocument("$sort", new BsonDocument("Timestamp", -1)),
-            new BsonDocument("$group", new BsonDocument
-            {
-                { "_id", "$Meta.DeviceId" },
-                { "Timestamp", new BsonDocument("$first", "$Timestamp") },
-                { "CapabilityId", new BsonDocument("$first", "$CapabilityId") },
-                { "TriggerSource", new BsonDocument("$first", "$TriggerSource") },
-                { "TriggerId", new BsonDocument("$first", "$TriggerId") },
-                { "RuleId", new BsonDocument("$first", "$RuleId") },
-                { "CorrelationId", new BsonDocument("$first", "$CorrelationId") },
-                { "NewValue", new BsonDocument("$first", "$NewValue") },
-            }),
-        };
-
-        var rows = await db.GetCollection<DeviceEventLog>(TimeSeriesInitializer.DeviceEventsCollection)
-            .Aggregate<BsonDocument>(pipeline)
-            .ToListAsync();
-
-        string? Str(BsonDocument d, string f) => d.TryGetValue(f, out var v) && !v.IsBsonNull ? v.AsString : null;
-
-        return rows.Select(r => new LatestEventDto(
-            r["_id"].AsString,
-            r["Timestamp"].ToUniversalTime(),
-            Str(r, "CapabilityId") ?? string.Empty,
-            Str(r, "TriggerSource") ?? string.Empty,
-            Str(r, "TriggerId"),
-            Str(r, "RuleId"),
-            Str(r, "CorrelationId"),
-            r.TryGetValue("NewValue", out var nv) && !nv.IsBsonNull ? BsonTypeMapper.MapToDotNetValue(nv) : null))
-            .ToList();
-    }
-
-    /// <summary>Aggregations the rollup endpoints accept: avg/min/max = band stats; <c>sum</c> = total of the
-    /// bucket's samples; <c>delta</c> = last−first within the bucket — energy consumption from a cumulative
-    /// counter (Epic 3C). Closed allow-list (no injection into the pipeline).</summary>
-    private static bool AggAllowed(string agg) =>
-        agg is "avg" or "min" or "max" or "sum" or "delta";
-
-    private const string AggError = "agg must be avg, min, max, sum or delta";
-
-    /// <summary>Shared <c>$group</c> body for a rollup bucket keyed by <paramref name="id"/>. Carries every
-    /// accumulator the allowed aggs need; <c>first</c>/<c>last</c> drive <c>delta</c> and are only read on the
-    /// delta path, which sorts by time upstream so they are the earliest/latest sample of the bucket.</summary>
-    private static BsonDocument GroupStage(BsonValue id) => new()
-    {
-        { "_id", id },
-        { "avg", new BsonDocument("$avg", "$Value") },
-        { "min", new BsonDocument("$min", "$Value") },
-        { "max", new BsonDocument("$max", "$Value") },
-        { "sum", new BsonDocument("$sum", "$Value") },
-        { "first", new BsonDocument("$first", "$Value") },
-        { "last", new BsonDocument("$last", "$Value") },
-        { "count", new BsonDocument("$sum", 1) },
-    };
-
-    /// <summary>Project one grouped row into an <see cref="AggregateBucket"/>, picking <c>Value</c> per agg.
-    /// A counter reset within the bucket (<c>last &lt; first</c>) is read as "restarted then climbed to last",
-    /// so a spurious negative delta never surfaces.</summary>
-    private static AggregateBucket BucketOf(BsonDocument r, DateTime ts, string which)
-    {
-        var avg = r["avg"].ToDouble();
-        var min = r["min"].ToDouble();
-        var max = r["max"].ToDouble();
-        var sum = r["sum"].ToDouble();
-        var first = r["first"].ToDouble();
-        var last = r["last"].ToDouble();
-        var delta = last >= first ? last - first : last;
-        var value = which switch { "min" => min, "max" => max, "sum" => sum, "delta" => delta, _ => avg };
-        return new AggregateBucket(ts, value, min, max, avg, r["count"].ToInt64());
-    }
-
-    private static string ToCsv(IEnumerable<TelemetryDto> samples)
+    private static string ToCsv(IEnumerable<TelemetryRow> samples)
     {
         var sb = new StringBuilder();
         sb.AppendLine("timestamp,deviceId,zoneId,capabilityId,unit,value");
@@ -437,56 +106,5 @@ public static class HistoryEndpoints
               .Append(s.CapabilityId).Append(',').Append(s.Unit).Append(',')
               .Append(s.Value.ToString(CultureInfo.InvariantCulture)).Append('\n');
         return sb.ToString();
-    }
-
-    private static FilterDefinition<SensorReading> TelemetryFilter(
-        string? capabilityId, string? zoneId, DateTime? from, DateTime? to)
-    {
-        var (lo, hi, _) = Window(from, to, null);
-        var b = Builders<SensorReading>.Filter;
-        var filter = b.Gte(x => x.Timestamp, lo) & b.Lte(x => x.Timestamp, hi);
-        if (!string.IsNullOrEmpty(capabilityId)) filter &= b.Eq(x => x.Meta.CapabilityId, capabilityId);
-        if (!string.IsNullOrEmpty(zoneId)) filter &= b.Eq(x => x.Meta.ZoneId, zoneId);
-        return filter;
-    }
-
-    private static FilterDefinition<DeviceEventLog> EventFilter(
-        string? capabilityId, string? zoneId, DateTime? from, DateTime? to)
-    {
-        var (lo, hi, _) = Window(from, to, null);
-        var b = Builders<DeviceEventLog>.Filter;
-        var filter = b.Gte(x => x.Timestamp, lo) & b.Lte(x => x.Timestamp, hi);
-        if (!string.IsNullOrEmpty(capabilityId)) filter &= b.Eq(x => x.CapabilityId, capabilityId);
-        if (!string.IsNullOrEmpty(zoneId)) filter &= b.Eq(x => x.Meta.ZoneId, zoneId);
-        return filter;
-    }
-
-    /// <summary>Group matching documents by <c>Meta.ZoneId</c> and count each zone (one aggregation round-trip).</summary>
-    private static async Task<List<ZoneCount>> CountByZone<T>(
-        IMongoCollection<T> collection, FilterDefinition<T> filter)
-    {
-        var rows = await collection.Aggregate()
-            .Match(filter)
-            .Group(new BsonDocument
-            {
-                { "_id", "$Meta.ZoneId" },
-                { "count", new BsonDocument("$sum", 1) },
-            })
-            .ToListAsync();
-
-        return rows
-            .Select(r => new ZoneCount(r["_id"].IsBsonNull ? "" : r["_id"].AsString, r["count"].ToInt64()))
-            .ToList();
-    }
-
-    /// <summary>Per-zone sample count for the ML data-sufficiency check (Epic 2P).</summary>
-    public record ZoneCount(string ZoneId, long Count);
-
-    private static (DateTime from, DateTime to, int limit) Window(DateTime? from, DateTime? to, int? limit)
-    {
-        var hi = to?.ToUniversalTime() ?? DateTime.UtcNow;
-        var lo = from?.ToUniversalTime() ?? hi - DefaultWindow;
-        var take = Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit);
-        return (lo, hi, take);
     }
 }

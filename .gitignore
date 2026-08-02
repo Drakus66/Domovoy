@@ -28,3 +28,4 @@ data/zigbee2mqtt/database.db
 /data/backups/
 # SSH reverse-tunnel key material (Этап 3c autossh) — private keys, never commit.
 /data/autossh/
+CLAUDE.md

@@ -76,7 +76,8 @@ public sealed class EnergyTests
             Energy(rig, 3, now.AddSeconds(-6)), Energy(rig, 20, now),            // 17 kWh (ignored)
         });
 
-        var res = await EnergyEndpoints.ConsumptionAsync(_fx.Db, from: null, to: null, bucket: "hour");
+        var res = await EnergyEndpoints.ConsumptionAsync(
+            _fx.Db, new Domovoy.DbGateway.Stores.Mongo.MongoTelemetryStore(_fx.Db), from: null, to: null, bucket: "hour");
 
         // Per-device consumption (isolated by unique ids).
         Assert.Equal(5, res.Devices.Single(d => d.DeviceId == boiler).Kwh, 3);
@@ -120,7 +121,8 @@ public sealed class EnergyTests
             Energy(dev, 100, now.AddSeconds(-6)), Energy(dev, 104, now), // 4 kWh
         });
 
-        var res = await EnergyEndpoints.CostAsync(_fx.Db, from: null, to: null);
+        var res = await EnergyEndpoints.CostAsync(
+            _fx.Db, new Domovoy.DbGateway.Stores.Mongo.MongoTelemetryStore(_fx.Db), from: null, to: null);
 
         Assert.Equal("₽", res.Currency);
         Assert.True(res.TotalKwh >= 4, $"expected ≥4 kWh, got {res.TotalKwh}");

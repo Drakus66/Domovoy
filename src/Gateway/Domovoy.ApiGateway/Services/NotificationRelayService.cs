@@ -48,7 +48,8 @@ public sealed class NotificationRelayService : BackgroundService
 
         try
         {
-            // A plain object so the JS client reads it as { title, body, severity, category, raisedAt }.
+            // A plain object so the JS client reads it as { title, body, severity, category, raisedAt, actions }.
+            // Actions (Epic 3F) are the actionable buttons the banner renders and posts back to /api/notifications/action.
             await _hub.Clients.All.SendAsync("NotificationRaised", new
             {
                 title = n.Title,
@@ -56,6 +57,7 @@ public sealed class NotificationRelayService : BackgroundService
                 severity = n.Severity,
                 category = n.Category,
                 raisedAt = n.RaisedAt,
+                actions = n.Actions,
             });
         }
         catch (Exception ex)

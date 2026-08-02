@@ -65,7 +65,7 @@ public sealed class BoundedActiveRuleTests
     private static ActionExecutor Executor(IMessageBus bus, int cooldownSeconds)
     {
         var dispatcher = new NotificationDispatcher(
-            Array.Empty<INotificationChannel>(), NullLogger<NotificationDispatcher>.Instance);
+            Array.Empty<INotificationChannel>(), new NotificationRuntimeState(), NullLogger<NotificationDispatcher>.Instance);
         var options = Options.Create(new AutomationOptions { BoundedActiveCooldownSeconds = cooldownSeconds });
         // Empty scene store (never refreshed) — these tests use Command actions, not scenes.
         var scenes = new SceneStore(

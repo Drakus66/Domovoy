@@ -53,6 +53,11 @@ internal static class Program
             builder.Services.AddSingleton<IMongoDatabase>(sp =>
                 sp.GetRequiredService<IMongoClient>().GetDatabase(mongoDbSettings.DatabaseName));
 
+            // Storage-abstraction seam (roadmap Epic 3H, Ф1 reference migration): the telemetry/event-log domain
+            // is reached only through ITelemetryStore. A second backend (PostgreSQL, Ф2) registers a sibling
+            // implementation here; HistoryEndpoints never sees MongoDB.Driver.
+            builder.Services.AddSingleton<Stores.ITelemetryStore, Stores.Mongo.MongoTelemetryStore>();
+
             // Telemetry data-platform options (retention; roadmap Epic 1B).
             builder.Services.Configure<Config.TelemetryOptions>(
                 builder.Configuration.GetSection(Config.TelemetryOptions.SectionName));
@@ -149,6 +154,7 @@ internal static class Program
             app.MapProposalsEndpoints();
             app.MapRoleEndpoints();
             app.MapUserEndpoints();
+            app.MapResidentEndpoints();
             app.MapAuthEndpoints();
             app.MapSettingsEndpoints();
             app.MapDashboardEndpoints();

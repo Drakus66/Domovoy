@@ -18,6 +18,9 @@ public static class MessageTypes
     public const string BlockTriggered = "domovoy.block.triggered.v1";
     public const string HomeModeChanged = "domovoy.home.mode.v1";
 
+    /// <summary>A presence/location report from a geofencing source (roadmap Epic 3D).</summary>
+    public const string PresenceReported = "domovoy.presence.reported.v1";
+
     /// <summary>A user-facing notification was raised (2M.2 LAN channel + off-LAN push, Epic 2O.4).</summary>
     public const string NotificationRaised = "domovoy.notification.raised.v1";
 
@@ -52,6 +55,7 @@ public static class BusTopology
     public const string AutomationTriggeredKey = "automation.triggered";
     public const string BlockTriggeredKey = "block.triggered";
     public const string HomeModeChangedKey = "home.mode.changed";
+    public const string PresenceReportedKey = "presence.reported";
     public const string NotificationRaisedKey = "notification.raised";
 
     // Plugin settings: schema is announced on one shared key (the supervisor binds it); effective values are

@@ -17,6 +17,20 @@ public static class WellKnownCapabilities
     public static Capability Occupancy() =>
         Boolean(CapabilityIds.Occupancy, writable: false);
 
+    // --- Presence (roadmap Epic 3D) — read-only, reported by the presence platform layer ---
+
+    /// <summary>A single resident's home/away signal on their virtual person device (read-only).</summary>
+    public static Capability Presence() =>
+        Boolean(CapabilityIds.Presence, writable: false);
+
+    /// <summary>Aggregate "someone is home" over all tracked residents (read-only), on the Occupancy device.</summary>
+    public static Capability AnyoneHome() =>
+        Boolean(CapabilityIds.AnyoneHome, writable: false);
+
+    /// <summary>Aggregate count of residents currently home (read-only), on the Occupancy device.</summary>
+    public static Capability HomeCount() =>
+        Number(CapabilityIds.HomeCount, null, 0, null, writable: false);
+
     public static Capability Contact() =>
         Boolean(CapabilityIds.Contact, writable: false);
 

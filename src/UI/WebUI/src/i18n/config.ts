@@ -29,6 +29,7 @@ export const namespaces = [
   'proposals',
   'variables',
   'users',
+  'presence',
   'plugins',
   'logs',
   'diary',

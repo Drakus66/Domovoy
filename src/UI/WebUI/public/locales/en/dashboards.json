@@ -142,6 +142,7 @@
     "unaccounted": "Not attributed to devices: {{value}}",
     "empty": "No devices with energy metering",
     "mains": "mains",
-    "kwh": "kWh"
+    "kwh": "kWh",
+    "configure": "Configure tariff and device energy profiles"
   }
 }

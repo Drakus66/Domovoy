@@ -78,6 +78,24 @@ public class SettingsController : ControllerBase
     public Task<IActionResult> PutMl(CancellationToken ct)
         => Forward(HttpMethod.Put, "api/settings/ml", ct);
 
+    // Presence-layer settings (roadmap Epic 3D) — geofence radius, away-grace, OwnTracks ingest token.
+    [HttpGet("presence")]
+    public Task<IActionResult> GetPresence(CancellationToken ct)
+        => Forward(HttpMethod.Get, "api/settings/presence", ct);
+
+    [HttpPut("presence")]
+    public Task<IActionResult> PutPresence(CancellationToken ct)
+        => Forward(HttpMethod.Put, "api/settings/presence", ct);
+
+    // Notification-discipline settings (roadmap Epic 3F) — per-type channel routing, rate-limit, safety floor.
+    [HttpGet("notifications")]
+    public Task<IActionResult> GetNotifications(CancellationToken ct)
+        => Forward(HttpMethod.Get, "api/settings/notifications", ct);
+
+    [HttpPut("notifications")]
+    public Task<IActionResult> PutNotifications(CancellationToken ct)
+        => Forward(HttpMethod.Put, "api/settings/notifications", ct);
+
     private async Task<IActionResult> Forward(HttpMethod method, string relativePath, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient("db-gateway");

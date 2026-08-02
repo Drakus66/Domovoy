@@ -109,9 +109,14 @@ public sealed class DiscoveryEngine : BackgroundService
 
         // Epic 3J "living rules": rules the household systematically overrides → a "retire this rule?" proposal.
         var deadRules = InterventionMiner.Mine(events, _options);
+        // Epic 3J tails: the per-firing signal drives self-correcting (amend, don't retire) and threshold drift.
+        var firings = InterventionMiner.Firings(events, _options);
+        var refinements = OverrideMiner.Mine(firings, _options);
+        var drifts = ThresholdDriftMiner.Mine(events, rules, firings, _options);
 
         if (patterns.Count == 0 && preferences.Count == 0 && modelCandidates.Count == 0
-            && sceneCandidates.Count == 0 && sceneSchedules.Count == 0 && deadRules.Count == 0)
+            && sceneCandidates.Count == 0 && sceneSchedules.Count == 0 && deadRules.Count == 0
+            && refinements.Count == 0 && drifts.Count == 0)
         {
             await _gate.WriteScanAsync(Source, 0, 0, "no patterns found", HypothesisMetrics(events.Count, 0), ct);
             return new ScanResult(0, 0, "no patterns found");
@@ -338,11 +343,92 @@ public sealed class DiscoveryEngine : BackgroundService
             created++;
         }
 
+        // Epic 3J tail 2 "self-correcting rules": a rule fought only in one time band → add an exception, not retire.
+        foreach (var rf in refinements)
+        {
+            if (created >= _options.DiscoveryMaxProposals) break;
+
+            var rule = rules.FirstOrDefault(r => string.Equals(r.Id, rf.RuleId, StringComparison.Ordinal));
+            if (rule is null || rule.Status is not (RuleStatus.Active or RuleStatus.BoundedActive)) continue;
+            if (openProposals.Any(p => p.Kind == ProposalKind.RuleAmendment && p.AmendmentAction == "add_condition"
+                && string.Equals(p.RuleId, rf.RuleId, StringComparison.Ordinal))) continue;
+
+            var title = $"Refine rule \"{rule.Name}\"?";
+            if (openProposals.Any(x => string.Equals(x.Title, title, StringComparison.Ordinal))) continue;
+
+            var proposal = new Proposal
+            {
+                Kind = ProposalKind.RuleAmendment,
+                Title = title,
+                Rationale = $"You overrode \"{rule.Name}\" in {rf.Overrides} of its {rf.Firings} runs between "
+                    + $"{rf.FromHour:D2}:00 and {rf.ToHour % 24:D2}:00 ({rf.OverrideRate:P0}) — but it looks fine the "
+                    + "rest of the day. Approving adds a time-of-day exception so it only runs outside those hours "
+                    + "(edit any time on the Automations page).",
+                Source = "intervention",
+                RuleId = rf.RuleId,
+                AmendmentAction = "add_condition",
+                AmendmentCondition = OverrideMiner.ExceptionCondition(rf),
+                Evidence = new Dictionary<string, double>
+                {
+                    ["firings"] = rf.Firings,
+                    ["overrides"] = rf.Overrides,
+                    ["overrideRate"] = rf.OverrideRate,
+                    ["fromHour"] = rf.FromHour,
+                    ["toHour"] = rf.ToHour % 24,
+                    ["windowDays"] = _options.DiscoveryWindowDays,
+                },
+            };
+            var saved = await _db.CreateProposalAsync(proposal, ct);
+            if (saved is null) continue;
+            openProposals.Add(saved);
+            created++;
+        }
+
+        // Epic 3J tail 4 "seasonal threshold drift": a numeric trigger the household keeps beating → shift its value.
+        foreach (var dr in drifts)
+        {
+            if (created >= _options.DiscoveryMaxProposals) break;
+
+            var rule = rules.FirstOrDefault(r => string.Equals(r.Id, dr.RuleId, StringComparison.Ordinal));
+            if (rule is null || rule.Status is not (RuleStatus.Active or RuleStatus.BoundedActive)) continue;
+            if (openProposals.Any(p => p.Kind == ProposalKind.RuleAmendment && p.AmendmentAction == "set_threshold"
+                && string.Equals(p.RuleId, dr.RuleId, StringComparison.Ordinal))) continue;
+
+            var title = $"Adjust \"{rule.Name}\" threshold?";
+            if (openProposals.Any(x => string.Equals(x.Title, title, StringComparison.Ordinal))) continue;
+
+            var proposal = new Proposal
+            {
+                Kind = ProposalKind.RuleAmendment,
+                Title = title,
+                Rationale = $"When you overrode \"{rule.Name}\", {dr.CapabilityId} was usually around "
+                    + $"{dr.SuggestedThreshold:0.#}, not its trigger value {dr.CurrentThreshold:0.#} — the threshold may have "
+                    + $"drifted (season/habit). Approving sets it to {dr.SuggestedThreshold:0.#} (edit any time).",
+                Source = "intervention",
+                RuleId = dr.RuleId,
+                AmendmentAction = "set_threshold",
+                AmendmentCapabilityId = dr.CapabilityId,
+                AmendmentValue = dr.SuggestedThreshold,
+                Evidence = new Dictionary<string, double>
+                {
+                    ["currentThreshold"] = dr.CurrentThreshold,
+                    ["suggestedThreshold"] = dr.SuggestedThreshold,
+                    ["samples"] = dr.Samples,
+                    ["windowDays"] = _options.DiscoveryWindowDays,
+                },
+            };
+            var saved = await _db.CreateProposalAsync(proposal, ct);
+            if (saved is null) continue;
+            openProposals.Add(saved);
+            created++;
+        }
+
         _logger.LogInformation(
             "Pattern discovery: {Created} new candidate(s) from {Patterns} patterns + {Prefs} setpoint prefs + {Models} ml-setpoints "
-            + "+ {Scenes} scene configs + {SceneSched} scene schedules + {Dead} dead-rules / {Events} events",
-            created, patterns.Count, preferences.Count, modelCandidates.Count, sceneCandidates.Count, sceneSchedules.Count, deadRules.Count, events.Count);
-        var total = patterns.Count + preferences.Count + modelCandidates.Count + sceneCandidates.Count + sceneSchedules.Count + deadRules.Count;
+            + "+ {Scenes} scene configs + {SceneSched} scene schedules + {Dead} dead-rules + {Refine} refinements + {Drift} drifts / {Events} events",
+            created, patterns.Count, preferences.Count, modelCandidates.Count, sceneCandidates.Count, sceneSchedules.Count, deadRules.Count, refinements.Count, drifts.Count, events.Count);
+        var total = patterns.Count + preferences.Count + modelCandidates.Count + sceneCandidates.Count + sceneSchedules.Count
+            + deadRules.Count + refinements.Count + drifts.Count;
 
         // Epic 3I: journal the pulse (how many hypotheses survived the funnel, how many were queued) and raise one
         // notification when something new landed in the queue.

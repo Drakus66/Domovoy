@@ -15,12 +15,20 @@ import { useUIStore, type NotificationType } from '../../store/uiStore';
  * shown as a banner (the full history lives in the Activity journal); banners are reserved for things that
  * warrant interrupting the user.
  */
+interface RaisedAction {
+  id: string;
+  label: string;
+  kind: string;
+  params?: Record<string, string>;
+}
+
 interface RaisedNotification {
   title: string;
   body: string;
   severity: string;
   category?: string | null;
   raisedAt: string;
+  actions?: RaisedAction[] | null;
 }
 
 // Severities that warrant an interruptive banner. Everything below (info, unknown) is journal-only.
@@ -45,12 +53,14 @@ export default function NotificationHubListener() {
     const conn = buildNotificationHubConnection();
 
     conn.on('NotificationRaised', (n: RaisedNotification) => {
-      // Reserve banners for important notifications; info-level ones are recorded in the journal only.
-      if (!BANNER_SEVERITIES.has(n.severity?.toLowerCase())) return;
+      const hasActions = Array.isArray(n.actions) && n.actions.length > 0;
+      // Reserve banners for important notifications; info-level ones are journal-only — UNLESS the notification is
+      // actionable (Epic 3F), in which case surface it so the user can act on the button (it still auto-dismisses).
+      if (!BANNER_SEVERITIES.has(n.severity?.toLowerCase()) && !hasActions) return;
       const message = n.body ? `${n.title} — ${n.body}` : n.title;
       // Critical alerts stay until dismissed (duration 0); the rest auto-dismiss.
       const duration = n.severity?.toLowerCase() === 'critical' ? 0 : 8000;
-      showNotification(typeForSeverity(n.severity), message, duration);
+      showNotification(typeForSeverity(n.severity), message, duration, hasActions ? n.actions! : undefined);
     });
 
     // Keep the connection alive across gateway blips (same policy as the device-state hub).

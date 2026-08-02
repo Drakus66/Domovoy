@@ -2,23 +2,55 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using Domovoy.Contracts.Notifications;
+
 namespace Domovoy.AutomationService.Services.Notifications;
 
-/// <summary>A notification to deliver. Severity is a free string (info/warning/critical) for channel formatting.</summary>
-public sealed record NotificationMessage(string Title, string Body, string Severity = "info");
+/// <summary>
+/// A notification to deliver. Beyond the display fields, it carries the Epic 3F discipline metadata:
+/// <see cref="Category"/> (reactive/proactive/optimization) drives per-type channel routing + rate-limiting,
+/// <see cref="DedupKey"/> gives recurring alerts a stable identity for dedup, and <see cref="Actions"/> are the
+/// actionable buttons. Severity <c>critical</c> marks the safety class (never rate-limited, forced onto a
+/// prominent channel).
+/// </summary>
+public sealed record NotificationMessage(
+    string Title,
+    string Body,
+    string Severity = NotificationSeverities.Info,
+    string Category = NotificationCategories.Reactive,
+    IReadOnlyList<NotificationAction>? Actions = null,
+    string? DedupKey = null);
+
+/// <summary>
+/// How visible a channel is to the user (roadmap Epic 3F). The safety floor uses this: a <c>critical</c> alert
+/// must reach a <see cref="Prominent"/> channel and must not be delivered only through a <see cref="Quiet"/> one
+/// (the in-app banner is quiet — it's invisible if no browser is open).
+/// </summary>
+public enum NotificationVisibility
+{
+    /// <summary>Only seen with the app open (in-app SignalR banner).</summary>
+    Quiet,
+
+    /// <summary>Reaches the user out-of-app (push/ntfy, Telegram, webhook).</summary>
+    Prominent,
+}
 
 /// <summary>
 /// A delivery channel for notifications (roadmap Epic 2G). Provider-agnostic: Telegram, generic webhook/push,
-/// … each channel is independently enabled by config. The dispatcher fans a message out to every enabled
-/// channel; a channel that is disabled or fails does not affect the others or rule execution.
+/// … each channel is independently enabled by config. The dispatcher fans a message out to the channels chosen by
+/// the Epic 3F routing policy; a channel that is disabled or fails does not affect the others or rule execution.
 /// </summary>
 public interface INotificationChannel
 {
-    /// <summary>Short channel name (e.g. "telegram", "webhook") — surfaced in status and logs.</summary>
+    /// <summary>Short channel name (e.g. "telegram", "webhook") — surfaced in status and logs, and the key the
+    /// per-category mute (Epic 3F) references.</summary>
     string Name { get; }
 
     /// <summary>Whether the channel is configured and turned on.</summary>
     bool Enabled { get; }
+
+    /// <summary>How visible the channel is (Epic 3F safety floor). Defaults to prominent for external channels.</summary>
+    NotificationVisibility Visibility { get; }
 
     /// <summary>Deliver the message. Returns true on success; must not throw for a delivery failure.</summary>
     Task<bool> SendAsync(NotificationMessage message, CancellationToken ct);
