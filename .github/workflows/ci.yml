@@ -11,8 +11,35 @@ on:
     branches: [master, develop, 'epic-*']
   pull_request:
   workflow_dispatch:
+  # Вызывается как функция из release.yml (Эпик 3K): тесты — обязательный гейт перед публикацией
+  # образов, и дублировать их описание в двух местах незачем.
+  workflow_call:
 
 jobs:
+  # Страж контракта (Эпик 3K). Решатель обновлений доверяет только тому, что объявлено в
+  # build/components.json, поэтому незаявленное изменение контракта — единственный способ тихо
+  # получить несовместимое обновление на боевом доме. Обход осознанный и видимый в истории:
+  # строка `Compat: none` в теле коммита.
+  contract-guard:
+    name: Contract guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # нужен диапазон коммитов, а не один снимок
+
+      - name: Check declared compatibility
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+          fi
+          bash build/tools/contract-guard.sh "$BASE" "${{ github.sha }}"
+
+      - name: Validate component set
+        run: node build/tools/validate-components.mjs
+
   build-test:
     name: Build + unit tests
     runs-on: ubuntu-latest

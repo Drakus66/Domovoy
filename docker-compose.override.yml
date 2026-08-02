@@ -19,6 +19,16 @@ services:
       - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
 
+  # Delivery service (Epic 3K) in local development: never phone the registry and never raise
+  # "a new version is available" while you are the one making the versions. The installation
+  # root is the repository itself, so `releases/` and `state/` land under ./data/updater.
+  domovoy-updater:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - UPDATES__CHECKENABLED=false
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+
   rabbitmq:
     environment:
       RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER}

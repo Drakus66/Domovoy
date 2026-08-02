@@ -31,4 +31,11 @@ public class BackupOptions
     /// live files.
     /// </summary>
     public List<string> IncludeDirectories { get; set; } = new();
+
+    /// <summary>
+    /// Delivery service (Epic 3K), asked for the component versions a bundle is being taken on.
+    /// Unreachable — the manifest simply carries no <c>runtime</c> block; a backup is never blocked
+    /// on it, because losing the backup is strictly worse than losing the version record.
+    /// </summary>
+    public string UpdaterBaseUrl { get; set; } = "http://domovoy-updater:8080";
 }

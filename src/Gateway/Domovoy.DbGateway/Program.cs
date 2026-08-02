@@ -58,6 +58,10 @@ internal static class Program
             // implementation here; HistoryEndpoints never sees MongoDB.Driver.
             builder.Services.AddSingleton<Stores.ITelemetryStore, Stores.Mongo.MongoTelemetryStore>();
 
+            // Update settings (roadmap Epic 3K) go through the same seam — the channel this house is
+            // subscribed to is ordinary domain state, not a special case.
+            builder.Services.AddSingleton<Stores.IUpdateStore, Stores.Mongo.MongoUpdateStore>();
+
             // Telemetry data-platform options (retention; roadmap Epic 1B).
             builder.Services.Configure<Config.TelemetryOptions>(
                 builder.Configuration.GetSection(Config.TelemetryOptions.SectionName));
@@ -159,6 +163,7 @@ internal static class Program
             app.MapSettingsEndpoints();
             app.MapDashboardEndpoints();
             app.MapBackupEndpoints();
+            app.MapUpdateSettingsEndpoints();
             app.MapMetrics();
 
             // Health check endpoint

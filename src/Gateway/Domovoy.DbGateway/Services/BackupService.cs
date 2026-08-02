@@ -49,13 +49,16 @@ public sealed class BackupService
     private readonly IMongoDatabase _db;
     private readonly BackupOptions _options;
     private readonly string _directory;
+    private readonly IHttpClientFactory? _httpFactory;
     private readonly ILogger<BackupService> _logger;
 
     public BackupService(
-        IMongoDatabase db, IOptions<BackupOptions> options, IHostEnvironment env, ILogger<BackupService> logger)
+        IMongoDatabase db, IOptions<BackupOptions> options, IHostEnvironment env, ILogger<BackupService> logger,
+        IHttpClientFactory? httpFactory = null)
     {
         _db = db;
         _options = options.Value;
+        _httpFactory = httpFactory;
         _directory = Path.IsPathRooted(_options.Directory)
             ? _options.Directory
             : Path.Combine(env.ContentRootPath, _options.Directory);
@@ -89,7 +92,8 @@ public sealed class BackupService
                 CreatedAt = createdAt,
                 Database = _db.DatabaseNamespace.DatabaseName,
                 Reason = reason,
-                AppVersion = typeof(BackupService).Assembly.GetName().Version?.ToString(),
+                AppVersion = Domovoy.Common.AppVersion.Of(typeof(BackupService).Assembly),
+                Runtime = await ReadRuntimeVersionsAsync(ct),
             };
 
             try
@@ -332,6 +336,70 @@ public sealed class BackupService
         }
 
         return result.OrderBy(x => x.Item1, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// Asks the delivery service which component versions are running (roadmap Epic 3K), so the
+    /// bundle records what it was taken on. Any failure returns null: a backup must never be lost
+    /// because the version record could not be fetched.
+    /// </summary>
+    private async Task<BackupRuntimeInfo?> ReadRuntimeVersionsAsync(CancellationToken ct)
+    {
+        if (_httpFactory is null) return null;
+
+        try
+        {
+            using var http = _httpFactory.CreateClient(nameof(BackupService));
+            http.Timeout = TimeSpan.FromSeconds(10);
+
+            using var response = await http.GetAsync(
+                $"{_options.UpdaterBaseUrl.TrimEnd('/')}/api/components", ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation(
+                    "Версии компонентов для манифеста бэкапа не получены: {Status}", response.StatusCode);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            var root = doc.RootElement;
+
+            var info = new BackupRuntimeInfo
+            {
+                Channel = root.TryGetProperty("channel", out var channel) ? channel.GetString() : null,
+            };
+
+            if (!root.TryGetProperty("components", out var components)
+                || components.ValueKind != JsonValueKind.Array)
+                return info;
+
+            foreach (var component in components.EnumerateArray())
+            {
+                var name = component.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                var version = component.TryGetProperty("installed", out var v) ? v.GetString() : null;
+
+                if (name == "topology" && int.TryParse(version?.Split('.')[0], out var topologyVersion))
+                    info.TopologyVersion = topologyVersion;
+
+                info.Components.Add(new BackupComponentInfo
+                {
+                    Name = name,
+                    Version = version,
+                    Digest = component.TryGetProperty("digest", out var d) ? d.GetString() : null,
+                    Deps = component.TryGetProperty("deps", out var deps) && deps.ValueKind != JsonValueKind.Null
+                        ? JsonSerializer.Deserialize<object>(deps.GetRawText())
+                        : null,
+                });
+            }
+
+            return info;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogInformation(ex, "Версии компонентов для манифеста бэкапа недоступны");
+            return null;
+        }
     }
 
     private void AddPluginSettings(ZipArchive zip, BackupManifest manifest)

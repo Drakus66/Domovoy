@@ -157,6 +157,18 @@ internal static class Program
                 client.Timeout = TimeSpan.FromSeconds(180);
             });
 
+            // Delivery service hosts the update API (roadmap Epic 3K); proxy to it. It publishes no ports
+            // outside domovoy-network, so this proxy — with its auth and system.admin policy — is the only
+            // way to reach it.
+            var updaterUrl = builder.Configuration["Updater:BaseUrl"] ?? "http://domovoy-updater:8080";
+            builder.Services.AddHttpClient("updater", client =>
+            {
+                client.BaseAddress = new Uri(updaterUrl);
+                // Checking the channel walks every component's manifest in the registry; over a slow
+                // home connection that is seconds, not milliseconds.
+                client.Timeout = TimeSpan.FromSeconds(120);
+            });
+
             // PluginSupervisor hosts the plugin registry + lifecycle API (roadmap Epic 1C); proxy to it.
             var supervisorUrl = builder.Configuration["PluginSupervisor:BaseUrl"] ?? "http://plugin-supervisor:8080";
             builder.Services.AddHttpClient("plugin-supervisor", client =>

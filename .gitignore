@@ -29,3 +29,7 @@ data/zigbee2mqtt/database.db
 # SSH reverse-tunnel key material (Этап 3c autossh) — private keys, never commit.
 /data/autossh/
 CLAUDE.md
+
+# Generated release-topology bundle (Epic 3K) — built by build/tools/gen-topology.mjs in CI.
+# The source of truth is the root docker-compose.yml; this is a derived artifact.
+/build/topology/dist/

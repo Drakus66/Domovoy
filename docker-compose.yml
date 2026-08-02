@@ -233,12 +233,49 @@ services:
       - domovoy-network
     ports:
       - "80:80"
+    # >>> dev-only
     # UI translations are runtime-loaded static JSON (i18next-http-backend). Mounting
     # the source locales over the served folder means editing a language — or, later,
     # dropping a new one — takes effect on refresh with NO image rebuild. Read-only:
     # the container never writes here.
+    # Dev-only: a deployed host has no ./src, and the built image already carries the
+    # locales — the topology generator (Epic 3K) strips this block from the shipped compose.
     volumes:
       - ./src/UI/WebUI/public/locales:/usr/share/nginx/html/locales:ro
+    # <<< dev-only
+    restart: unless-stopped
+
+  # Delivery + self-update (Epic 3K). Watches the image registry for the channel the system is
+  # subscribed to (dev|release), resolves what a requested update pulls in via the declared
+  # interface versions, and applies it: backup → pull by digest → `docker compose up -d` per
+  # dependency group. Owns the installation directory (releases/, state/, .env) and the Docker
+  # socket; publishes no ports — it is reachable only from inside domovoy-network.
+  # ⚠️ docker.sock is root-equivalent host access. It lives HERE rather than on the
+  # internet-facing api-gateway on purpose: the privilege sits in one narrow service.
+  domovoy-updater:
+    container_name: domovoy-updater
+    image: ${DOCKER_REGISTRY-}domovoy-updater
+    build:
+      context: .
+      dockerfile: src/Services/Domovoy.Updater/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - domovoy-network
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # The installation root: releases/, state/, .env, docker-compose.override.yml.
+      # Read-write — applying a release writes a new release directory and flips `current`.
+      - ${DOMOVOY_INSTALL_DIR:-.}:/opt/domovoy
+    environment:
+      - RABBITMQ__HOSTNAME=rabbitmq
+      - RABBITMQ__PORT=5672
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
+      - UPDATES__INSTALLDIRECTORY=/opt/domovoy
+      - UPDATES__DBGATEWAYBASEURL=http://db-gateway:8080
     restart: unless-stopped
 
   # ============ Remote access (opt-in profiles) ============

@@ -36,6 +36,7 @@ export const namespaces = [
   'status',
   'zigbee',
   'kiosk',
+  'updates',
   // Shared vocabulary of operator/choice codes (eq/gt, and/or, min/max, PID presets, …) rendered as
   // human labels. Cross-cutting (automations and blocks both use it), so preloaded rather than page-scoped.
   'operators',

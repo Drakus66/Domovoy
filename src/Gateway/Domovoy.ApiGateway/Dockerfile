@@ -21,7 +21,13 @@ RUN dotnet build "./Domovoy.ApiGateway.csproj" -c $BUILD_CONFIGURATION -o /app/b
 # Этот этап используется для публикации проекта службы, который будет скопирован на последний этап
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./Domovoy.ApiGateway.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+# Версия компонента (Эпик 3K). CI подставляет её из build/components.json; локальная сборка
+# остаётся на 0.0.0 — это и есть признак «образ собран здесь, а не пришёл из канала».
+# AssemblyVersion не принимает pre-release суффикс, поэтому числовая часть идёт в Version,
+# а полная строка (1.4.0-dev.57+ab12cd3) — в InformationalVersion, её и читает код.
+ARG VERSION=0.0.0
+ARG INFORMATIONAL_VERSION=0.0.0
+RUN dotnet publish "./Domovoy.ApiGateway.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:Version=$VERSION /p:InformationalVersion=$INFORMATIONAL_VERSION
 
 # Этот этап используется в рабочей среде или при запуске из VS в обычном режиме (по умолчанию, когда конфигурация отладки не используется)
 FROM base AS final

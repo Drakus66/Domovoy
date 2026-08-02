@@ -23,6 +23,7 @@
         <ProjectReference Include="..\..\src\Gateway\Domovoy.ApiGateway\Domovoy.ApiGateway.csproj" />
         <ProjectReference Include="..\..\src\Services\Domovoy.AutomationService\Domovoy.AutomationService.csproj" />
         <ProjectReference Include="..\..\src\Services\Domovoy.Connectivity\Domovoy.Connectivity.csproj" />
+        <ProjectReference Include="..\..\src\Services\Domovoy.Updater\Domovoy.Updater.csproj" />
     </ItemGroup>
 
 </Project>

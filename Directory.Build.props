@@ -9,6 +9,14 @@
     later (AGPL-3.0-or-later). See the LICENSE file in the repository root.
   -->
   <PropertyGroup>
+    <!--
+      Fallback version for local builds. The real version of a shipped image comes from
+      build/components.json and is injected per component by CI as a Docker build-arg
+      (Epic 3K), so a locally built image reports 0.0.0 — which is exactly the signal
+      "this was built here, it did not come from a release channel".
+    -->
+    <VersionPrefix Condition="'$(VersionPrefix)' == ''">0.0.0</VersionPrefix>
+
     <Authors>Ilya Dryagin</Authors>
     <Company>Domovoy</Company>
     <Product>Domovoy</Product>

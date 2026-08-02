@@ -2,8 +2,9 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using Domovoy.Common;
+
 using Microsoft.AspNetCore.Mvc;
-using System.Reflection;
 
 namespace Domovoy.ApiGateway.Controllers
 {
@@ -25,12 +26,10 @@ namespace Domovoy.ApiGateway.Controllers
         {
             _logger.LogInformation("API Status requested");
 
-            var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
-
             return Ok(new
             {
                 Status = "Running",
-                Version = version,
+                Version = AppVersion.Current,
                 Timestamp = DateTime.UtcNow,
                 Environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"
             });

@@ -1,0 +1,62 @@
+{
+  "channel": "Update channel",
+  "channels": {
+    "release": "Stable",
+    "dev": "Development"
+  },
+  "channelHint": {
+    "release": "Tested builds. Recommended for a house people actually live in.",
+    "dev": "Fresh builds straight from development. New things sooner, rough edges more likely."
+  },
+  "channelSwitched": "Switched to the \"{{channel}}\" channel. Available versions refreshed.",
+
+  "checkEnabled": "Check automatically",
+  "backupBeforeUpdate": "Back up before updating",
+
+  "components": "Components",
+  "checkNow": "Check now",
+  "checked": "Check complete",
+  "updateAll": "Update all",
+  "update": "Update",
+  "upToDate": "up to date",
+
+  "table": {
+    "component": "Component",
+    "installed": "Installed",
+    "available": "Available"
+  },
+
+  "planTitle": "What will happen",
+  "atomicGroup": "These update together: the intermediate state between them is incompatible.",
+  "conflict": "Conflict: {{components}}",
+  "nothingToDo": "Nothing to update — everything is current.",
+  "willBackup": "A backup will be taken before updating.",
+  "willNotBackup": "Backup before update is disabled in settings.",
+  "applyNow": "Update",
+  "cancel": "Cancel",
+  "started": "Update started",
+  "uiWillRestart": "The interface restarts on the final step — this page will reconnect on its own.",
+  "envKeysAdded": "New installation settings were added: {{keys}}",
+
+  "runStatus": {
+    "running": "Update in progress",
+    "ok": "Update complete",
+    "error": "Update failed",
+    "rolled-back": "Rolled back"
+  },
+
+  "history": "Update history",
+  "rollback": "Roll back",
+  "rollbackConfirm": "Restore the previous component versions?",
+  "rollbackStarted": "Rollback started",
+
+  "unavailable": "The delivery service is unavailable. Updating from the interface will not work; the rest of the stack is unaffected.",
+
+  "errors": {
+    "save": "Could not save settings",
+    "check": "Could not check for updates",
+    "plan": "Could not build the update plan",
+    "apply": "Could not start the update",
+    "rollback": "Rollback failed"
+  }
+}
