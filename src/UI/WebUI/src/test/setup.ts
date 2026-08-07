@@ -91,9 +91,6 @@ export const handlers = [
   http.get('/api/sensors', () => {
     return HttpResponse.json([]);
   }),
-  http.get('/api/logs', () => {
-    return HttpResponse.json({ data: [], totalCount: 0 });
-  }),
   // Custom dashboards: the main page loads these on every mount (wildcard host —
   // the axios client uses an absolute base URL).
   http.get('*/api/dashboards', () => {

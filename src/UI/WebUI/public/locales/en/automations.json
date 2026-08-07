@@ -122,7 +122,6 @@
       "sceneHelper": "The scene to activate when this rule runs",
       "noScenes": "No scenes yet — create one on the Scenes page first",
       "waitDevice": "Device",
-      "waitZone": "Zone",
       "waitCapability": "Capability",
       "waitOp": "Operator",
       "waitValue": "Value",

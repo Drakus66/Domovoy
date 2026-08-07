@@ -1,5 +1,4 @@
 {
-  "brand": "Domovoy",
   "language": {
     "label": "Language"
   },
@@ -33,9 +32,7 @@
     "delete": "Delete",
     "close": "Close",
     "add": "Add",
-    "search": "Search",
     "back": "Back",
-    "retry": "Retry",
     "openMenu": "open drawer"
   },
   "status": {

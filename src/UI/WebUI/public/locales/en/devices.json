@@ -137,9 +137,6 @@
   },
   "noCapabilities": "No capabilities reported.",
   "noHistory": "No recorded changes yet.",
-  "historyVia": "via {{rule}}",
-  "historyCausedBy": "Caused by rule: {{rule}}",
-  "aRule": "a rule",
   "capabilities": {
     "on_off": "Power",
     "brightness": "Brightness",

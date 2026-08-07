@@ -137,9 +137,6 @@
   },
   "noCapabilities": "Возможности не заявлены.",
   "noHistory": "Пока нет записанных изменений.",
-  "historyVia": "через {{rule}}",
-  "historyCausedBy": "Вызвано правилом: {{rule}}",
-  "aRule": "правило",
   "capabilities": {
     "on_off": "Питание",
     "brightness": "Яркость",

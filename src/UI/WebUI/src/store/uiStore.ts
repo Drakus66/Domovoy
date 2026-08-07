@@ -27,15 +27,9 @@ export interface Notification {
   actions?: NotificationActionData[];
 }
 
-interface LoadingState {
-  [key: string]: boolean;
-}
-
 interface UIStore {
   // State
   notifications: Notification[];
-  loadingStates: LoadingState;
-  globalLoading: boolean;
 
   // Actions
   showNotification: (
@@ -46,9 +40,6 @@ interface UIStore {
   ) => string;
   dismissNotification: (id: string) => void;
   clearAllNotifications: () => void;
-  setLoading: (key: string, loading: boolean) => void;
-  setGlobalLoading: (loading: boolean) => void;
-  isLoading: (key: string) => boolean;
 }
 
 // Generate unique ID for notifications
@@ -59,8 +50,6 @@ const generateId = (): string => {
 export const useUIStore = create<UIStore>((set, get) => ({
   // Initial state
   notifications: [],
-  loadingStates: {},
-  globalLoading: false,
 
   // Show a notification
   showNotification: (
@@ -103,25 +92,5 @@ export const useUIStore = create<UIStore>((set, get) => ({
   // Clear all notifications
   clearAllNotifications: () => {
     set({ notifications: [] });
-  },
-
-  // Set loading state for a specific key
-  setLoading: (key: string, loading: boolean) => {
-    set((state) => ({
-      loadingStates: {
-        ...state.loadingStates,
-        [key]: loading,
-      },
-    }));
-  },
-
-  // Set global loading state
-  setGlobalLoading: (loading: boolean) => {
-    set({ globalLoading: loading });
-  },
-
-  // Check if a specific key is loading
-  isLoading: (key: string): boolean => {
-    return get().loadingStates[key] || false;
   },
 }));

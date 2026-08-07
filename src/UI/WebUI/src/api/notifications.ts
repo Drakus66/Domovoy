@@ -26,7 +26,6 @@ export interface NotificationAction {
 
 /** The notification categories (Epic 3F taxonomy) — the rows of the routing matrix. */
 export const NOTIFICATION_CATEGORIES = ['reactive', 'proactive', 'optimization'] as const;
-export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
 /** Notification-discipline settings (Epic 3F): per-category channel routing (opt-out), rate-limit, safety floor. */
 export interface NotificationSettings {

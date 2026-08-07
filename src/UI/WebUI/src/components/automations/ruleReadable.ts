@@ -32,10 +32,6 @@ export const zoneNameOf = (zones: Zone[], zoneId?: string | null): string => {
   return zones.find((z) => z.id === zoneId)?.name ?? tr('target.unknownZone');
 };
 
-/** The zone a device is assigned to, rendered for the picker's context line. */
-export const deviceZoneName = (zones: Zone[], device?: CapabilityDevice | null): string =>
-  zoneNameOf(zones, device?.zoneId);
-
 /** Devices assigned to a zone (empty when no zone is given). */
 export const devicesInZone = (devices: CapabilityDevice[], zoneId?: string | null): CapabilityDevice[] =>
   !zoneId ? [] : devices.filter((d) => d.zoneId === zoneId);
