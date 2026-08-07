@@ -1,12 +1,4 @@
 services:
-  unified-device-service:
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
-      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
-    volumes:
-      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
-
   db-gateway:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development

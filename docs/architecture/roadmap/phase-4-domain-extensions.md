@@ -196,13 +196,22 @@ enforcement — здесь строим **модель/данные/UX**, кри
 > Зафиксировано по итогам аудита кодовой базы 2026-08-07 (см. [`PROJECT_ANALYSIS_REPORT.md`](../../../PROJECT_ANALYSIS_REPORT.md),
 > раздел 7). Не эпики: без DoD и приоритета, исполняются по решению владельца отдельными ветками.
 
-### Снятие UnifiedDeviceService + legacy-канала DeviceStateUpdatedEvent ⬜
+### Снятие UnifiedDeviceService + legacy-канала DeviceStateUpdatedEvent ✅ (2026-08-08)
 
-После Step 5 сервис выродился: его in-memory реестр write-only (никто не читает), единственная функция —
-перекладывать `Envelope<DeviceStateReportV1>` в legacy-событие `DeviceStateUpdatedEvent` для SignalR-релея
-ApiGateway. Содержание работы: подписать `ApiGateway.EventRelayService` напрямую на `DeviceStateReportV1`
-(StateExchange) → удалить сервис, контейнер из compose, тип `DeviceStateUpdatedEvent` и exchange
-`device.events` (с ним — большую часть `Domovoy.Common.Models`). Выигрыш: минус контейнер, минус hop в
-hot-path состояния устройств, минус последний legacy-контракт шины. Правка топологии и контрактов → по
-правилам «Контракты и совместимость» (`../coding_standards_ru.md`) требует поднять `bus.speaks/understands`, `topology.version` и версии компонентов.
-**Отложено до завершения живого прогона Эпика 3K** (решение владельца, 2026-08-07).
+После Step 5 сервис выродился: его in-memory реестр был write-only (никто не читал), единственной живой
+функцией осталось перекладывать `Envelope<DeviceStateReportV1>` в legacy-событие `DeviceStateUpdatedEvent`
+для SignalR-релея ApiGateway — контейнер и лишний hop шины на каждое изменение состояния ради
+переименования. Сделано: `ApiGateway.EventRelayService` подписан напрямую на `DeviceStateReportV1`
+(`BusTopology.StateExchange`), сервис и его контейнер удалены, вместе с ними ушли `DeviceStateUpdatedEvent`
+и пара констант `device.events` / `device.state.updated`. Событие для клиента не изменилось —
+`DeviceStateUpdated(deviceId, state)` с тем же отсевом `null`.
+
+Заявлено по правилам «Контракты и совместимость»: шина v2 → v3 с `understands: 3` у всех (ломающее
+изменение — старый api-gateway, подписанный на снятое событие, рядом с новой топологией молча перестал бы
+отдавать состояние в SignalR; поднятый `understands` приводит решатель к «обновить всё»), топология v2 → v3
+с хуком `remove-service` (compose сам контейнер не уберёт — сервис исчезает из файла, а контейнер остаётся
+сиротой), версии компонентов 1.1 → 1.2. Это первое боевое применение хука `remove-service`.
+
+> Отложено было до живого прогона 3K (решение владельца 2026-08-07), выполнено по его же решению
+> раньше — 2026-08-08. Практическое следствие: живой прогон 3K будет одновременно первым обновлением,
+> удаляющим сервис из топологии; на это стоит смотреть отдельно.

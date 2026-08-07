@@ -57,7 +57,7 @@
                         ▼
                    RabbitMQ ──────────────┬───────────────────────────┐
                                           ▼                           ▼
-                              DbGateway.EventInterceptor      UnifiedDeviceService
+                              DbGateway.EventInterceptor      ApiGateway.EventRelayService
                               upsert capability_devices       CapabilityDeviceManager
                                   (Mongo)                     переизлучает состояние
                                                                       │
@@ -106,7 +106,7 @@ Payloads
 ┌──────────────────────── Docker (homelab) ─────────────────────────┐
 │  Domovoy-сервисы        RabbitMQ (bus+MQTT)        MongoDB          │
 │  (Connectivity,         Zigbee2MQTT                Prometheus       │
-│   UnifiedDeviceService,                                            │
+│   ApiGateway.EventRelayService,                                            │
 │   ApiGateway, DbGateway)                                           │
 └────────────────────────────────────────────────────────────────────┘
         ▲ (вне Docker, намеренно)

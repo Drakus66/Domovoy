@@ -20,6 +20,12 @@
   ],
 
   "_versionComment": [
+    "v3 (2026-08-08): снят сервис unified-device-service. Он остался прокладкой после Step 5:",
+    "единственной живой функцией было переизлучение DeviceStateReportV1 как legacy-события",
+    "DeviceStateUpdatedEvent для SignalR-релея; релей теперь читает capability-контракт напрямую.",
+    "Хук remove-service останавливает и удаляет контейнер: compose сам его не уберёт — сервис",
+    "просто исчезает из файла, а работающий контейнер остаётся сиротой.",
+    "",
     "v2 (одной неопубликованной пачкой чистки 2026-08-08):",
     "  • у connectivity-service появились MQTT__USERNAME/MQTT__PASSWORD — настройки брокера",
     "    устройств отделены от настроек шины (раньше учётные данные брались из RabbitMq-секции);",
@@ -29,7 +35,7 @@
     "дефолтными учётными данными брокера, поэтому он объявляет requires.topology: 2."
   ],
 
-  "version": 2,
+  "version": 3,
   "minCompat": 1,
 
   "_assetsComment": [
@@ -41,5 +47,7 @@
     "deploy/caddy/Caddyfile"
   ],
 
-  "hooks": []
+  "hooks": [
+    { "type": "remove-service", "name": "unified-device-service" }
+  ]
 }

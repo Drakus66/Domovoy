@@ -266,10 +266,9 @@ wire-формат payload'ов не меняется, но `contract-guard` ср
 
 ## Отложено (решение владельца, 2026-08-07)
 
-**Снятие `UnifiedDeviceService`** — после живого прогона Эпика 3K. Содержание и обоснование —
-раздел «Техдолг-кандидаты» в [`roadmap/phase-4-domain-extensions.md`](architecture/roadmap/phase-4-domain-extensions.md)
-и раздел 7 отчёта. Правка топологии и контрактов шины → обязательное поднятие
-`bus.speaks/understands`, `topology.version` и версий компонентов.
+**Снятие `UnifiedDeviceService`** — ✅ ВЫПОЛНЕНО 2026-08-08 по решению владельца, не дожидаясь живого
+прогона 3K (изначально откладывалось до него). Итог и объявленная совместимость — раздел
+«Техдолг-кандидаты» в [`roadmap/phase-4-domain-extensions.md`](architecture/roadmap/phase-4-domain-extensions.md).
 
 Там же по смыслу: **довод шва 3H Ф1** (~24 домена DbGateway за store-интерфейсы; сейчас переведены
 2 файла из ~25, `EnergyEndpoints` — гибрид) — это уже отдельный пункт плана Эпика 3H, здесь не

@@ -7,27 +7,6 @@ networks:
 services:
   # ============ Application Services ============
 
-  # Subscribes to the capability contract on the bus and re-emits normalized state for SignalR/persist.
-  # No HTTP/MQTT — RabbitMQ AMQP only.
-  unified-device-service:
-    container_name: unified-device-service
-    image: ${DOCKER_REGISTRY-}unified-device-service
-    build:
-      context: .
-      dockerfile: src/Services/Domovoy.UnifiedDeviceService/Dockerfile
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - domovoy-network
-    environment:
-      - RABBITMQ__HOSTNAME=rabbitmq
-      - RABBITMQ__PORT=5672
-      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
-      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
-      - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
-    restart: unless-stopped
-
   # Owns the MQTT client; runs Zigbee2MQTT + Domovoy Native adapters and publishes the capability
   # contract. Needs RabbitMQ (AMQP + MQTT broker), nothing else.
   connectivity-service:
