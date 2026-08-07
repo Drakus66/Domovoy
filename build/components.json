@@ -32,7 +32,8 @@
 
   "topology": {
     "image": "topology",
-    "version": 1,
+    "_comment": "Держать в согласии с build/topology/manifest.json — там же и обоснование версии.",
+    "version": 2,
     "minCompat": 1,
     "paths": [
       "docker-compose.yml",
@@ -87,7 +88,7 @@
       "version": "1.1",
       "bus": { "speaks": 2, "understands": 1 },
       "provides": {},
-      "requires": {},
+      "requires": { "topology": 2 },
       "paths": ["src/Services/Domovoy.Connectivity/**"]
     },
     {

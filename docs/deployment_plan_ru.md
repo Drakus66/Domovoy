@@ -131,6 +131,19 @@
 6. **Перезапуск сервисов из UI (опционально).** Self-restart через шину live-verified только на `db-gateway`;
    для остальных (`connectivity`/`automation`/`unified`/`plugin-supervisor` + `webui`) нужна досборка образов.
    **Не блокер** — без неё рестарт делается `docker compose restart <svc>` вручную.
+7. **Одноразовое удаление старых очередей шины (только для уже работавшего стенда).** MQTT-ветки убраны из
+   `RabbitMqConnection`, поэтому очереди `domovoy.*` больше не объявляются с аргументом
+   `mqtt-subscription-qos`. Очередь, созданная прежней версией, при обновлении даст `PRECONDITION_FAILED 406`,
+   и сервис уйдёт в запасной путь **без dead-lettering** (сбойное сообщение будет крутиться вечно). В журнале
+   это видно как ERROR с готовой командой. Разово, после остановки стека:
+
+   ```bash
+   docker exec rabbitmq rabbitmqctl list_queues name arguments | grep mqtt-subscription-qos
+   docker exec rabbitmq rabbitmqctl delete_queue <очередь>   # для каждой найденной
+   ```
+
+   **Проверка после запуска:** у каждой очереди `domovoy.*` есть аргумент `x-dead-letter-exchange: domovoy.dlx`
+   и парная очередь `<queue>.dlq`. На чистой установке шаг не нужен.
 
 ---
 

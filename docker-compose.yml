@@ -46,8 +46,13 @@ services:
       - RABBITMQ__PORT=5672
       - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      # Device MQTT broker — a separate contour from the bus, with its own settings. Same container
+      # here only because RabbitMQ hosts both; pointing devices at a standalone broker is a change to
+      # these four variables and nothing else.
       - MQTT__BROKER=rabbitmq
       - MQTT__PORT=1883
+      - MQTT__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - MQTT__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
     restart: unless-stopped
 

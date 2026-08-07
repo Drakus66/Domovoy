@@ -35,17 +35,9 @@ public class RabbitMqConnection : IMessageBus, IAsyncDisposable
     private readonly ConcurrentDictionary<string, bool> _declaredExchanges = new();
     private readonly ConcurrentDictionary<string, bool> _queueHasDlq = new();
     private readonly SemaphoreSlim _connectLock = new(1, 1);
-    private readonly bool _useMqtt;
     private IConnection? _connection;
     private IChannel? _channel;
     private bool _disposed;
-    private readonly int _mqttDefaultQoS;
-    private readonly bool _mqttDefaultRetain;
-
-    /// <summary>
-    /// Returns true if MQTT mode is enabled
-    /// </summary>
-    public bool IsMqttEnabled => _useMqtt;
 
     public RabbitMqConnection(
         IOptions<RabbitMqConfig> config,
@@ -56,9 +48,6 @@ public class RabbitMqConnection : IMessageBus, IAsyncDisposable
         _config = config.Value;
         _logger = logger;
         _consumers = new Dictionary<string, IAsyncBasicConsumer>();
-        _useMqtt = config.Value.UseMqtt;
-        _mqttDefaultQoS = config.Value.MqttDefaultQoS;
-        _mqttDefaultRetain = config.Value.MqttDefaultRetain;
     }
 
     /// <summary>
@@ -90,7 +79,6 @@ public class RabbitMqConnection : IMessageBus, IAsyncDisposable
                             UserName = _config.UserName,
                             Password = _config.Password,
                             VirtualHost = _config.VirtualHost,
-                            // Always use AMQP port for the actual connection, even if MQTT mode is enabled
                             Port = _config.Port,
                             AutomaticRecoveryEnabled = true,
                             TopologyRecoveryEnabled = true,
@@ -105,10 +93,7 @@ public class RabbitMqConnection : IMessageBus, IAsyncDisposable
                     // Topology is per-channel state from our point of view — re-declare after reconnect.
                     _declaredExchanges.Clear();
 
-                    _logger.LogInformation(
-                        "Successfully connected to RabbitMQ ({Mode}) on port {Port}",
-                        _useMqtt ? "MQTT-compatible" : "AMQP",
-                        _config.Port);
+                    _logger.LogInformation("Successfully connected to RabbitMQ (AMQP) on port {Port}", _config.Port);
                     return _channel;
                 }
                 catch (Exception ex) when (attempt < MaxConnectAttempts && !cancellationToken.IsCancellationRequested)
@@ -135,14 +120,6 @@ public class RabbitMqConnection : IMessageBus, IAsyncDisposable
 
     public async Task PublishAsync<T>(string exchange, string routingKey, T message, CancellationToken cancellationToken = default)
     {
-        await PublishAsync(exchange, routingKey, message, _mqttDefaultQoS, _mqttDefaultRetain, cancellationToken);
-    }
-
-    /// <summary>
-    /// Publishes a message with specified MQTT QoS and retain settings
-    /// </summary>
-    public async Task PublishAsync<T>(string exchange, string routingKey, T message, int qos, bool retain, CancellationToken cancellationToken = default)
-    {
         try
         {
             var channel = await EnsureChannelAsync(cancellationToken);
@@ -150,20 +127,10 @@ public class RabbitMqConnection : IMessageBus, IAsyncDisposable
             var body = JsonSerializer.SerializeToUtf8Bytes(message);
             var properties = new BasicProperties();
 
-            if (_useMqtt)
-            {
-                properties.Headers = new Dictionary<string, object>
-                {
-                    { "mqtt-qos", (byte)qos },
-                    { "mqtt-retain", retain }
-                }!;
-            }
-
             await DeclareExchangeAsync(channel, exchange, cancellationToken);
             await channel.BasicPublishAsync(exchange, routingKey, mandatory: true, basicProperties: properties, body, cancellationToken: cancellationToken);
 
-            _logger.LogDebug("Message published to {Exchange} with routing key {RoutingKey}, QoS: {QoS}, Retain: {Retain}",
-                exchange, routingKey, qos, retain);
+            _logger.LogDebug("Message published to {Exchange} with routing key {RoutingKey}", exchange, routingKey);
         }
         catch (Exception ex)
         {
@@ -175,38 +142,11 @@ public class RabbitMqConnection : IMessageBus, IAsyncDisposable
 
     public async Task SubscribeAsync<T>(string queue, string exchange, string routingKey, Func<T, Task> handler, CancellationToken cancellationToken = default)
     {
-        // Default QoS for subscriptions
-        var qos = _useMqtt ? _mqttDefaultQoS : 0;
-        await SubscribeAsync(queue, exchange, routingKey, handler, qos, cancellationToken);
-    }
-
-    /// <summary>
-    /// Subscribes to a topic with specified MQTT QoS
-    /// </summary>
-    public async Task SubscribeAsync<T>(string queue, string exchange, string routingKey, Func<T, Task> handler, int qos, CancellationToken cancellationToken = default)
-    {
         try
         {
-            Dictionary<string, object?> arguments = [];
-
-            if (_useMqtt)
-            {
-                arguments = new()
-                {
-                    { "mqtt-subscription-qos", (byte)qos }
-                };
-
-                // Use wildcards if routingKey ends with #
-                // Convert MQTT wildcards to AMQP wildcards if needed
-                if (routingKey.EndsWith('#'))
-                {
-                    routingKey = routingKey.Replace("#", "*");
-                }
-            }
-
             var channel = await EnsureChannelAsync(cancellationToken);
             await DeclareExchangeAsync(channel, exchange, cancellationToken);
-            channel = await DeclareQueueWithDeadLetterAsync(channel, queue, arguments, cancellationToken);
+            channel = await DeclareQueueWithDeadLetterAsync(channel, queue, cancellationToken);
             await channel.QueueBindAsync(queue, exchange, routingKey, cancellationToken: cancellationToken);
 
             var consumer = new AsyncEventingBasicConsumer(channel);
@@ -238,7 +178,7 @@ public class RabbitMqConnection : IMessageBus, IAsyncDisposable
             await channel.BasicConsumeAsync(queue, false, consumer, cancellationToken: cancellationToken);
             _consumers[queue] = consumer;
 
-            _logger.LogInformation("Subscribed to {Queue} with routing key {RoutingKey}, QoS: {QoS}", queue, routingKey, qos);
+            _logger.LogInformation("Subscribed to {Queue} with routing key {RoutingKey}", queue, routingKey);
         }
         catch (Exception ex)
         {
@@ -252,11 +192,15 @@ public class RabbitMqConnection : IMessageBus, IAsyncDisposable
     /// A queue created by an older version has different arguments — redeclaring then fails with
     /// PRECONDITION_FAILED and closes the channel, so we reopen it and fall back to the legacy
     /// declaration (keeping the old requeue behaviour for that queue).
+    /// <para>
+    /// The fallback is a degradation, not a resting state: without dead-lettering a poison message loops
+    /// forever. Hence the ERROR — it names the remedy, because nothing else will ever surface it.
+    /// </para>
     /// </summary>
     private async Task<IChannel> DeclareQueueWithDeadLetterAsync(
-        IChannel channel, string queue, Dictionary<string, object?> arguments, CancellationToken cancellationToken)
+        IChannel channel, string queue, CancellationToken cancellationToken)
     {
-        var withDlq = new Dictionary<string, object?>(arguments)
+        var withDlq = new Dictionary<string, object?>
         {
             ["x-dead-letter-exchange"] = DeadLetterExchange,
             ["x-dead-letter-routing-key"] = queue,
@@ -273,12 +217,15 @@ public class RabbitMqConnection : IMessageBus, IAsyncDisposable
         }
         catch (OperationInterruptedException ex) when (ex.ShutdownReason?.ReplyCode == 406)
         {
-            _logger.LogWarning(
-                "Queue {Queue} exists with different arguments — declaring without dead-lettering (failed messages will be requeued)",
-                queue);
+            _logger.LogError(
+                "Очередь {Queue} уже объявлена с другими аргументами — работаем БЕЗ dead-letter (сбойные " +
+                "сообщения будут возвращаться в очередь бесконечно). Так бывает после обновления, изменившего " +
+                "аргументы очередей: остановите стек и удалите очередь один раз — " +
+                "`docker exec rabbitmq rabbitmqctl delete_queue {Queue}` — она пересоздастся правильно.",
+                queue, queue);
             _channel = null; // the failed declaration closed the channel
             var fresh = await EnsureChannelAsync(cancellationToken);
-            await fresh.QueueDeclareAsync(queue, durable: true, exclusive: false, arguments: arguments, cancellationToken: cancellationToken);
+            await fresh.QueueDeclareAsync(queue, durable: true, exclusive: false, cancellationToken: cancellationToken);
             _queueHasDlq[queue] = false;
             return fresh;
         }
