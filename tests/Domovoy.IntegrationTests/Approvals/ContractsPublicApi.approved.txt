@@ -204,7 +204,6 @@ Domovoy.Contracts.Capabilities.Capability
   method System.String ToString()
   method System.Void Deconstruct(System.String& Id, Domovoy.Contracts.Capabilities.CapabilityKind& Kind, System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Object, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& Attributes)
   prop Domovoy.Contracts.Capabilities.CapabilityKind Kind { get set }
-  prop System.Boolean IsReadable { get }
   prop System.Boolean IsWritable { get }
   prop System.Collections.Generic.IReadOnlyDictionary<System.String, System.Object> Attributes { get set }
   prop System.String Id { get set }
@@ -213,7 +212,6 @@ Domovoy.Contracts.Capabilities.CapabilityAttributeKeys
   const System.String Editor = "editor"
   const System.String Max = "max"
   const System.String Min = "min"
-  const System.String Readable = "readable"
   const System.String Step = "step"
   const System.String Unit = "unit"
   const System.String Values = "values"
@@ -284,24 +282,19 @@ Domovoy.Contracts.Capabilities.CapabilityKind
   method System.TypeCode GetTypeCode()
 
 Domovoy.Contracts.Capabilities.WellKnownCapabilities
-  field System.Collections.Generic.IReadOnlyList<System.String> DayNames
   method Domovoy.Contracts.Capabilities.Capability AnyoneHome()
   method Domovoy.Contracts.Capabilities.Capability Battery()
   method Domovoy.Contracts.Capabilities.Capability Boolean(System.String id, System.Boolean writable)
   method Domovoy.Contracts.Capabilities.Capability Brightness(System.Boolean writable)
   method Domovoy.Contracts.Capabilities.Capability CalendarDate()
   method Domovoy.Contracts.Capabilities.Capability Clock()
-  method Domovoy.Contracts.Capabilities.Capability Co2()
-  method Domovoy.Contracts.Capabilities.Capability Color(System.Boolean writable)
   method Domovoy.Contracts.Capabilities.Capability ColorTemp(System.Int32 minK, System.Int32 maxK, System.Boolean writable)
   method Domovoy.Contracts.Capabilities.Capability Contact()
   method Domovoy.Contracts.Capabilities.Capability DayOfWeek()
-  method Domovoy.Contracts.Capabilities.Capability Energy()
   method Domovoy.Contracts.Capabilities.Capability Enum(System.String id, System.Collections.Generic.IReadOnlyList<System.String> values, System.Boolean writable)
   method Domovoy.Contracts.Capabilities.Capability HomeCount()
   method Domovoy.Contracts.Capabilities.Capability HomeMode()
   method Domovoy.Contracts.Capabilities.Capability Humidity()
-  method Domovoy.Contracts.Capabilities.Capability Illuminance()
   method Domovoy.Contracts.Capabilities.Capability IsDark()
   method Domovoy.Contracts.Capabilities.Capability IsDay()
   method Domovoy.Contracts.Capabilities.Capability IsHoliday()
@@ -325,23 +318,10 @@ Domovoy.Contracts.Capabilities.WellKnownCapabilities
   method Domovoy.Contracts.Capabilities.Capability Text(System.String id, System.Boolean writable)
   method Domovoy.Contracts.Capabilities.Capability TimeInput(System.String id, System.Boolean writable)
   method Domovoy.Contracts.Capabilities.Capability TimeOfDay()
-  method Domovoy.Contracts.Capabilities.Capability Valve()
 
 Domovoy.Contracts.Devices.CapabilityState
   ctor ()
-  ctor (System.Collections.Generic.IDictionary<System.String, System.Object> values)
   method Domovoy.Contracts.Devices.CapabilityState Set(System.String capabilityId, System.Object value)
-  method System.Boolean Has(System.String capabilityId)
-  method System.Boolean TryGetBool(System.String capabilityId, System.Boolean& value)
-  method System.Boolean TryGetDouble(System.String capabilityId, System.Double& value)
-  method System.Boolean TryGetInt(System.String capabilityId, System.Int32& value)
-  method System.Boolean TryGetString(System.String capabilityId, System.String& value)
-  method System.Nullable<System.Boolean> OnOff()
-  method System.Nullable<System.Double> Co2()
-  method System.Nullable<System.Double> Humidity()
-  method System.Nullable<System.Double> Temperature()
-  method System.Nullable<System.Int32> Battery()
-  method System.Nullable<System.Int32> Brightness()
   prop System.Collections.Generic.IReadOnlyDictionary<System.String, System.Object> Values { get }
 
 Domovoy.Contracts.Devices.DeviceArchetypes
@@ -947,7 +927,6 @@ Domovoy.Contracts.Narrative.Transition
   const Domovoy.Contracts.Narrative.Transition Off = 1
   const Domovoy.Contracts.Narrative.Transition On = 0
   const Domovoy.Contracts.Narrative.Transition Open = 4
-  const Domovoy.Contracts.Narrative.Transition Reached = 10
   const Domovoy.Contracts.Narrative.Transition Set = 9
   const Domovoy.Contracts.Narrative.Transition Unlock = 7
   method System.Boolean Equals(System.Object obj)
