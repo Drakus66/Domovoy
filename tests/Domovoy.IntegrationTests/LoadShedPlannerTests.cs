@@ -128,6 +128,14 @@ public sealed class LoadShedPlannerTests
         Assert.Equal(900, plan.EstimatedWatts);
     }
 
+    /// <summary>
+    /// Единый бюджет дома в виде, который принимает живая перегрузка <c>PlanRestore</c>. До этого тесты
+    /// звали обёртку без scope — единственного её потребителя в продакшн-коде не было, и удаление
+    /// мёртвой обёртки не должно было терять покрытие.
+    /// </summary>
+    private static Func<LoadCandidate, (double Measured, double Limit)> Budget(double measuredWatts, double limitWatts) =>
+        _ => (measuredWatts, limitWatts);
+
     [Fact]
     public void PlanRestore_RespectsMinDwell()
     {
@@ -136,7 +144,7 @@ public sealed class LoadShedPlannerTests
         var stack = new[] { new ShedStackEntry(id, ShedLevel.Normal, ShedLevel.Off, Now.AddSeconds(-30)) };
         var loadsById = new Dictionary<Guid, LoadCandidate> { [id] = load };
 
-        var plan = LoadShedPlanner.PlanRestore(stack, loadsById, measuredWatts: 100, limitWatts: 1000, marginWatts: 50, minDwellSeconds: 120, Now);
+        var plan = LoadShedPlanner.PlanRestore(stack, loadsById, Budget(100, 1000), marginWatts: 50, minDwellSeconds: 120, Now);
 
         Assert.Empty(plan.Commands);
         Assert.Empty(plan.Popped);
@@ -158,7 +166,7 @@ public sealed class LoadShedPlannerTests
         };
         var loadsById = new Dictionary<Guid, LoadCandidate> { [idA] = loadA, [idB] = loadB };
 
-        var plan = LoadShedPlanner.PlanRestore(stack, loadsById, measuredWatts: 100, limitWatts: 1000, marginWatts: 50, minDwellSeconds: 60, Now);
+        var plan = LoadShedPlanner.PlanRestore(stack, loadsById, Budget(100, 1000), marginWatts: 50, minDwellSeconds: 60, Now);
 
         Assert.Equal(new[] { idB, idA }, plan.Popped.Select(p => p.DeviceId));
         Assert.Equal(500, plan.RestoredWatts); // 200 (B) + 300 (A) given back on top of the measured 100
@@ -179,7 +187,7 @@ public sealed class LoadShedPlannerTests
         };
         var loadsById = new Dictionary<Guid, LoadCandidate> { [idA] = loadA, [idB] = loadB };
 
-        var plan = LoadShedPlanner.PlanRestore(stack, loadsById, measuredWatts: 100, limitWatts: 1000, marginWatts: 50, minDwellSeconds: 60, Now);
+        var plan = LoadShedPlanner.PlanRestore(stack, loadsById, Budget(100, 1000), marginWatts: 50, minDwellSeconds: 60, Now);
 
         // B (top) doesn't fit (100+900+50 > 1000) → stop immediately, A (which would fit) is never reached.
         Assert.Empty(plan.Commands);
@@ -195,7 +203,7 @@ public sealed class LoadShedPlannerTests
         var stack = new[] { new ShedStackEntry(id, ShedLevel.Curtailed, ShedLevel.Off, Now.AddMinutes(-10)) };
         var loadsById = new Dictionary<Guid, LoadCandidate> { [id] = load };
 
-        var plan = LoadShedPlanner.PlanRestore(stack, loadsById, measuredWatts: 0, limitWatts: 1000, marginWatts: 0, minDwellSeconds: 60, Now);
+        var plan = LoadShedPlanner.PlanRestore(stack, loadsById, Budget(0, 1000), marginWatts: 0, minDwellSeconds: 60, Now);
 
         Assert.Equal(2, plan.Commands.Count);
         Assert.Equal(CapabilityIds.OnOff, plan.Commands[0].CapabilityId);
@@ -213,7 +221,7 @@ public sealed class LoadShedPlannerTests
         var stack = new[] { new ShedStackEntry(id, ShedLevel.Normal, ShedLevel.Curtailed, Now.AddMinutes(-10)) };
         var loadsById = new Dictionary<Guid, LoadCandidate> { [id] = load };
 
-        var plan = LoadShedPlanner.PlanRestore(stack, loadsById, measuredWatts: 0, limitWatts: 1000, marginWatts: 0, minDwellSeconds: 60, Now);
+        var plan = LoadShedPlanner.PlanRestore(stack, loadsById, Budget(0, 1000), marginWatts: 0, minDwellSeconds: 60, Now);
 
         var cmd = Assert.Single(plan.Commands);
         Assert.Equal("brightness", cmd.CapabilityId);
@@ -228,7 +236,7 @@ public sealed class LoadShedPlannerTests
         var stack = new[] { new ShedStackEntry(goneId, ShedLevel.Normal, ShedLevel.Off, Now.AddMinutes(-10)) };
 
         var plan = LoadShedPlanner.PlanRestore(
-            stack, new Dictionary<Guid, LoadCandidate>(), measuredWatts: 0, limitWatts: 1000, marginWatts: 0, minDwellSeconds: 60, Now);
+            stack, new Dictionary<Guid, LoadCandidate>(), Budget(0, 1000), marginWatts: 0, minDwellSeconds: 60, Now);
 
         Assert.Empty(plan.Commands);
         Assert.Equal(goneId, Assert.Single(plan.Popped).DeviceId);
