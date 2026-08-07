@@ -44,6 +44,10 @@ public sealed class PluginSupervisor : BackgroundService
         _logger.LogInformation("Host resources: {Cores} cores, {Mem} MB, GPU={Gpu}, Internet={Net}",
             _host.CpuCores, _host.MemoryMb, _host.Gpu, _host.Internet);
 
+        // Before discovery, and before anything is launched: the first-party plugins this image carries are
+        // laid out on the host volume, so the update channel delivers them like any other component.
+        BuiltInPluginSeeder.Seed(_options.BuiltInPluginsDirectory, _options.PluginsRoot, _logger);
+
         foreach (var entry in ManifestLoader.Discover(_options.PluginsRoot, _logger))
         {
             Classify(entry);

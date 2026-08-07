@@ -21,7 +21,16 @@ ARG VERSION=0.0.0
 ARG INFORMATIONAL_VERSION=0.0.0
 RUN dotnet publish "./Domovoy.PluginSupervisor.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:Version=$VERSION /p:InformationalVersion=$INFORMATIONAL_VERSION
 
+# Первопартийные плагины едут ВНУТРИ образа супервизора (Эпик 3K). Плагин — это папка на томе
+# хоста, а не compose-сервис, поэтому иначе канал обновлений доставить его не может: DLL пришлось
+# бы копировать руками. Супервизор раскладывает их в plugins-root на старте (BuiltInPluginSeeder),
+# уважая удаление владельцем. Имя папки = id плагина из его plugin.json.
+RUN dotnet publish "/src/src/Plugins/Domovoy.CommutePlugin/Domovoy.CommutePlugin.csproj" \
+    -c $BUILD_CONFIGURATION -o /app/builtin-plugins/commute-planner \
+    /p:UseAppHost=false /p:Version=$VERSION /p:InformationalVersion=$INFORMATIONAL_VERSION
+
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+COPY --from=publish /app/builtin-plugins ./builtin-plugins
 ENTRYPOINT ["dotnet", "Domovoy.PluginSupervisor.dll"]

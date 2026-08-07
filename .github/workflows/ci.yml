@@ -57,8 +57,10 @@ jobs:
       - name: Build
         run: dotnet build Domovoy.sln -c Release --no-restore
 
+      # Всё решение, а не один тестовый проект: указание конкретного .csproj однажды уже привело к
+      # тому, что тесты Domovoy.CommutePlugin.Tests не выполнялись в CI ни разу.
       - name: Unit tests (no Docker)
-        run: dotnet test tests/Domovoy.IntegrationTests/Domovoy.IntegrationTests.csproj -c Release --no-build --filter "Category!=Infra"
+        run: dotnet test Domovoy.sln -c Release --no-build --filter "Category!=Infra"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -93,4 +95,4 @@ jobs:
       # Runs the OfflineSmoke-tagged integration tests: adapter → bus → Mongo persistence, home-mode change,
       # proposal approval + BSON round-trip — all against local containers, exercising the offline invariant.
       - name: Offline-smoke tests
-        run: dotnet test tests/Domovoy.IntegrationTests/Domovoy.IntegrationTests.csproj -c Release --filter "Category=OfflineSmoke"
+        run: dotnet test Domovoy.sln -c Release --filter "Category=OfflineSmoke"

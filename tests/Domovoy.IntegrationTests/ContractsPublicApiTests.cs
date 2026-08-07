@@ -41,11 +41,23 @@ public class ContractsPublicApiTests
         var actual = RenderPublicApi(typeof(MessageTypes).Assembly);
         var path = ResolveApprovalPath();
 
-        if (Environment.GetEnvironmentVariable("UPDATE_APPROVALS") == "1" || !File.Exists(path))
+        if (Environment.GetEnvironmentVariable("UPDATE_APPROVALS") == "1")
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, actual);
             return;
+        }
+
+        // A missing snapshot used to be silently created, which meant the guard disarmed itself in any
+        // fresh checkout that had lost the file — a guard that passes when its baseline is gone guards
+        // nothing. Re-approval stays possible, but only as a deliberate act.
+        if (!File.Exists(path))
+        {
+            Assert.Fail(
+                $"Снимок публичной поверхности не найден: {path}\n" +
+                "Страж контракта без снимка бесполезен, поэтому это падение, а не тихое создание файла.\n" +
+                "Если снимок действительно нужно создать заново:\n" +
+                "  UPDATE_APPROVALS=1 dotnet test --filter ContractsPublicApi\n");
         }
 
         var approved = File.ReadAllText(path).Replace("\r\n", "\n");

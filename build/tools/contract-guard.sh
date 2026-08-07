@@ -31,7 +31,11 @@ if [ -z "$BASE" ] || ! git rev-parse --verify --quiet "$BASE" >/dev/null; then
 fi
 
 # Пути, изменение которых способно поменять совместимость.
-CONTRACT_PATTERNS='^(src/Common/Domovoy\.Contracts/|src/Gateway/[^/]+/Endpoints/|src/Gateway/[^/]+/Controllers/|src/Services/[^/]+/Endpoints/|src/Services/[^/]+/Controllers/|docker-compose\.yml$)'
+#
+# src/Plugins/*/plugin.json — объявленная поверхность плагина (id, capability, подписки, схема
+# настроек, ресурсные требования). Плагины едут внутри образа plugin-supervisor, поэтому их
+# манифест — такой же контракт с супервизором и UI, как Endpoints/ у сервиса.
+CONTRACT_PATTERNS='^(src/Common/Domovoy\.Contracts/|src/Gateway/[^/]+/Endpoints/|src/Gateway/[^/]+/Controllers/|src/Services/[^/]+/Endpoints/|src/Services/[^/]+/Controllers/|src/Plugins/[^/]+/plugin\.json$|docker-compose\.yml$)'
 
 CHANGED="$(git diff --name-only "$BASE" "$HEAD_REF")"
 TOUCHED="$(printf '%s\n' "$CHANGED" | grep -E "$CONTRACT_PATTERNS" || true)"

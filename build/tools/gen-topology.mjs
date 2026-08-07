@@ -25,9 +25,8 @@
 
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+import { repoRoot, loadSpec, loadTopologyManifest, imageOf } from './spec.mjs';
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
@@ -37,13 +36,11 @@ function arg(name, fallback) {
 const outDir = resolve(repoRoot, arg('out', 'build/topology/dist'));
 const channelDefault = arg('channel', 'release');
 
-const spec = JSON.parse(readFileSync(join(repoRoot, 'build/components.json'), 'utf8'));
-const manifest = JSON.parse(readFileSync(join(repoRoot, 'build/topology/manifest.json'), 'utf8'));
+const spec = loadSpec();
+const manifest = loadTopologyManifest();
 
 /** compose-имя сервиса → адрес образа в реестре. */
-const imageByService = new Map(
-  spec.components.map((c) => [c.container, `${spec.registry}/${spec.imagePrefix}${c.name}`]),
-);
+const imageByService = new Map(spec.components.map((c) => [c.container, imageOf(spec, c)]));
 
 const source = readFileSync(join(repoRoot, 'docker-compose.yml'), 'utf8');
 const lines = source.split(/\r?\n/);
