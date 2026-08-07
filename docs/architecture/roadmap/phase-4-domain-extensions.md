@@ -188,3 +188,21 @@ enforcement — здесь строим **модель/данные/UX**, кри
   (PrefixSpan-класс): упорядоченные рутины → сцены/сценарии с порядком шагов (глубже аранжировок 2F×3B).
 - **DoD:** пользователь проверяет гипотезу из UI без ML-терминов; денежное «что-если» считается на своей истории;
   секвенс-майнер находит упорядоченную рутину на тестовой истории.
+
+---
+
+## Техдолг-кандидаты (вне эпиков)
+
+> Зафиксировано по итогам аудита кодовой базы 2026-08-07 (см. [`PROJECT_ANALYSIS_REPORT.md`](../../../PROJECT_ANALYSIS_REPORT.md),
+> раздел 7). Не эпики: без DoD и приоритета, исполняются по решению владельца отдельными ветками.
+
+### Снятие UnifiedDeviceService + legacy-канала DeviceStateUpdatedEvent ⬜
+
+После Step 5 сервис выродился: его in-memory реестр write-only (никто не читает), единственная функция —
+перекладывать `Envelope<DeviceStateReportV1>` в legacy-событие `DeviceStateUpdatedEvent` для SignalR-релея
+ApiGateway. Содержание работы: подписать `ApiGateway.EventRelayService` напрямую на `DeviceStateReportV1`
+(StateExchange) → удалить сервис, контейнер из compose, тип `DeviceStateUpdatedEvent` и exchange
+`device.events` (с ним — большую часть `Domovoy.Common.Models`). Выигрыш: минус контейнер, минус hop в
+hot-path состояния устройств, минус последний legacy-контракт шины. Правка топологии и контрактов → по
+правилам «Контракты и совместимость» (`../coding_standards_ru.md`) требует поднять `bus.speaks/understands`, `topology.version` и версии компонентов.
+**Отложено до завершения живого прогона Эпика 3K** (решение владельца, 2026-08-07).
