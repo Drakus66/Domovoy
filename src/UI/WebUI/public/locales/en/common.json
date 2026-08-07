@@ -1,4 +1,7 @@
 {
+  "confirm": {
+    "title": "Confirm action"
+  },
   "language": {
     "label": "Language"
   },
@@ -28,6 +31,7 @@
     "refresh": "Refresh",
     "save": "Save",
     "cancel": "Cancel",
+    "confirm": "Confirm",
     "create": "Create",
     "delete": "Delete",
     "close": "Close",

@@ -18,6 +18,7 @@ import MovieFilterRoundedIcon from '@mui/icons-material/MovieFilterRounded';
 import CameraRoundedIcon from '@mui/icons-material/CameraRounded';
 import { scenesApi, Scene, SceneTarget, NewScene } from '../api/scenes';
 import { capabilityDevicesApi, CapabilityDevice, Capability, isServiceDevice } from '../api/capabilityDevices';
+import { confirmAction } from '../store/confirmStore';
 
 /** The scene-builder draft: mirrors the server model but keeps description as a plain string for the field. */
 interface SceneDraft {
@@ -98,7 +99,7 @@ export default function Scenes() {
   };
 
   const remove = async (scene: Scene) => {
-    if (!window.confirm(t('confirm.delete', { name: scene.name }))) return;
+    if (!await confirmAction({ message: t('confirm.delete', { name: scene.name }) })) return;
     try { await scenesApi.deleteScene(scene.id); await load(); }
     catch { setError(t('errors.delete')); }
   };

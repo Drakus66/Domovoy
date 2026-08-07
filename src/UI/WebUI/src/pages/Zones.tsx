@@ -19,6 +19,7 @@ import { capabilityDevicesApi } from '../api/capabilityDevices';
 import { deviceLabel, hasZonePointer, stripZonePointer, withZonePointer } from '../components/devices/deviceNaming';
 import { useDeviceRename } from '../components/devices/useDeviceRename';
 import type { RenameProposal } from '../components/devices/DeviceRenameDialog';
+import { confirmAction } from '../store/confirmStore';
 
 const KIND_OPTIONS = ['floor', 'room', 'outdoor', 'lawn', 'bed', 'gate'];
 
@@ -101,7 +102,7 @@ export default function Zones() {
   };
 
   const remove = async (z: Zone) => {
-    if (!window.confirm(i18n.t('zones:deleteConfirm', { name: z.name }))) return;
+    if (!await confirmAction({ message: i18n.t('zones:deleteConfirm', { name: z.name }) })) return;
     try {
       await zonesApi.deleteZone(z.id);
       await fetchZones();

@@ -15,6 +15,7 @@ import { blocksApi, ControlBlock } from '../../api/blocks';
 import { toNewBlock } from '../blocks/blockGraphModel';
 import { fmtDateTime } from '../../i18n/format';
 import ScorecardChart from '../charts/ScorecardChart';
+import { confirmAction } from '../../store/confirmStore';
 
 type ScopeGroup = { key: string; level: string; scopeKey: string; models: MlModel[] };
 
@@ -77,7 +78,7 @@ export default function MlTaskDetail({
 
   const removeModel = async (m: MlModel) => {
     const warn = pinnedVersions.has(m.version) ? `\n${t('detail.deletePinnedWarn')}` : '';
-    if (!window.confirm(t('detail.confirmDelete', { name: m.name, version: m.version }) + warn)) return;
+    if (!await confirmAction({ message: t('detail.confirmDelete', { name: m.name, version: m.version }) + warn })) return;
     setError(null);
     try {
       await mlApi.deleteModel(m.id);

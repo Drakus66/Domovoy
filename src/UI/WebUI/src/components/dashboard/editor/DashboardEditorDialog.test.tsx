@@ -7,6 +7,7 @@ import { fireEvent, render, screen, waitFor } from '../../../test/utils';
 import DashboardEditorDialog from './DashboardEditorDialog';
 import { dashboardsApi } from '../../../api/dashboards';
 import type { CapabilityDevice } from '../../../api/capabilityDevices';
+import { useConfirmStore } from '../../../store/confirmStore';
 
 vi.mock('../../../api/dashboards', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../../api/dashboards')>();
@@ -111,7 +112,13 @@ describe('DashboardEditorDialog', () => {
 
   it('asks for confirmation before deleting', async () => {
     mockedApi.remove.mockResolvedValue(undefined);
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    // Подтверждение — общий диалог интерфейса (store/confirmStore), а не window.confirm: он живёт
+    // в теме приложения, локализуется и не подавляется браузером в киоске.
+    const asked: string[] = [];
+    const realAsk = useConfirmStore.getState().ask;
+    useConfirmStore.setState({
+      ask: (request) => { asked.push(request.message); return Promise.resolve(true); },
+    });
     render(
       <DashboardEditorDialog
         open
@@ -125,8 +132,8 @@ describe('DashboardEditorDialog', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Удалить вкладку' }));
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('Климат'));
     await waitFor(() => expect(mockedApi.remove).toHaveBeenCalledWith('dash-1'));
-    confirmSpy.mockRestore();
+    expect(asked.join(' ')).toContain('Климат');
+    useConfirmStore.setState({ ask: realAsk });
   });
 });

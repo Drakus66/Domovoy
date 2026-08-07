@@ -13,6 +13,7 @@ import { baseOptions } from '../i18n/config';
 import { DEFAULT_LANGUAGE } from '../i18n/languages';
 import { resetSharedResources } from '../store/sharedResource';
 import { useAuthStore } from '../store/authStore';
+import { useConfirmStore } from '../store/confirmStore';
 
 // Tests can't use http-backend (no static server under jsdom), so init i18next with
 // the real locale JSON loaded inline. Language is pinned to the Russian default, so
@@ -114,6 +115,10 @@ beforeAll(() => {
 // re-confirms via the MSW handler above — same result.
 beforeEach(() => {
   useAuthStore.setState({ status: 'authenticated', user: { ...TEST_AUTH_USER } });
+  // Подтверждение опасного действия — общий диалог (store/confirmStore). В тестах он по умолчанию
+  // отвечает «да»: проверять хотят последствие действия, а не механику диалога. Тест, которому важен
+  // сам вопрос, подменяет `ask` у себя и смотрит на переданное сообщение.
+  useConfirmStore.setState({ request: null, resolve: null, ask: () => Promise.resolve(true) });
 });
 
 // Reset handlers after each test

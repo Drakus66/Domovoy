@@ -108,6 +108,7 @@ import LocationMap from '../components/settings/LocationMap';
 import ColorModeToggle from '../components/theme/ColorModeToggle';
 import ThemePicker from '../components/theme/ThemePicker';
 import LanguagePicker from '../components/i18n/LanguagePicker';
+import { confirmAction } from '../store/confirmStore';
 
 export default function Settings() {
   const { t } = useTranslation('settings');
@@ -205,7 +206,7 @@ export default function Settings() {
   };
 
   const restoreBackup = async (file: string) => {
-    if (!window.confirm(t('backups.restoreConfirm', { file }))) return;
+    if (!await confirmAction({ message: t('backups.restoreConfirm', { file }) })) return;
     setBackupBusy(true); setError(null); setBackupNotice(null);
     try {
       const r = await backupsApi.restore(file);
@@ -218,7 +219,7 @@ export default function Settings() {
   };
 
   const deleteBackup = async (file: string) => {
-    if (!window.confirm(t('backups.deleteConfirm', { file }))) return;
+    if (!await confirmAction({ message: t('backups.deleteConfirm', { file }) })) return;
     setError(null); setBackupNotice(null);
     try {
       await backupsApi.remove(file);

@@ -15,6 +15,7 @@ import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import {
   ComponentStatus, UpdatePlan, UpdateRun, UpdateSettings, updatesApi,
 } from '../../api/updates';
+import { confirmAction } from '../../store/confirmStore';
 
 /** A run is in flight — the poller keeps going and the buttons stay locked. */
 const isRunning = (run: UpdateRun | { status: string } | null): run is UpdateRun =>
@@ -139,7 +140,7 @@ export default function UpdatesEditor() {
   };
 
   const rollback = async () => {
-    if (!window.confirm(t('rollbackConfirm'))) return;
+    if (!await confirmAction({ message: t('rollbackConfirm') })) return;
     setBusy(true);
     try {
       await updatesApi.rollback();
