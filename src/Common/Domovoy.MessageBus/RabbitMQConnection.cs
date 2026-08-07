@@ -15,7 +15,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Domovoy.Common.Configuration;
+using Domovoy.Contracts.Messaging;
 
 using RabbitMQ.Client.Events;
 using RabbitMQ.Client.Exceptions;
@@ -124,7 +124,9 @@ public class RabbitMqConnection : IMessageBus, IAsyncDisposable
         {
             var channel = await EnsureChannelAsync(cancellationToken);
 
-            var body = JsonSerializer.SerializeToUtf8Bytes(message);
+            // Формат шины объявлен в одном месте (DomovoyJson.Bus), а не выводится из умолчаний
+            // сериализатора: до этого он держался только на том, что все звали JsonSerializer без опций.
+            var body = JsonSerializer.SerializeToUtf8Bytes(message, DomovoyJson.Bus);
             var properties = new BasicProperties();
 
             await DeclareExchangeAsync(channel, exchange, cancellationToken);
@@ -156,7 +158,7 @@ public class RabbitMqConnection : IMessageBus, IAsyncDisposable
                 try
                 {
                     var body = ea.Body.ToArray();
-                    var message = JsonSerializer.Deserialize<T>(body);
+                    var message = JsonSerializer.Deserialize<T>(body, DomovoyJson.Bus);
                     if (!Equals(message, default(T)))
                     {
                         await handler(message);

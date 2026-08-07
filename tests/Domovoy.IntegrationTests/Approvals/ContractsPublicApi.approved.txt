@@ -457,6 +457,9 @@ Domovoy.Contracts.Home.SiteLocation
   prop System.String Label { get set }
   prop System.String TimeZoneId { get set }
 
+Domovoy.Contracts.Home.SiteTimeZone
+  method System.TimeZoneInfo Resolve(System.String ianaId)
+
 Domovoy.Contracts.Home.TariffCalculator
   const System.String DefaultZoneName = "default"
   method System.Collections.Generic.IReadOnlyList<Domovoy.Contracts.Home.TariffPoint> Forward(Domovoy.Contracts.Home.TariffSettings settings, System.DateTimeOffset fromLocal, System.Int32 hours)
@@ -608,6 +611,9 @@ Domovoy.Contracts.Messaging.DeviceStateReportV1
   method System.Void Deconstruct(System.Guid& DeviceId, System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Object, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& State)
   prop System.Collections.Generic.IReadOnlyDictionary<System.String, System.Object> State { get set }
   prop System.Guid DeviceId { get set }
+
+Domovoy.Contracts.Messaging.DomovoyJson
+  field System.Text.Json.JsonSerializerOptions Bus
 
 Domovoy.Contracts.Messaging.Envelope
   prop System.DateTimeOffset Time { get set }

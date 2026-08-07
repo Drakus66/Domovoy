@@ -22,6 +22,10 @@ public class CapabilityDevicesController : ProxyController
     [HttpGet]
     public Task<IActionResult> List(CancellationToken ct) => Forward("api/capability-devices", ct);
 
+    /// <summary>Словарь известных архетипов — чтобы интерфейс не держал собственную копию, отстающую от контракта.</summary>
+    [HttpGet("archetypes")]
+    public Task<IActionResult> Archetypes(CancellationToken ct) => Forward("api/capability-devices/archetypes", ct);
+
     /// <summary>Fetch a single capability device by id.</summary>
     [HttpGet("{id}")]
     public Task<IActionResult> Get(string id, CancellationToken ct)

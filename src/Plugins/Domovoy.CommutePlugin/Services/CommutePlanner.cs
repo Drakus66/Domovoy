@@ -16,6 +16,7 @@ using Domovoy.MessageBus;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Domovoy.Contracts.Home;
 
 namespace Domovoy.CommutePlugin.Services;
 
@@ -262,15 +263,7 @@ public sealed class CommutePlanner : BackgroundService
         return p.Label is { Length: > 0 } label ? $"{coords}|{label}" : coords;
     }
 
-    private static TimeZoneInfo ResolveTimeZone(string? ianaId)
-    {
-        if (!string.IsNullOrWhiteSpace(ianaId))
-        {
-            try { return TimeZoneInfo.FindSystemTimeZoneById(ianaId); }
-            catch (Exception) { /* fall through to UTC */ }
-        }
-        return TimeZoneInfo.Utc;
-    }
+    private static TimeZoneInfo ResolveTimeZone(string? ianaId) => SiteTimeZone.Resolve(ianaId);
 
     // --- Bus I/O ---
 

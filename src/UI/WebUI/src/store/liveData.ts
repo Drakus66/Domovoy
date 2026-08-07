@@ -60,6 +60,15 @@ function announceNewDevices(list: CapabilityDevice[]): CapabilityDevice[] {
 /** Зоны — необязательные метаданные группировки, но их читает почти каждая страница устройств. */
 export const zones = createSharedResource<Zone[]>(() => zonesApi.getZones(), 60_000);
 
+/**
+ * Словарь архетипов из контракта. Меняется только с релизом, поэтому опрос редкий; запасной список
+ * в `api/capabilityDevices` работает, пока ответ не пришёл.
+ */
+export const deviceArchetypes = createSharedResource<string[]>(
+  () => capabilityDevicesApi.getArchetypes(),
+  30 * 60_000,
+);
+
 /** Влить пришедшее по SignalR состояние одного устройства в общий реестр. */
 export function applyDeviceState(deviceId: string, state: Record<string, unknown>): void {
   capabilityDevices.set((prev) =>
