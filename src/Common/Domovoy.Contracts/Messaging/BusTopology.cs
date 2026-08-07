@@ -24,6 +24,13 @@ public static class MessageTypes
     /// <summary>A user-facing notification was raised (2M.2 LAN channel + off-LAN push, Epic 2O.4).</summary>
     public const string NotificationRaised = "domovoy.notification.raised.v1";
 
+    /// <summary>
+    /// A service outside the AutomationService asks for a notification to be delivered (Epic 3F discipline
+    /// as a bus ingress, first consumer Epic 3K). Distinct from <see cref="NotificationRaised"/>, which is
+    /// the <i>output</i> of the dispatcher.
+    /// </summary>
+    public const string NotificationRequested = "domovoy.notification.requested.v1";
+
     // Plugin settings channel (Epic 2M tail): the plugin announces its settings schema, the supervisor
     // replies/broadcasts the effective values which the plugin applies live.
     public const string PluginSettingsSchema = "domovoy.plugin.settings.schema.v1";
@@ -57,6 +64,14 @@ public static class BusTopology
     public const string HomeModeChangedKey = "home.mode.changed";
     public const string PresenceReportedKey = "presence.reported";
     public const string NotificationRaisedKey = "notification.raised";
+
+    /// <summary>
+    /// Ingress for out-of-process notification sources (Epic 3F/3K). The AutomationService owns the delivery
+    /// discipline (routing, mute, rate-limit, safety floor) but the dispatcher is in-process only; a separate
+    /// service — the updater, an out-of-process plugin — publishes here instead of shortcutting straight to
+    /// <see cref="NotificationRaisedKey"/>, which would bypass the whole policy.
+    /// </summary>
+    public const string NotificationRequestedKey = "notification.requested";
 
     // Plugin settings: schema is announced on one shared key (the supervisor binds it); effective values are
     // routed per-plugin so a plugin only receives its own settings (key = "plugin.settings.applied.{id}").

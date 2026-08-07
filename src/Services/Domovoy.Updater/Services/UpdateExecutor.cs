@@ -29,6 +29,13 @@ namespace Domovoy.Updater.Services;
 /// </summary>
 public sealed class UpdateExecutor
 {
+    /// <summary>
+    /// The db-gateway route that takes a backup. A constant rather than a literal at the call site because
+    /// <c>UpdaterBackupRouteTests</c> checks it against the routes the DbGateway actually declares: a typo
+    /// here is a 404 swallowed as a warning, i.e. the pre-update safety backup silently not happening.
+    /// </summary>
+    public const string BackupRunPath = "/api/backup/run";
+
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
     private readonly UpdaterOptions _options;
@@ -337,7 +344,7 @@ public sealed class UpdateExecutor
         {
             var http = _httpFactory.CreateClient(nameof(UpdateExecutor));
             var response = await http.PostAsync(
-                $"{_options.DbGatewayBaseUrl.TrimEnd('/')}/api/backups/run?reason=pre-update", null, ct);
+                $"{_options.DbGatewayBaseUrl.TrimEnd('/')}{BackupRunPath}?reason=pre-update", null, ct);
 
             if (!response.IsSuccessStatusCode)
             {

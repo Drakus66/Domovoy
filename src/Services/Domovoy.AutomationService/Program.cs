@@ -53,6 +53,9 @@ internal static class Program
             builder.Services.AddSingleton<Services.Notifications.INotificationChannel, Services.Notifications.WebhookChannel>();
             builder.Services.AddSingleton<Services.Notifications.NotificationRuntimeState>(); // 3F: live notification-discipline settings (RefreshLoop syncs notification_settings)
             builder.Services.AddSingleton<Services.Notifications.NotificationDispatcher>();
+            // 3F: bus ingress so an out-of-process source (the updater, a plugin) gets the same discipline
+            // instead of publishing straight onto the dispatcher's own output key.
+            builder.Services.AddHostedService<Services.Notifications.NotificationIngressService>();
 
             // Typed HttpClient to the DbGateway (rules + device read-model + event-log for replay).
             builder.Services.AddHttpClient<DbGatewayClient>((sp, client) =>

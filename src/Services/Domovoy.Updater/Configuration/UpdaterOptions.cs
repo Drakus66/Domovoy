@@ -28,11 +28,14 @@ public sealed class UpdaterOptions
     public string DockerSocket { get; set; } = "unix:///var/run/docker.sock";
 
     /// <summary>
-    /// Periodic registry polling. Off in local development (see docker-compose.override.yml):
-    /// nobody wants "a new version is available" while they are the one making the versions.
+    /// Default for periodic registry polling, used only until the house saves its own update settings —
+    /// the authoritative value lives in the database and is edited on <c>/settings</c>. Off in local
+    /// development (see docker-compose.override.yml): nobody wants "a new version is available" while
+    /// they are the one making the versions.
     /// </summary>
     public bool CheckEnabled { get; set; } = true;
 
+    /// <summary>Default polling interval; superseded by the saved update settings, same as <see cref="CheckEnabled"/>.</summary>
     public int CheckIntervalHours { get; set; } = 6;
 
     /// <summary>Delay before the first check, so a cold start settles first.</summary>
@@ -56,4 +59,7 @@ public sealed class UpdaterOptions
     public string CurrentRunFile => Path.Combine(StateDirectory, "current-run.json");
     public string TopologyStateFile => Path.Combine(StateDirectory, "topology.json");
     public string HistoryFile => Path.Combine(StateDirectory, "history.json");
+
+    /// <summary>Fingerprint of the version set already announced — on disk so a restart does not re-announce it.</summary>
+    public string AnnouncedFile => Path.Combine(StateDirectory, "announced.json");
 }

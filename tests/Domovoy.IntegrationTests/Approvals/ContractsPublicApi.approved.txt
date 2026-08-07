@@ -578,6 +578,7 @@ Domovoy.Contracts.Messaging.BusTopology
   const System.String EventsExchange = "domovoy.events"
   const System.String HomeModeChangedKey = "home.mode.changed"
   const System.String NotificationRaisedKey = "notification.raised"
+  const System.String NotificationRequestedKey = "notification.requested"
   const System.String PluginSettingsAppliedKeyPrefix = "plugin.settings.applied"
   const System.String PluginSettingsSchemaKey = "plugin.settings.schema"
   const System.String PresenceReportedKey = "presence.reported"
@@ -671,6 +672,7 @@ Domovoy.Contracts.Messaging.MessageTypes
   const System.String DeviceState = "domovoy.device.state.v1"
   const System.String HomeModeChanged = "domovoy.home.mode.v1"
   const System.String NotificationRaised = "domovoy.notification.raised.v1"
+  const System.String NotificationRequested = "domovoy.notification.requested.v1"
   const System.String PluginSettingsApplied = "domovoy.plugin.settings.applied.v1"
   const System.String PluginSettingsSchema = "domovoy.plugin.settings.schema.v1"
   const System.String PresenceReported = "domovoy.presence.reported.v1"
@@ -688,6 +690,22 @@ Domovoy.Contracts.Messaging.NotificationRaisedV1
   prop System.DateTimeOffset RaisedAt { get set }
   prop System.String Body { get set }
   prop System.String Category { get set }
+  prop System.String Severity { get set }
+  prop System.String Title { get set }
+
+Domovoy.Contracts.Messaging.NotificationRequestV1
+  ctor (System.String Title, System.String Body, System.String Severity, System.DateTimeOffset RequestedAt, System.String Category, System.Collections.Generic.IReadOnlyList<Domovoy.Contracts.Notifications.NotificationAction> Actions, System.String DedupKey)
+  method Domovoy.Contracts.Messaging.NotificationRequestV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Messaging.NotificationRequestV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& Title, System.String& Body, System.String& Severity, System.DateTimeOffset& RequestedAt, System.String& Category, System.Collections.Generic.IReadOnlyList`1[[Domovoy.Contracts.Notifications.NotificationAction, Domovoy.Contracts, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]]& Actions, System.String& DedupKey)
+  prop System.Collections.Generic.IReadOnlyList<Domovoy.Contracts.Notifications.NotificationAction> Actions { get set }
+  prop System.DateTimeOffset RequestedAt { get set }
+  prop System.String Body { get set }
+  prop System.String Category { get set }
+  prop System.String DedupKey { get set }
   prop System.String Severity { get set }
   prop System.String Title { get set }
 

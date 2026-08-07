@@ -103,6 +103,28 @@ public sealed record NotificationRaisedV1(
     IReadOnlyList<NotificationAction>? Actions = null);
 
 /// <summary>
+/// A service outside the AutomationService asks for a notification to be delivered (Epic 3F discipline,
+/// first consumer Epic 3K's delivery service). The notification discipline — per-category routing, mute,
+/// rate-limit/dedup and the safety floor — lives in the AutomationService's dispatcher, which is in-process;
+/// a separate process therefore publishes this <b>request</b> and the AutomationService runs it through the
+/// same policy every in-process source goes through. Publishing <see cref="NotificationRaisedV1"/> directly
+/// is <i>not</i> the way in: that is the dispatcher's output and skips the whole policy (it can only ever
+/// reach the in-app banner).
+///
+/// <para><see cref="DedupKey"/> gives a recurring announcement a stable identity for the policy's dedup
+/// window; without it the key is category + title + body.</para>
+/// </summary>
+/// <remarks>Envelope type: <see cref="MessageTypes.NotificationRequested"/>.</remarks>
+public sealed record NotificationRequestV1(
+    string Title,
+    string Body,
+    string Severity,
+    DateTimeOffset RequestedAt,
+    string? Category = null,
+    IReadOnlyList<NotificationAction>? Actions = null,
+    string? DedupKey = null);
+
+/// <summary>
 /// A presence/location report from a geofencing source (roadmap Epic 3D) — chiefly the OwnTracks-compatible
 /// ingest in the ApiGateway, which normalizes OwnTracks <c>location</c>/<c>transition</c> payloads onto this.
 /// The AutomationService's presence layer resolves the resident from <see cref="ResidentKeys"/> (matched

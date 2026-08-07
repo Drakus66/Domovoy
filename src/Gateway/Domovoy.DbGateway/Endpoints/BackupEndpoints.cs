@@ -50,12 +50,14 @@ public static class BackupEndpoints
 
         group.MapGet("/", (BackupService backup) => Results.Ok(backup.List()));
 
-        group.MapPost("/run", (BackupService backup, IMongoDatabase db, CancellationToken ct) =>
+        // ?reason= is recorded in the bundle manifest, so "why does this backup exist" survives in the
+        // artefact itself. The delivery service (Epic 3K) passes `pre-update`; the UI passes nothing.
+        group.MapPost("/run", (string? reason, BackupService backup, IMongoDatabase db, CancellationToken ct) =>
             Guarded(async () =>
             {
                 try
                 {
-                    var result = await backup.CreateBackupAsync("manual", ct);
+                    var result = await backup.CreateBackupAsync(NormalizeReason(reason), ct);
                     await BackupSettingsStore.RecordRunAsync(db, ok: true, file: result.FileName, error: null, ct);
 
                     var settings = await BackupSettingsStore.GetOrDefaultAsync(db, ct);
@@ -127,6 +129,17 @@ public static class BackupEndpoints
                 var file = await backup.SaveUploadAsync(request.Body, ct);
                 return Results.Ok(new { file });
             }));
+    }
+
+    /// <summary>
+    /// A caller-supplied reason ends up verbatim in the manifest, so keep it short and printable;
+    /// absent or blank means the default manual run.
+    /// </summary>
+    private static string NormalizeReason(string? reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason)) return "manual";
+        var trimmed = reason.Trim();
+        return trimmed.Length > 64 ? trimmed[..64] : trimmed;
     }
 
     /// <summary>Translate the backup exceptions into their HTTP shapes (409 busy / 404 / 400).</summary>

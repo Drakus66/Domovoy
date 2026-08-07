@@ -48,9 +48,9 @@
       "dockerfile": "src/Gateway/Domovoy.DbGateway/Dockerfile",
       "context": ".",
       "runtime": "dotnet",
-      "version": "1.0",
-      "bus": { "speaks": 1, "understands": 1 },
-      "provides": { "db-api": { "version": 1, "minCompat": 1 } },
+      "version": "1.1",
+      "bus": { "speaks": 2, "understands": 1 },
+      "provides": { "db-api": { "version": 2, "minCompat": 1 } },
       "requires": {},
       "paths": ["src/Gateway/Domovoy.DbGateway/**"]
     },
@@ -60,8 +60,8 @@
       "dockerfile": "src/Services/Domovoy.AutomationService/Dockerfile",
       "context": ".",
       "runtime": "dotnet",
-      "version": "1.0",
-      "bus": { "speaks": 1, "understands": 1 },
+      "version": "1.1",
+      "bus": { "speaks": 2, "understands": 1 },
       "provides": { "automation-api": { "version": 1, "minCompat": 1 } },
       "requires": { "db-api": 1 },
       "paths": ["src/Services/Domovoy.AutomationService/**"]
@@ -72,8 +72,8 @@
       "dockerfile": "src/Services/Domovoy.UnifiedDeviceService/Dockerfile",
       "context": ".",
       "runtime": "dotnet",
-      "version": "1.0",
-      "bus": { "speaks": 1, "understands": 1 },
+      "version": "1.1",
+      "bus": { "speaks": 2, "understands": 1 },
       "provides": {},
       "requires": {},
       "paths": ["src/Services/Domovoy.UnifiedDeviceService/**"]
@@ -84,8 +84,8 @@
       "dockerfile": "src/Services/Domovoy.Connectivity/Dockerfile",
       "context": ".",
       "runtime": "dotnet",
-      "version": "1.0",
-      "bus": { "speaks": 1, "understands": 1 },
+      "version": "1.1",
+      "bus": { "speaks": 2, "understands": 1 },
       "provides": {},
       "requires": {},
       "paths": ["src/Services/Domovoy.Connectivity/**"]
@@ -96,8 +96,13 @@
       "dockerfile": "src/Services/Domovoy.Updater/Dockerfile",
       "context": ".",
       "runtime": "dotnet",
-      "version": "1.0",
-      "bus": { "speaks": 1, "understands": 1 },
+      "version": "1.1",
+      "_comment": [
+        "understands: 2 — служба публикует запрос уведомления (notification.requested, шина v2)",
+        "и рассчитывает, что его кто-то обработает: без automation-service той же версии",
+        "объявление об обновлении просто не дойдёт до владельца."
+      ],
+      "bus": { "speaks": 2, "understands": 2 },
       "provides": { "updater-api": { "version": 1, "minCompat": 1 } },
       "requires": { "db-api": 1 },
       "paths": ["src/Services/Domovoy.Updater/**"]
@@ -108,8 +113,8 @@
       "dockerfile": "src/Gateway/Domovoy.ApiGateway/Dockerfile",
       "context": ".",
       "runtime": "dotnet",
-      "version": "1.0",
-      "bus": { "speaks": 1, "understands": 1 },
+      "version": "1.1",
+      "bus": { "speaks": 2, "understands": 1 },
       "provides": { "rest-api": { "version": 1, "minCompat": 1 } },
       "requires": { "db-api": 1, "automation-api": 1, "updater-api": 1 },
       "paths": ["src/Gateway/Domovoy.ApiGateway/**"]
@@ -120,8 +125,8 @@
       "dockerfile": "src/Services/Domovoy.PluginSupervisor/Dockerfile",
       "context": ".",
       "runtime": "dotnet",
-      "version": "1.0",
-      "bus": { "speaks": 1, "understands": 1 },
+      "version": "1.1",
+      "bus": { "speaks": 2, "understands": 1 },
       "provides": {},
       "requires": { "rest-api": 1 },
       "paths": ["src/Services/Domovoy.PluginSupervisor/**"]

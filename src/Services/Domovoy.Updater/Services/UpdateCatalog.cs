@@ -12,6 +12,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Domovoy.Updater.Services;
 
+/// <summary>
+/// How this house polls the registry (roadmap Epic 3K) — the operator's live choices, not the container's
+/// environment. Read fresh on every cycle so a change on <c>/settings</c> does not wait for a restart.
+/// </summary>
+public sealed record PollingSettings(string Channel, bool CheckEnabled, int CheckIntervalHours);
+
 /// <summary>What is installed and what the channel offers — everything the resolver needs.</summary>
 public sealed record UpdateCatalogSnapshot(
     string Channel,
@@ -68,21 +74,63 @@ public sealed class UpdateCatalog
     /// <c>.env</c> is the bootstrap fallback for when the gateway is down (and the value the manual
     /// <c>docker compose up -d</c> would use, which is why applying an update writes it back there).
     /// </summary>
-    public async Task<string> GetChannelAsync(CancellationToken ct)
+    public async Task<string> GetChannelAsync(CancellationToken ct) =>
+        (await GetPollingSettingsAsync(ct)).Channel;
+
+    /// <summary>
+    /// Everything the periodic check needs, from the same authoritative place the channel comes from:
+    /// the database. The environment (<see cref="UpdaterOptions"/>) is only the default for a house that
+    /// never saved settings — otherwise the toggle and the interval on <c>/settings</c> would be decoration.
+    /// </summary>
+    public async Task<PollingSettings> GetPollingSettingsAsync(CancellationToken ct)
+    {
+        var settings = await TryReadSettingsAsync(ct);
+
+        return new PollingSettings(
+            UpdateChannels.IsKnown(settings?.Channel) ? settings!.Channel! : await ChannelFromEnvAsync(ct),
+            settings?.CheckEnabled ?? _options.CheckEnabled,
+            Math.Clamp(settings?.CheckIntervalHours ?? _options.CheckIntervalHours, 1, 24 * 7));
+    }
+
+    /// <summary>
+    /// Stamps the outcome of a background check so the UI can show when the house last looked and how it
+    /// went. Best-effort: a failure to record must never turn into a failed check.
+    /// </summary>
+    public async Task RecordCheckResultAsync(string result, CancellationToken ct)
     {
         try
         {
             var http = _httpFactory.CreateClient(nameof(UpdateCatalog));
-            var settings = await http.GetFromJsonAsync<UpdateSettingsDto>(
-                $"{_options.DbGatewayBaseUrl.TrimEnd('/')}/api/update-settings", ct);
+            var response = await http.PostAsync(
+                $"{_options.DbGatewayBaseUrl.TrimEnd('/')}/api/update-settings/check-result?result={result}",
+                null, ct);
 
-            if (UpdateChannels.IsKnown(settings?.Channel)) return settings!.Channel!;
+            if (!response.IsSuccessStatusCode)
+                _logger.LogDebug("Отметка о проверке не записана: {Status}", response.StatusCode);
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Канал не получен от db-gateway — используем .env");
+            _logger.LogDebug(ex, "Отметка о проверке не записана");
         }
+    }
 
+    private async Task<UpdateSettingsDto?> TryReadSettingsAsync(CancellationToken ct)
+    {
+        try
+        {
+            var http = _httpFactory.CreateClient(nameof(UpdateCatalog));
+            return await http.GetFromJsonAsync<UpdateSettingsDto>(
+                $"{_options.DbGatewayBaseUrl.TrimEnd('/')}/api/update-settings", ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Настройки обновлений не получены от db-gateway — используем .env и окружение");
+            return null;
+        }
+    }
+
+    private async Task<string> ChannelFromEnvAsync(CancellationToken ct)
+    {
         try
         {
             if (File.Exists(_options.EnvFile))
@@ -129,5 +177,11 @@ public sealed class UpdateCatalog
     {
         [JsonPropertyName("channel")]
         public string? Channel { get; init; }
+
+        [JsonPropertyName("checkEnabled")]
+        public bool? CheckEnabled { get; init; }
+
+        [JsonPropertyName("checkIntervalHours")]
+        public int? CheckIntervalHours { get; init; }
     }
 }

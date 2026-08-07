@@ -2,14 +2,69 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using Domovoy.DbGateway.Endpoints;
 using Domovoy.Updater.Model;
 using Domovoy.Updater.Services;
 
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using Xunit;
 
 namespace Domovoy.IntegrationTests;
+
+/// <summary>
+/// The pre-update safety backup only exists if the delivery service and the DbGateway agree on the route
+/// (roadmap Epic 3K). They shipped disagreeing once — <c>/api/backups/run</c> against a gateway that maps
+/// <c>/api/backup/run</c> — and nothing failed loudly: the 404 was swallowed as a warning and the update
+/// went ahead with no backup. A defect of that class must not be able to come back silently.
+/// </summary>
+public class UpdaterBackupRouteTests
+{
+    [Fact]
+    public void BackupRequest_TargetsARouteTheGatewayDeclares()
+    {
+        Assert.Contains(UpdateExecutor.BackupRunPath, DeclaredBackupRoutes());
+    }
+
+    [Fact]
+    public void BackupRun_AcceptsTheReasonRecordedInTheManifest()
+    {
+        // Отправляемый службой `?reason=pre-update` должен именно приниматься, а не молча теряться:
+        // причина уезжает в манифест бандла и отвечает на вопрос «откуда взялся этот бэкап».
+        var endpoint = BackupEndpoints()
+            .Single(e => e.RoutePattern.RawText == UpdateExecutor.BackupRunPath);
+
+        var handler = endpoint.Metadata.GetMetadata<System.Reflection.MethodInfo>();
+
+        Assert.NotNull(handler);
+        Assert.Contains(handler!.GetParameters(), p => p.Name == "reason");
+    }
+
+    private static IReadOnlyList<string?> DeclaredBackupRoutes() =>
+        BackupEndpoints().Select(e => e.RoutePattern.RawText).ToList();
+
+    private static IReadOnlyList<RouteEndpoint> BackupEndpoints()
+    {
+        var builder = WebApplication.CreateBuilder();
+
+        // Handlers are never invoked here — only their routes and signatures are read. The registrations
+        // exist because minimal-API metadata inference treats an unregistered parameter as a request body.
+        builder.Services.AddSingleton<MongoDB.Driver.IMongoDatabase>(_ => null!);
+        builder.Services.AddSingleton<Domovoy.DbGateway.Services.BackupService>(_ => null!);
+        builder.Services.AddSingleton<Domovoy.MessageBus.IMessageBus>(_ => null!);
+
+        var app = builder.Build();
+        app.MapBackupEndpoints();
+
+        return ((IEndpointRouteBuilder)app).DataSources
+            .SelectMany(d => d.Endpoints)
+            .OfType<RouteEndpoint>()
+            .ToList();
+    }
+}
 
 /// <summary>Version ordering used to answer "which of these builds is newer" (roadmap Epic 3K).</summary>
 public class SemVerComparerTests
