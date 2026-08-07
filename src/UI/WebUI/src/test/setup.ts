@@ -11,6 +11,7 @@ import i18n, { type ResourceLanguage } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import { baseOptions } from '../i18n/config';
 import { DEFAULT_LANGUAGE } from '../i18n/languages';
+import { resetSharedResources } from '../store/sharedResource';
 import { useAuthStore } from '../store/authStore';
 
 // Tests can't use http-backend (no static server under jsdom), so init i18next with
@@ -119,6 +120,9 @@ beforeEach(() => {
 afterEach(() => {
   server.resetHandlers();
   cleanup();
+  // Общие ресурсы (store/sharedResource) живут в модуле и переживают отдельный тест: без сброса
+  // следующий тест увидел бы дом, оставшийся от предыдущего.
+  resetSharedResources();
 });
 
 // Close server after all tests

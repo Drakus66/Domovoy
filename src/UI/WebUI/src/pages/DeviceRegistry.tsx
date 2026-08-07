@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Alert, Box, Button, Chip, Container, Dialog, DialogActions, DialogContent,
@@ -17,15 +17,11 @@ import DevicesIcon from '@mui/icons-material/Devices';
 import {
   capabilityDevicesApi, CapabilityDevice, effectiveArchetype, isServiceDevice, isUnassignedZone,
 } from '../api/capabilityDevices';
-import { zonesApi, Zone } from '../api/zones';
 import DeviceDetailDrawer from '../components/devices/DeviceDetailDrawer';
-import type { CommandFn } from '../components/devices/CapabilityControls';
 import { deviceCategory, capabilityIconForCategory, CATEGORY_ACCENT } from '../components/devices/deviceVisuals';
-import { deviceLabel, proposeZoneName } from '../components/devices/deviceNaming';
-import { useDeviceRename } from '../components/devices/useDeviceRename';
+import { deviceLabel } from '../components/devices/deviceNaming';
+import { useDeviceCollection } from '../components/devices/useDeviceCollection';
 import { useUIStore } from '../store/uiStore';
-
-const REFRESH_INTERVAL_MS = 20_000;
 
 /**
  * The device registry: the full inventory as a dense table — every device the house knows,
@@ -35,10 +31,12 @@ const REFRESH_INTERVAL_MS = 20_000;
  */
 export default function DeviceRegistry() {
   const { t, i18n } = useTranslation('devices');
-  const [devices, setDevices] = useState<CapabilityDevice[]>([]);
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Список, зоны, живое состояние и действия — общие с главной страницей (см. useDeviceCollection):
+  // раньше здесь лежала своя копия того же самого, и реестр отставал от главной до двадцати секунд.
+  const {
+    devices, zones, loading, error, setError, refresh,
+    zoneName, handleCommand, handleAssignZone, handleSetAlias, handleSetArchetype, renameDialog,
+  } = useDeviceCollection();
   const [search, setSearch] = useState('');
   const [adapter, setAdapter] = useState<string>('all');
   const [onlineOnly, setOnlineOnly] = useState(false);
@@ -46,35 +44,6 @@ export default function DeviceRegistry() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CapabilityDevice | null>(null);
   const [deleting, setDeleting] = useState(false);
-
-  const fetchDevices = useCallback(async () => {
-    setError(null);
-    try {
-      setDevices(await capabilityDevicesApi.getDevices());
-    } catch {
-      setError(t('errors.loadDevices'));
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
-
-  useEffect(() => {
-    fetchDevices();
-    zonesApi.getZones().then(setZones).catch(() => {
-      // Zones are optional grouping metadata; a failure just falls back to "Unassigned".
-    });
-    const interval = setInterval(fetchDevices, REFRESH_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [fetchDevices]);
-
-  const unassignedLabel = t('unassigned');
-  const zoneName = useCallback(
-    (zoneId?: string | null): string => {
-      if (isUnassignedZone(zoneId)) return unassignedLabel;
-      return zones.find((z) => z.id === zoneId)?.name ?? unassignedLabel;
-    },
-    [zones, unassignedLabel],
-  );
 
   // Service devices hide first, so the adapter chip row only offers sources that are visible.
   const visible = useMemo(
@@ -99,39 +68,6 @@ export default function DeviceRegistry() {
       .sort((a, b) => deviceLabel(a).localeCompare(deviceLabel(b)));
   }, [visible, search, adapter, onlineOnly, zoneName]);
 
-  const handleCommand = useCallback<CommandFn>((deviceId, set) => {
-    setDevices((prev) =>
-      prev.map((d) => (d.id === deviceId ? { ...d, state: { ...d.state, ...set } } : d)));
-    capabilityDevicesApi.sendCommand(deviceId, set).catch(() => setError(t('errors.command')));
-  }, [t]);
-
-  // Rename-on-zone flow (Epic 3G): reflect applied aliases in local state.
-  const { dialog: renameDialog, requestRename } = useDeviceRename((updates) => {
-    setDevices((prev) => prev.map((d) => (d.id in updates ? { ...d, alias: updates[d.id] } : d)));
-  });
-
-  const handleAssignZone = useCallback((deviceId: string, zoneId: string | null) => {
-    const normalized = zoneId ?? '';
-    const device = devices.find((d) => d.id === deviceId);
-    setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, zoneId: normalized } : d)));
-    capabilityDevicesApi.assignZone(deviceId, zoneId).catch(() => setError(t('errors.assignZone')));
-    if (device) {
-      const newZoneName = zoneId ? (zones.find((z) => z.id === zoneId)?.name ?? null) : null;
-      const current = deviceLabel(device);
-      requestRename([{ device, current, proposed: proposeZoneName(current, newZoneName, zones.map((z) => z.name)) }]);
-    }
-  }, [devices, zones, requestRename, t]);
-
-  const handleSetAlias = useCallback((deviceId: string, alias: string | null) => {
-    setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, alias } : d)));
-    capabilityDevicesApi.setAlias(deviceId, alias).catch(() => setError(t('errors.setAlias')));
-  }, [t]);
-
-  const handleSetArchetype = useCallback((deviceId: string, archetype: string | null) => {
-    setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, archetype } : d)));
-    capabilityDevicesApi.setArchetype(deviceId, archetype).catch(() => setError(t('errors.setArchetype')));
-  }, [t]);
-
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -139,14 +75,14 @@ export default function DeviceRegistry() {
       await capabilityDevicesApi.deleteDevice(deleteTarget.id);
       useUIStore.getState().showNotification('success', t('registry.deleted', { name: deviceLabel(deleteTarget) }));
       setDeleteTarget(null);
-      await fetchDevices();
+      await refresh();
     } catch {
       setError(t('registry.deleteError'));
       setDeleteTarget(null);
     } finally {
       setDeleting(false);
     }
-  }, [deleteTarget, fetchDevices, t]);
+  }, [deleteTarget, refresh, t, setError]);
 
   const selected = useMemo(() => devices.find((d) => d.id === selectedId) ?? null, [devices, selectedId]);
 
@@ -162,7 +98,7 @@ export default function DeviceRegistry() {
           </Box>
           <Tooltip title={t('actions.refresh')}>
             <span>
-              <IconButton onClick={fetchDevices} disabled={loading}><RefreshIcon /></IconButton>
+              <IconButton onClick={refresh} disabled={loading}><RefreshIcon /></IconButton>
             </span>
           </Tooltip>
         </Stack>

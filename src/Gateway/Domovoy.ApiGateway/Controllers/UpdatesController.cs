@@ -21,33 +21,30 @@ namespace Domovoy.ApiGateway.Controllers;
 [ApiController]
 [Route("api/updates")]
 [Authorize(Policy = WellKnownPermissions.SystemAdmin)]
-public class UpdatesController : ControllerBase
+public class UpdatesController : ProxyController
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-
-    public UpdatesController(IHttpClientFactory httpClientFactory)
-        => _httpClientFactory = httpClientFactory;
+    public UpdatesController(IHttpClientFactory httpClientFactory) : base(httpClientFactory) { }
 
     // ---- настройки (db-gateway) ----
 
     [HttpGet("settings")]
     public Task<IActionResult> GetSettings(CancellationToken ct)
-        => Forward("db-gateway", HttpMethod.Get, "api/update-settings", ct);
+        => ForwardTo("db-gateway", "api/update-settings", ct);
 
     [HttpPut("settings")]
     public Task<IActionResult> PutSettings(CancellationToken ct)
-        => Forward("db-gateway", HttpMethod.Put, "api/update-settings", ct, forwardBody: true);
+        => ForwardTo("db-gateway", "api/update-settings", ct);
 
     // ---- состав и планирование (служба обновлений) ----
 
     /// <summary>Installed versus available, per component — the table the settings page renders.</summary>
     [HttpGet("components")]
     public Task<IActionResult> Components(CancellationToken ct)
-        => Forward("updater", HttpMethod.Get, "api/components", ct);
+        => ForwardTo("updater", "api/components", ct);
 
     [HttpGet("check")]
     public Task<IActionResult> Check(CancellationToken ct)
-        => Forward("updater", HttpMethod.Get, "api/updates/check", ct);
+        => ForwardTo("updater", "api/updates/check", ct);
 
     /// <summary>
     /// What updating these components would actually do — including what gets pulled in and why.
@@ -56,11 +53,11 @@ public class UpdatesController : ControllerBase
     /// </summary>
     [HttpPost("plan")]
     public Task<IActionResult> Plan(CancellationToken ct)
-        => Forward("updater", HttpMethod.Post, "api/updates/plan", ct, forwardBody: true);
+        => ForwardTo("updater", "api/updates/plan", ct);
 
     [HttpPost("apply")]
     public Task<IActionResult> Apply(CancellationToken ct)
-        => Forward("updater", HttpMethod.Post, "api/updates/apply", ct, forwardBody: true);
+        => ForwardTo("updater", "api/updates/apply", ct);
 
     /// <summary>
     /// Progress of the current run. Polled rather than pushed: an update recreates this very gateway
@@ -69,51 +66,13 @@ public class UpdatesController : ControllerBase
     /// </summary>
     [HttpGet("status")]
     public Task<IActionResult> Status(CancellationToken ct)
-        => Forward("updater", HttpMethod.Get, "api/updates/status", ct);
+        => ForwardTo("updater", "api/updates/status", ct);
 
     [HttpGet("history")]
     public Task<IActionResult> History(CancellationToken ct)
-        => Forward("updater", HttpMethod.Get, "api/updates/history", ct);
+        => ForwardTo("updater", "api/updates/history", ct);
 
     [HttpPost("rollback")]
     public Task<IActionResult> Rollback(CancellationToken ct)
-        => Forward("updater", HttpMethod.Post, "api/updates/rollback", ct);
-
-    private async Task<IActionResult> Forward(
-        string upstream, HttpMethod method, string relativePath, CancellationToken ct, bool forwardBody = false)
-    {
-        var client = _httpClientFactory.CreateClient(upstream);
-        using var request = new HttpRequestMessage(method, relativePath);
-
-        if (forwardBody)
-        {
-            request.Content = new StreamContent(Request.Body);
-            if (!string.IsNullOrEmpty(Request.ContentType))
-                request.Content.Headers.TryAddWithoutValidation("Content-Type", Request.ContentType);
-        }
-
-        try
-        {
-            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-            var body = await response.Content.ReadAsStringAsync(ct);
-
-            return new ContentResult
-            {
-                StatusCode = (int)response.StatusCode,
-                Content = string.IsNullOrEmpty(body) ? null : body,
-                ContentType = response.Content.Headers.ContentType?.ToString() ?? "application/json",
-            };
-        }
-        catch (HttpRequestException)
-        {
-            // Служба обновлений опциональна: стек, поднятый без неё, должен вести себя внятно,
-            // а не отдавать 500 на страницу настроек.
-            return new ContentResult
-            {
-                StatusCode = StatusCodes.Status503ServiceUnavailable,
-                Content = """{"error":"Служба обновлений недоступна"}""",
-                ContentType = "application/json",
-            };
-        }
-    }
+        => ForwardTo("updater", "api/updates/rollback", ct);
 }

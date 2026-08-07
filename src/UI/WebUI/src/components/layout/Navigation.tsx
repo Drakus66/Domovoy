@@ -2,14 +2,14 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   AppBar, Toolbar, Typography, Box, IconButton, Drawer, List, ListItem,
   ListItemButton, ListItemIcon, ListItemText, Collapse, Badge, useMediaQuery, useTheme,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
-import { proposalsApi } from '../../api/proposals';
+import { pendingProposals as pendingProposalsResource } from '../../store/liveData';
 import MenuIcon from '@mui/icons-material/Menu';
 import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import SpaceDashboardRoundedIcon from '@mui/icons-material/SpaceDashboardRounded';
@@ -90,25 +90,12 @@ function Brand() {
   );
 }
 
-// Epic 3I: the always-visible signal that the intelligence layer has queued something — a count on the
-// Proposals nav item. Polled (not pushed) every minute; fails silently so a gateway blip never breaks the nav.
-function usePendingProposalsCount(): number {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    const load = () =>
-      proposalsApi.list('Proposed').then((ps) => { if (!cancelled) setCount(ps.length); }).catch(() => undefined);
-    load();
-    const id = setInterval(load, 60000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, []);
-  return count;
-}
-
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { t } = useTranslation('nav');
-  const pendingProposals = usePendingProposalsCount();
+  // Epic 3I: постоянно видимый признак, что слой интеллекта что-то поставил в очередь.
+  // Значение из общего слоя — тот же список читают очаг в шапке, дайджест и рельса.
+  const pending = pendingProposalsResource.use().data?.length ?? 0;
   const activeGroup = navGroups.find((g) => g.items.some((i) => i.path === location.pathname))?.key;
   // Start with the active section open; the user can toggle any section freely afterwards.
   const [open, setOpen] = useState<Record<string, boolean>>(
@@ -158,8 +145,8 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
                         }}
                       >
                         <ListItemIcon sx={{ minWidth: 34, color: 'text.secondary' }}>
-                          {item.key === 'proposals' && pendingProposals > 0 ? (
-                            <Badge badgeContent={pendingProposals} color="primary">{item.icon}</Badge>
+                          {item.key === 'proposals' && pending > 0 ? (
+                            <Badge badgeContent={pending} color="primary">{item.icon}</Badge>
                           ) : item.icon}
                         </ListItemIcon>
                         <ListItemText

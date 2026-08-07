@@ -22,38 +22,37 @@ namespace Domovoy.ApiGateway.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/scenes")]
-public class ScenesController : ControllerBase
+public class ScenesController : ProxyController
 {
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMessageBus _messageBus;
     private readonly ILogger<ScenesController> _logger;
 
     public ScenesController(IHttpClientFactory httpClientFactory, IMessageBus messageBus, ILogger<ScenesController> logger)
+        : base(httpClientFactory)
     {
-        _httpClientFactory = httpClientFactory;
         _messageBus = messageBus;
         _logger = logger;
     }
 
     [HttpGet]
     public Task<IActionResult> List(CancellationToken ct)
-        => Forward(HttpMethod.Get, "api/scenes", ct);
+        => Forward("api/scenes", ct);
 
     [HttpGet("{id}")]
     public Task<IActionResult> Get(string id, CancellationToken ct)
-        => Forward(HttpMethod.Get, $"api/scenes/{Uri.EscapeDataString(id)}", ct);
+        => Forward($"api/scenes/{Uri.EscapeDataString(id)}", ct);
 
     [HttpPost]
     public Task<IActionResult> Create(CancellationToken ct)
-        => Forward(HttpMethod.Post, "api/scenes", ct);
+        => Forward("api/scenes", ct);
 
     [HttpPut("{id}")]
     public Task<IActionResult> Update(string id, CancellationToken ct)
-        => Forward(HttpMethod.Put, $"api/scenes/{Uri.EscapeDataString(id)}", ct);
+        => Forward($"api/scenes/{Uri.EscapeDataString(id)}", ct);
 
     [HttpDelete("{id}")]
     public Task<IActionResult> Delete(string id, CancellationToken ct)
-        => Forward(HttpMethod.Delete, $"api/scenes/{Uri.EscapeDataString(id)}", ct);
+        => Forward($"api/scenes/{Uri.EscapeDataString(id)}", ct);
 
     /// <summary>
     /// Activate a scene: publish one <see cref="DeviceCommandV1"/> per target device with the captured
@@ -63,7 +62,7 @@ public class ScenesController : ControllerBase
     [HttpPost("{id}/activate")]
     public async Task<IActionResult> Activate(string id, CancellationToken ct)
     {
-        var client = _httpClientFactory.CreateClient("db-gateway");
+        var client = HttpClientFactory.CreateClient("db-gateway");
         using var upstream = await client.GetAsync($"api/scenes/{Uri.EscapeDataString(id)}", ct);
         if (upstream.StatusCode == HttpStatusCode.NotFound) return NotFound();
         if (!upstream.IsSuccessStatusCode) return StatusCode((int)upstream.StatusCode);
@@ -91,32 +90,6 @@ public class ScenesController : ControllerBase
 
         _logger.LogInformation("Scene {SceneId} activated → {Devices} device command(s)", id, devices);
         return Accepted(new { sceneId = id, devices });
-    }
-
-    private async Task<IActionResult> Forward(HttpMethod method, string path, CancellationToken ct)
-    {
-        var relativePath = Request.QueryString.HasValue ? $"{path}{Request.QueryString.Value}" : path;
-        var client = _httpClientFactory.CreateClient("db-gateway");
-        using var request = new HttpRequestMessage(method, relativePath);
-
-        if (method == HttpMethod.Post || method == HttpMethod.Put)
-        {
-            Request.EnableBuffering();
-            Request.Body.Position = 0;
-            using var reader = new StreamReader(Request.Body, leaveOpen: true);
-            var body = await reader.ReadToEndAsync(ct);
-            request.Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
-        }
-
-        using var upstream = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        var responseBody = await upstream.Content.ReadAsStringAsync(ct);
-
-        return new ContentResult
-        {
-            StatusCode = (int)upstream.StatusCode,
-            Content = string.IsNullOrEmpty(responseBody) ? null : responseBody,
-            ContentType = upstream.Content.Headers.ContentType?.ToString() ?? "application/json",
-        };
     }
 
     private static object? Normalize(JsonElement value) => value.ValueKind switch

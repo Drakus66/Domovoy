@@ -6,9 +6,8 @@ import { useEffect, useState } from 'react';
 import { Typography, Link as MuiLink } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { modeApi } from '../../api/mode';
 import { activityApi } from '../../api/activity';
-import { proposalsApi } from '../../api/proposals';
+import { homeMode, pendingProposals } from '../../store/liveData';
 
 const REFRESH_INTERVAL_MS = 60_000;
 
@@ -17,25 +16,20 @@ const REFRESH_INTERVAL_MS = 60_000;
 // a failed fetch just drops its part instead of breaking the header.
 export default function DomovoyDigest() {
   const { t } = useTranslation('common');
-  const [mode, setMode] = useState<string | null>(null);
+  // Режим и очередь предложений — из общего слоя: эту же пару читают ещё три компонента на экране.
+  const mode = homeMode.use().data?.mode ?? null;
+  const pending = pendingProposals.use().data?.length ?? null;
   const [actionsToday, setActionsToday] = useState<number | null>(null);
-  const [pending, setPending] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // Счётчик, а не выгрузка: строке нужно одно число, и тянуть ради него сотни записей раз в минуту
+    // — это трафик и разбор JSON на пустом месте. Запрос свой: границы окна тут собственные.
     const load = () => {
-      modeApi.getMode()
-        .then((s) => { if (!cancelled) setMode(s.mode); })
-        .catch(() => undefined);
       const midnight = new Date();
       midnight.setHours(0, 0, 0, 0);
-      // Счётчик, а не выгрузка: строке нужно одно число, и тянуть ради него 500 записей раз в минуту
-      // — это трафик и разбор JSON на пустом месте.
       activityApi.count({ source: 'automation', from: midnight.toISOString() })
         .then((count) => { if (!cancelled) setActionsToday(count); })
-        .catch(() => undefined);
-      proposalsApi.list('Proposed')
-        .then((list) => { if (!cancelled) setPending(list.length); })
         .catch(() => undefined);
     };
     load();
