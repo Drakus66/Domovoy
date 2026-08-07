@@ -81,7 +81,9 @@ internal static class Program
 
             if (jwtEnabled)
             {
-                var secretKey = jwtSettings["SecretKey"] ?? "DefaultDevelopmentSecretKeyThatShouldBeReplacedInProduction";
+                // Падает на старте, а не на первом входе: неверная настройка безопасности должна быть
+                // видна сразу и в журнале, а не проявляться подписью общеизвестным секретом.
+                var secretKey = Services.JwtTokenService.RequireSecret(builder.Configuration);
                 var issuer = jwtSettings["Issuer"] ?? "domovoy";
                 var audience = jwtSettings["Audience"] ?? "domovoy-clients";
 
@@ -249,8 +251,13 @@ internal static class Program
             app.UseCors("CorsPolicy");
 
             app.UseMiddleware<Middleware.RequestLoggingMiddleware>();
-            app.UseMiddleware<Middleware.RequestCounterMiddleware>();
-            app.UseMiddleware<Middleware.RouteCounterMiddleware>();
+
+            // Prometheus по шаблону маршрута (как в DbGateway). Прежняя пара самописных middleware
+            // клеила метки из СЫРОГО пути — с GUID устройств и именами файлов бэкапов внутри, то есть
+            // выдавала новый временной ряд на каждое устройство и каждый бэкап. Это бомба кардинальности:
+            // ряды в Prometheus не истекают, память растёт молча. Заодно снято дублирование смысла:
+            // счётчик, гистограмма и «активные запросы» были расписаны дважды в двух middleware.
+            app.UseHttpMetrics();
 
             // Start Prometheus
             var metricServer = app.Services.GetRequiredService<MetricServer>();

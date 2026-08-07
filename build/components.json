@@ -58,7 +58,7 @@
       "runtime": "dotnet",
       "version": "1.1",
       "bus": { "speaks": 2, "understands": 1 },
-      "provides": { "db-api": { "version": 2, "minCompat": 1 } },
+      "provides": { "db-api": { "version": 3, "minCompat": 1 } },
       "requires": {},
       "paths": ["src/Gateway/Domovoy.DbGateway/**"]
     },
@@ -123,8 +123,8 @@
       "runtime": "dotnet",
       "version": "1.1",
       "bus": { "speaks": 2, "understands": 1 },
-      "provides": { "rest-api": { "version": 1, "minCompat": 1 } },
-      "requires": { "db-api": 1, "automation-api": 1, "updater-api": 1 },
+      "provides": { "rest-api": { "version": 2, "minCompat": 1 } },
+      "requires": { "db-api": 3, "automation-api": 1, "updater-api": 1 },
       "paths": ["src/Gateway/Domovoy.ApiGateway/**"]
     },
     {
@@ -151,10 +151,10 @@
       "dockerfile": "Dockerfile",
       "context": "src/UI/WebUI",
       "runtime": "node",
-      "version": "1.0",
+      "version": "1.1",
       "bus": null,
       "provides": {},
-      "requires": { "rest-api": 1 },
+      "requires": { "rest-api": 2 },
       "paths": ["src/UI/WebUI/**"]
     }
   ]

@@ -29,8 +29,10 @@ export default function DomovoyDigest() {
         .catch(() => undefined);
       const midnight = new Date();
       midnight.setHours(0, 0, 0, 0);
-      activityApi.get({ source: 'automation', from: midnight.toISOString(), limit: 500 })
-        .then((entries) => { if (!cancelled) setActionsToday(entries.length); })
+      // Счётчик, а не выгрузка: строке нужно одно число, и тянуть ради него 500 записей раз в минуту
+      // — это трафик и разбор JSON на пустом месте.
+      activityApi.count({ source: 'automation', from: midnight.toISOString() })
+        .then((count) => { if (!cancelled) setActionsToday(count); })
         .catch(() => undefined);
       proposalsApi.list('Proposed')
         .then((list) => { if (!cancelled) setPending(list.length); })

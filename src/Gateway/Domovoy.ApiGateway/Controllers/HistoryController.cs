@@ -29,6 +29,10 @@ public class HistoryController : ControllerBase
     [HttpGet("api/activity")]
     public Task<IActionResult> Activity(CancellationToken ct) => Forward("api/activity", ct);
 
+    /// <summary>How many activity rows match, without shipping them — for headline counters.</summary>
+    [HttpGet("api/activity/count")]
+    public Task<IActionResult> ActivityCount(CancellationToken ct) => Forward("api/activity/count", ct);
+
     /// <summary>Numeric telemetry samples over a period (supports <c>?format=csv</c> export).</summary>
     [HttpGet("api/telemetry")]
     public Task<IActionResult> Telemetry(CancellationToken ct) => Forward("api/telemetry", ct);

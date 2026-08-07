@@ -123,12 +123,13 @@ services:
       - AUTOMATIONSERVICE__BASEURL=http://automation-service:8080
       - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
       # Local authentication (mobile-app / remote-access track). ON = the API is gated by login + permissions;
-      # this is the posture required before any external exposure (IPv6-direct / SSH-tunnel). ⚠️ Override the
-      # secret in .env (JWT_SECRET_KEY) with a long random value — e.g. `openssl rand -base64 48` — before
-      # exposing the system; the default below is a public placeholder. Set JWTSETTINGS__ENABLED=false to run
-      # the stack open on a trusted LAN.
+      # this is the posture required before any external exposure (IPv6-direct / SSH-tunnel).
+      # ⚠️ JWT_SECRET_KEY is REQUIRED in .env — a long random value, e.g. `openssl rand -base64 48`.
+      # There is no default: the gateway refuses to start without it (a secret shipped in the repository
+      # is a secret everyone has, i.e. authentication that only looks enabled). Set
+      # JWTSETTINGS__ENABLED=false to run the stack open on a trusted LAN.
       - JWTSETTINGS__ENABLED=true
-      - JWTSETTINGS__SECRETKEY=${JWT_SECRET_KEY:-YourSuperSecretKeyForDomovoyShouldBeVeryLongAndComplex}
+      - JWTSETTINGS__SECRETKEY=${JWT_SECRET_KEY:-}
       # Restrict CORS once exposed (array via indexed env, e.g. CORS__ALLOWEDORIGINS__0=https://home.example).
       # Same-origin (the UI served by nginx) needs no entry; the app / external hostnames do. Empty = dev-open.
       # - CORS__ALLOWEDORIGINS__0=https://home.example.com

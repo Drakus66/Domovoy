@@ -14,10 +14,12 @@ using MongoDB.Driver;
 namespace Domovoy.DbGateway.Endpoints;
 
 /// <summary>
-/// Installation settings (roadmap Epic 2K). Today this owns the single site-location document
-/// (<c>site_location</c>): the coordinates the AutomationService reads for sunrise/sunset geometry, plus a
-/// display label and an IANA timezone. The location is edited from the WebUI Settings page and made
-/// runtime-mutable so changing it needs no redeploy (it used to live only in appsettings).
+/// Installation settings — the runtime-mutable documents behind the WebUI Settings page, so changing any of
+/// them needs no redeploy (they used to live in appsettings). Seven domains have accumulated here:
+/// <b>location</b> (Epic 2K, <c>site_location</c> — the coordinates the AutomationService reads for
+/// sunrise/sunset geometry, plus a display label and an IANA timezone), <b>calendar</b> (2L),
+/// <b>tariff</b> (3C), <b>load-management</b> (3C-LM), <b>ml</b> (3I), <b>presence</b> (3D) and
+/// <b>notifications</b> (3F).
 ///
 /// Offline-first: the timezone is derived from the coordinates locally (GeoTimeZone), so it is correct with
 /// no network. The geocode endpoint is the only networked part and is optional — it turns

@@ -79,11 +79,13 @@ export default function Devices() {
       knownIdsRef.current = new Set(list.map((d) => d.id));
       setDevices(list);
     } catch {
-      setError(t('errors.loadDevices'));
+      // i18n.t, а не хук t: иначе fetchDevices зависит от t, а от fetchDevices зависит эффект
+      // SignalR — и смена языка рвала и переустанавливала хаб устройств.
+      setError(i18n.t('devices:errors.loadDevices'));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, []);
 
   const classify = useCallback(async () => {
     setClassifying(true); setClassifyInfo(null); setDisagreements(null);

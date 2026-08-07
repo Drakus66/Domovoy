@@ -581,13 +581,14 @@ public sealed class EmulatorEngine : IHostedService
 
     private async Task SimulateLoopAsync(CancellationToken ct)
     {
-        var rng = new Random();
         var tick = 0;
         try
         {
             while (!ct.IsCancellationRequested)
             {
-                await Task.Delay(TimeSpan.FromSeconds(15), ct);
+                // TickSeconds, а не литерал: физика (тепло, CO2, интеграл kWh) считает шаг именно по
+                // константе, и разъехавшийся здесь литерал молча дал бы кривые киловатт-часы.
+                await Task.Delay(TimeSpan.FromSeconds(TickSeconds), ct);
                 tick++;
 
                 // Liveness heartbeat (~every 30s): re-assert availability=online for every registered
@@ -607,7 +608,7 @@ public sealed class EmulatorEngine : IHostedService
                     var changed = false;
                     foreach (var cap in device.Capabilities.Where(IsReadableNumber))
                     {
-                        device.SetValue(cap.Id, RandomInRange(cap, rng));
+                        device.SetValue(cap.Id, RandomInRange(cap, _rng));
                         changed = true;
                     }
                     if (changed)

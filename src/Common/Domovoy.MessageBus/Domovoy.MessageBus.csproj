@@ -16,4 +16,10 @@
       <ProjectReference Include="..\Domovoy.Contracts\Domovoy.Contracts.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <!-- Коэрсия настроек плагина (PluginSettingsService.Coerce) проверяется напрямую: её поведение
+           зависит от типа T, и через Get<T> покрыть все ветки нельзя, не заводя плагин целиком. -->
+      <InternalsVisibleTo Include="Domovoy.CommutePlugin.Tests"/>
+    </ItemGroup>
+
 </Project>

@@ -29,20 +29,23 @@ public class EventRelayService : BackgroundService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("EventRelayService starting - subscribing to state change events");
 
         // Subscribe to device state changes — CapabilityDeviceManager re-emits normalized state
         // as this event so SignalR clients receive live updates with capability values.
-        _messageBus.SubscribeAsync<DeviceStateUpdatedEvent>(
+        // Awaited, with the stopping token: a fire-and-forget subscribe swallows a broker failure
+        // (the service would report "ready" while relaying nothing) and never unsubscribes on shutdown.
+        // The pattern to copy is NotificationRelayService.
+        await _messageBus.SubscribeAsync<DeviceStateUpdatedEvent>(
             "apigateway-device-states",
             MessageBusConfiguration.DeviceEventsExchange,
             MessageBusConfiguration.DeviceStateUpdatedRoutingKey,
-            HandleDeviceStateChanged);
+            HandleDeviceStateChanged,
+            stoppingToken);
 
         _logger.LogInformation("EventRelayService subscriptions complete");
-        return Task.CompletedTask;
     }
 
     private async Task HandleDeviceStateChanged(DeviceStateUpdatedEvent stateEvent)

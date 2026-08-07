@@ -43,4 +43,12 @@ export const activityApi = {
   /** Unified, filterable feed of device events + automation runs + system logs. */
   get: (q: ActivityQuery = {}): Promise<ActivityEntry[]> =>
     apiClient.get<ActivityEntry[]>('/api/activity', { params: params(q) }).then((r) => r.data),
+
+  /**
+   * How many rows match — counted in the database, nothing shipped. For a headline number, asking for
+   * the rows and taking `.length` means pulling hundreds of records a minute to render one integer.
+   * `severity` / `q` are not supported here (they are in-memory filters on the feed, see the endpoint).
+   */
+  count: (q: Omit<ActivityQuery, 'severity' | 'q' | 'limit'> = {}): Promise<number> =>
+    apiClient.get<{ count: number }>('/api/activity/count', { params: params(q) }).then((r) => r.data.count),
 };

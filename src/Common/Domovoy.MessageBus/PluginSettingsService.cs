@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using System.Globalization;
 using System.Text.Json;
 
 using Domovoy.Contracts.Messaging;
@@ -70,35 +71,41 @@ public sealed class PluginSettingsService
             OnAppliedAsync,
             ct);
 
-        _ = Task.Run(() => AnnounceUntilAckedAsync(ct), ct);
+        // Первое объявление — до возврата из StartAsync. Раньше в фон уходил весь цикл, и сразу после
+        // старта было неопределённо, ушла схема или ещё нет: наблюдаемого момента «объявлено» не
+        // существовало вовсе. Повторы остаются фоновыми.
+        await AnnounceAsync(ct);
+        _logger?.LogInformation("Announced {Count} plugin setting(s) for {PluginId}", _schema.Count, _pluginId);
+
+        _ = Task.Run(() => ReannounceUntilAckedAsync(ct), ct);
     }
 
-    private async Task AnnounceUntilAckedAsync(CancellationToken ct)
+    private async Task AnnounceAsync(CancellationToken ct)
     {
-        var announced = false;
+        try
+        {
+            var envelope = Envelope<PluginSettingsSchemaV1>.Create(
+                MessageTypes.PluginSettingsSchema,
+                source: $"plugin:{_pluginId}",
+                data: new PluginSettingsSchemaV1(_pluginId, _schema),
+                subject: _pluginId);
+            await _bus.PublishAsync(BusTopology.EventsExchange, BusTopology.PluginSettingsSchemaKey, envelope, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.LogWarning(ex, "Failed to announce settings for {PluginId}; will retry", _pluginId);
+        }
+    }
+
+    private async Task ReannounceUntilAckedAsync(CancellationToken ct)
+    {
         while (!ct.IsCancellationRequested && !_received)
         {
-            try
-            {
-                var envelope = Envelope<PluginSettingsSchemaV1>.Create(
-                    MessageTypes.PluginSettingsSchema,
-                    source: $"plugin:{_pluginId}",
-                    data: new PluginSettingsSchemaV1(_pluginId, _schema),
-                    subject: _pluginId);
-                await _bus.PublishAsync(BusTopology.EventsExchange, BusTopology.PluginSettingsSchemaKey, envelope, ct);
-                if (!announced)
-                {
-                    _logger?.LogInformation("Announced {Count} plugin setting(s) for {PluginId}", _schema.Count, _pluginId);
-                    announced = true;
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger?.LogWarning(ex, "Failed to announce settings for {PluginId}; will retry", _pluginId);
-            }
-
             try { await Task.Delay(TimeSpan.FromSeconds(10), ct); }
             catch (OperationCanceledException) { break; }
+
+            if (_received) break;
+            await AnnounceAsync(ct);
         }
     }
 
@@ -158,22 +165,7 @@ public sealed class PluginSettingsService
         {
             if (raw is JsonElement je)
             {
-                object? converted = default(T) switch
-                {
-                    string => je.ValueKind == JsonValueKind.String ? je.GetString() : je.GetRawText(),
-                    bool => je.ValueKind switch
-                    {
-                        JsonValueKind.True => true,
-                        JsonValueKind.False => false,
-                        JsonValueKind.String => bool.TryParse(je.GetString(), out var b) && b,
-                        _ => (object)false,
-                    },
-                    double => je.ValueKind == JsonValueKind.Number ? je.GetDouble()
-                        : double.TryParse(je.GetString(), out var d) ? d : fallback,
-                    int => je.ValueKind == JsonValueKind.Number ? je.GetInt32()
-                        : int.TryParse(je.GetString(), out var i) ? i : fallback,
-                    _ => je.Deserialize<T>(),
-                };
+                var converted = FromJson(je, fallback);
                 return converted is T t ? t : fallback;
             }
 
@@ -185,5 +177,39 @@ public sealed class PluginSettingsService
         {
             return fallback;
         }
+    }
+
+    /// <summary>
+    /// Wire value → <typeparamref name="T"/>. The discriminator is <c>typeof(T)</c>, deliberately: it used
+    /// to be <c>default(T)</c>, and for <c>T = string</c> that is <c>null</c>, so the string branch was
+    /// unreachable and a non-string JSON value stored for a string setting fell through to
+    /// <c>Deserialize&lt;string&gt;()</c>, threw, and silently became the fallback instead of its raw text.
+    /// </summary>
+    private static object? FromJson<T>(JsonElement je, T fallback)
+    {
+        if (typeof(T) == typeof(string))
+            return je.ValueKind == JsonValueKind.String ? je.GetString() : je.GetRawText();
+
+        if (typeof(T) == typeof(bool))
+            return je.ValueKind switch
+            {
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.String => bool.TryParse(je.GetString(), out var b) && b,
+                _ => false,
+            };
+
+        // InvariantCulture обязательна: значение пришло из JSON, а там разделитель дробной части —
+        // всегда точка. С культурой хоста "60.5" на русской локали не разбиралось и молча становилось
+        // значением по умолчанию.
+        if (typeof(T) == typeof(double))
+            return je.ValueKind == JsonValueKind.Number ? je.GetDouble()
+                : double.TryParse(je.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : fallback;
+
+        if (typeof(T) == typeof(int))
+            return je.ValueKind == JsonValueKind.Number ? je.GetInt32()
+                : int.TryParse(je.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var i) ? i : fallback;
+
+        return je.Deserialize<T>();
     }
 }

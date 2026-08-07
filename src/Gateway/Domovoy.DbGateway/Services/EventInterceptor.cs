@@ -23,15 +23,23 @@ using MongoDB.Driver;
 namespace Domovoy.DbGateway.Services;
 
 /// <summary>
-/// Background service that persists the bus traffic to MongoDB. It maintains two things:
+/// Background service that persists the bus traffic to MongoDB. It maintains three things:
 /// <list type="bullet">
-///   <item>the <b>current-state</b> read-model (<c>capability_devices</c>) for the UI; and</item>
+///   <item>the <b>current-state</b> read-model (<c>capability_devices</c>) for the UI;</item>
 ///   <item>the append-only <b>domain event-log + telemetry</b> feature store (roadmap P0-5):
 ///   every capability delta and command is written to the <c>device_events</c> time-series collection
 ///   with its state delta and trigger source, and numeric samples to <c>sensor_readings</c>. This is
 ///   the fuel for ML, replay and explainability (Epics 1F/2) and is kept separate from Serilog
-///   operational diagnostics.</item>
+///   operational diagnostics; and</item>
+///   <item>the <b>Zigbee bridge-liveness watchdog</b>: it tracks the coordinator's last confirmed
+///   heartbeat and sweeps every Zigbee device offline while the bridge is down, so the dashboard agrees
+///   with the Zigbee page instead of showing stale "online".</item>
 /// </list>
+/// <para>
+/// The watchdog is a guest here, not a natural resident — it lives in this class only because the
+/// read-model it corrects is written here. Its natural home is next to <c>DeviceLivenessWatchdog</c>;
+/// moving it is a queued refactor, not an oversight.
+/// </para>
 /// </summary>
 public class EventInterceptor : BackgroundService
 {

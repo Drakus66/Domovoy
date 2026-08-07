@@ -32,11 +32,36 @@ public sealed class JwtTokenService
     private readonly int _refreshDays;
     private readonly JwtSecurityTokenHandler _handler = new() { MapInboundClaims = false };
 
+    /// <summary>
+    /// Минимальная длина секрета: HMAC-SHA256 подписывает ключом не короче 256 бит, иначе IdentityModel
+    /// падает уже на выдаче токена и с невнятным сообщением.
+    /// </summary>
+    private const int MinSecretLength = 32;
+
+    /// <summary>
+    /// Возвращает секрет подписи или падает с внятным сообщением. Скомпилированного запасного значения
+    /// здесь нет намеренно: раньше оно было в трёх местах сразу (appsettings, Program, этот класс), и
+    /// установка, где секрет не задали, молча подписывала токены общеизвестной строкой из репозитория —
+    /// то есть аутентификация была включена, а подделать токен мог кто угодно.
+    /// </summary>
+    public static string RequireSecret(IConfiguration config)
+    {
+        var secret = config.GetSection("JwtSettings")["SecretKey"];
+
+        if (string.IsNullOrWhiteSpace(secret) || secret.Length < MinSecretLength)
+            throw new InvalidOperationException(
+                "JwtSettings:Enabled = true, но JwtSettings:SecretKey не задан или короче " +
+                $"{MinSecretLength} символов. Задайте JWT_SECRET_KEY в .env длинным случайным значением " +
+                "(`openssl rand -base64 48`). Запасного значения по умолчанию нет: подпись общеизвестным " +
+                "секретом равносильна выключенной аутентификации.");
+
+        return secret;
+    }
+
     public JwtTokenService(IConfiguration config)
     {
         var s = config.GetSection("JwtSettings");
-        var secret = s["SecretKey"] ?? "DefaultDevelopmentSecretKeyThatShouldBeReplacedInProduction";
-        _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
+        _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(RequireSecret(config)));
         _issuer = s["Issuer"] ?? "domovoy";
         _audience = s["Audience"] ?? "domovoy-clients";
         _accessMinutes = s.GetValue<int?>("ExpiryMinutes") ?? 60;

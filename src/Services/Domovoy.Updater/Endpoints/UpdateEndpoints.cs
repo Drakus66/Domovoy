@@ -16,6 +16,8 @@ public static class UpdateEndpoints
 {
     public static void MapUpdateEndpoints(this WebApplication app)
     {
+        var background = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Updates.Background");
+
         // Что установлено и что доступно. Это же читает db-gateway, складывая версии в манифест бэкапа.
         app.MapGet("/api/components", async (UpdateCatalog catalog, CancellationToken ct) =>
         {
@@ -94,7 +96,7 @@ public static class UpdateEndpoints
 
             // Обновление длится минуты и по дороге перезапускает api-gateway и webui, поэтому
             // отвечаем сразу, а ход выполнения UI дочитывает из /api/updates/status.
-            _ = Task.Run(() => executor.ApplyAsync(plan, snapshot, request.Backup, CancellationToken.None));
+            RunDetached(background, "обновление", () => executor.ApplyAsync(plan, snapshot, request.Backup, CancellationToken.None));
 
             return Results.Accepted("/api/updates/status", new { status = "started", plan = ToDto(plan, snapshot.Channel) });
         });
@@ -108,11 +110,31 @@ public static class UpdateEndpoints
         app.MapGet("/api/updates/history", (UpdateExecutor executor) =>
             Results.Ok(executor.GetHistory().Reverse()));
 
-        app.MapPost("/api/updates/rollback", async (UpdateExecutor executor, CancellationToken ct) =>
+        app.MapPost("/api/updates/rollback", (UpdateExecutor executor) =>
         {
-            _ = Task.Run(() => executor.RollbackAsync(CancellationToken.None));
-            await Task.CompletedTask;
+            RunDetached(background, "откат", () => executor.RollbackAsync(CancellationToken.None));
             return Results.Accepted("/api/updates/status", new { status = "started" });
+        });
+    }
+
+    /// <summary>
+    /// Запускает долгую операцию в фоне, отвечая клиенту сразу. Наблюдаемость обязательна: голый
+    /// <c>_ = Task.Run(...)</c> терял бы исключение целиком — прогон бы просто не начался, а в журнале
+    /// не осталось бы ни строки. Сам ход выполнения пишется в state/current-run.json, поэтому здесь
+    /// нужно поймать ровно то, что не дошло даже до него.
+    /// </summary>
+    private static void RunDetached(ILogger logger, string what, Func<Task> operation)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await operation();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Фоновая операция «{What}» завершилась с ошибкой", what);
+            }
         });
     }
 

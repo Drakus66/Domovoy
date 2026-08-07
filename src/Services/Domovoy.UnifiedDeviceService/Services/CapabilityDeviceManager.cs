@@ -16,15 +16,20 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
-/// Capability-contract consumer (roadmap Step 3). Subscribes to <see cref="DeviceDiscoveredV1"/> and
+/// Capability-contract consumer. Subscribes to <see cref="DeviceDiscoveredV1"/> and
 /// <see cref="DeviceStateReportV1"/> published by adapters on the canonical bus topology, maintains an
-/// in-memory capability device registry, and re-emits normalized state as the existing
-/// <see cref="DeviceStateUpdatedEvent"/> so the SignalR relay and persistence interceptor keep working.
+/// in-memory capability device registry, and re-emits normalized state as
+/// <see cref="DeviceStateUpdatedEvent"/> for the ApiGateway's SignalR relay.
 /// <para>
-/// Runs in parallel with the legacy <see cref="UnifiedDeviceManager"/> during migration. Persistence to
-/// the DB and UI cutover are Step 4; legacy-path removal is Step 5. Device ids are deterministic
-/// (see <see cref="DeviceIdFactory"/>), so duplicates across restarts cannot occur even without a
-/// persisted registry — the in-memory registry simply repopulates when adapters re-announce.
+/// The migration this was written for is over: the legacy device manager was removed in Step 5, so
+/// there is no parallel path any more — translating the capability report into the legacy SignalR event
+/// is now this service's <b>only</b> live function. Whether that hop deserves a container of its own is
+/// an open question, deferred until after the Epic 3K live run (roadmap phase-4, «Техдолг-кандидаты»).
+/// </para>
+/// <para>
+/// Device ids are deterministic (see <see cref="DeviceIdFactory"/>), so duplicates across restarts cannot
+/// occur even without a persisted registry — the in-memory registry simply repopulates when adapters
+/// re-announce.
 /// </para>
 /// </summary>
 public sealed class CapabilityDeviceManager : BackgroundService
