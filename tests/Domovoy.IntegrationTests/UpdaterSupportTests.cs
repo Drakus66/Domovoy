@@ -232,3 +232,92 @@ public class ComponentDepsTests
     public void MalformedLabel_YieldsNull_RatherThanThrowing(string? label) =>
         Assert.Null(ComponentDeps.TryParse(label));
 }
+
+/// <summary>
+/// Holds the two component lists together (roadmap Epic 3K).
+///
+/// <para><b>Why this test exists.</b> The system is described in two places on purpose:
+/// <c>build/components.json</c> drives what CI publishes, and <c>ReleaseSource.Components</c> drives
+/// what the house looks for and in what order it is recreated. They must agree — and when
+/// <c>UnifiedDeviceService</c> was retired they briefly did not: the C# list still named a component
+/// that no longer had a Dockerfile, a package or a container, so every update check went looking for
+/// it in the registry for nothing.</para>
+///
+/// <para>Nothing else catches this: <c>contract-guard</c> watches <c>components.json</c>, not the
+/// constant beside it.</para>
+/// </summary>
+public class ReleaseSourceTests
+{
+    [Fact]
+    public void ComponentList_MatchesTheBuildSpecification()
+    {
+        var spec = LoadComponentsSpec();
+
+        var declared = spec
+            .RootElement.GetProperty("components")
+            .EnumerateArray()
+            .Select(c => c.GetProperty("name").GetString()!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var known = ReleaseSource.Components.ToHashSet(StringComparer.Ordinal);
+
+        var missingInCode = declared.Except(known).OrderBy(x => x, StringComparer.Ordinal).ToList();
+        var stale = known.Except(declared).OrderBy(x => x, StringComparer.Ordinal).ToList();
+
+        Assert.True(
+            missingInCode.Count == 0 && stale.Count == 0,
+            "Списки компонентов разошлись между build/components.json и ReleaseSource.Components.\n" +
+            (missingInCode.Count > 0 ? $"  Публикуются, но дом их не ищет: {string.Join(", ", missingInCode)}\n" : "") +
+            (stale.Count > 0 ? $"  Дом ищет, но никто не публикует: {string.Join(", ", stale)}\n" : ""));
+    }
+
+    [Fact]
+    public void RecreationOrder_PutsTheUpdaterLast()
+    {
+        // Служба обновлений заменяется одноразовым агентом уже после всех остальных: пересоздать
+        // себя изнутри контейнер не может, поэтому её место в порядке — не деталь стиля.
+        Assert.Equal(ReleaseSource.SelfComponent, ReleaseSource.Components[^1]);
+
+        // Браузер разговаривает с этими двумя, поэтому они идут в конце — иначе интерфейс отвалится
+        // на середине обновления, когда до остальных ещё не дошло.
+        var order = ReleaseSource.Components.ToList();
+        Assert.True(order.IndexOf("api-gateway") > order.IndexOf("db-gateway"));
+        Assert.True(order.IndexOf("webui") > order.IndexOf("api-gateway"));
+    }
+
+    [Fact]
+    public void EveryDeclaredComponentHasABuildableDockerfile()
+    {
+        // Компонент без Dockerfile — это job сборки, который упадёт в CI. Дешевле поймать здесь.
+        var root = RepositoryRoot();
+        var spec = LoadComponentsSpec();
+
+        foreach (var component in spec.RootElement.GetProperty("components").EnumerateArray())
+        {
+            var name = component.GetProperty("name").GetString()!;
+            var context = component.GetProperty("context").GetString()!;
+            var dockerfile = component.GetProperty("dockerfile").GetString()!;
+
+            var path = context == "."
+                ? Path.Combine(root, dockerfile)
+                : Path.Combine(root, context, dockerfile);
+
+            Assert.True(File.Exists(path), $"Для компонента '{name}' нет Dockerfile: {path}");
+        }
+    }
+
+    private static System.Text.Json.JsonDocument LoadComponentsSpec() =>
+        System.Text.Json.JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(RepositoryRoot(), "build", "components.json")));
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Domovoy.sln")))
+            directory = directory.Parent;
+
+        Assert.NotNull(directory);
+        return directory!.FullName;
+    }
+}

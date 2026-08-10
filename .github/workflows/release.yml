@@ -16,9 +16,6 @@ on:
     branches:
       - develop
       - master
-      # ВРЕМЕННО на период Эпика 3K: даёт отлаживать публикацию, не вливая эпик в develop.
-      # УДАЛИТЬ последним коммитом эпика — иначе любая epic-ветка начнёт пушить в канал.
-      - epic-3k-delivery
   workflow_dispatch:
 
 permissions:

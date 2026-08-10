@@ -213,6 +213,12 @@ digest'ов ключом Ed25519, служба обновлений провер
 | `build-test` | Сборка решения + офлайн-юнит-тесты **всего решения** (.NET и WebUI) |
 | `offline-smoke` | Инвариант offline-first на реальных RabbitMQ + Mongo (Testcontainers) |
 | `ContractsPublicApiTests` | Снимок публичной поверхности `Domovoy.Contracts` — любое изменение видно в диффе; отсутствие снимка — падение, а не тихое создание |
+| `ReleaseSourceTests` | Список компонентов в `build/components.json` и в `ReleaseSource.Components` не разошёлся, порядок пересоздания цел (updater последним), у каждого объявленного компонента есть Dockerfile |
+
+> **Где какой workflow срабатывает.** `release.yml` — на `develop` и `master`; тесты он вызывает
+> из `ci.yml` через `workflow_call`. Поэтому у самого `ci.yml` в push-триггерах остались только
+> `epic-*` и pull request: держать там `develop`/`master` значило бы прогонять весь набор тестов
+> дважды на каждый пуш.
 
 > Тестовые шаги адресуют `Domovoy.sln`, а не отдельный `.csproj`. Указание конкретного проекта уже
 > однажды привело к тому, что тесты `Domovoy.CommutePlugin.Tests` не выполнялись в CI ни разу, —

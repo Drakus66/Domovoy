@@ -19,6 +19,10 @@
 /plugins/.settings/
 /plugins/*/*
 !/plugins/*/plugin.json
+# Bookkeeping of the built-in plugin seeder (Epic 3K): which first-party plugins have been laid out
+# and at which version. Host state, not source — and committing it would resurrect plugins the owner
+# deleted, which the seeder deliberately avoids.
+/plugins/.builtin-state.json
 
 data/zigbee2mqtt/state.json
 data/zigbee2mqtt/coordinator_backup.json

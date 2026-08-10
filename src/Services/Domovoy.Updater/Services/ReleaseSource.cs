@@ -39,10 +39,15 @@ public static class ReleaseSource
     /// The components this system is made of, in <b>safe recreation order</b>: providers before
     /// consumers, the two things the browser talks to (api-gateway, webui) late, and the updater
     /// itself last — it can only be replaced by a throwaway agent after everything else is done.
+    /// <para>
+    /// ⚠️ Must stay in step with the component list in <c>build/components.json</c>: that file drives
+    /// what CI publishes, this one drives what the house looks for. A name left here after a service
+    /// is retired means fruitless registry lookups on every check —
+    /// <c>ReleaseSourceTests</c> holds the two lists together.
+    /// </para>
     /// </summary>
     public static readonly IReadOnlyList<string> Components = new[]
     {
-        "unified-device-service",
         "connectivity-service",
         "db-gateway",
         "automation-service",

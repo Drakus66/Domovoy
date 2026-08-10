@@ -8,7 +8,10 @@ name: CI
 
 on:
   push:
-    branches: [master, develop, 'epic-*']
+    # Только эпик-ветки: для master/develop этот же workflow вызывается из release.yml как гейт
+    # публикации (workflow_call ниже). Держать их и здесь — значит прогонять весь набор тестов
+    # дважды на каждый пуш.
+    branches: ['epic-*']
   pull_request:
   workflow_dispatch:
   # Вызывается как функция из release.yml (Эпик 3K): тесты — обязательный гейт перед публикацией
