@@ -16,8 +16,17 @@ using Microsoft.Extensions.Logging;
 
 namespace Domovoy.Updater.Services;
 
-/// <summary>Which topology version is applied, and where it came from.</summary>
-public sealed record TopologyState(int Version, string Digest, DateTimeOffset AppliedAt);
+/// <summary>
+/// Which topology version is applied, and where it came from.
+/// <para>
+/// Two versions, on purpose: <paramref name="Version"/> is the compatibility version components declare
+/// against (<c>requires: topology >= 2</c>), while <paramref name="Release"/> is the full build tag the
+/// bundle shipped under. Without the second one the resolver compares the installed bundle as
+/// <c>"3.0"</c> against <c>"3.0.57-dev"</c> in the channel and offers the very same topology forever.
+/// Null on state written before this field existed.
+/// </para>
+/// </summary>
+public sealed record TopologyState(int Version, string Digest, DateTimeOffset AppliedAt, string? Release = null);
 
 /// <summary>
 /// Owns the deployment topology on the host (roadmap Epic 3K).
@@ -75,17 +84,20 @@ public sealed class TopologyManager
         var state = GetApplied();
         if (state is null) return null;
 
+        // Полный тег, если он записан; иначе — версия совместимости, как писали раньше.
+        var version = state.Release is { Length: > 0 } release ? release : $"{state.Version}.0";
+
         return new InstalledComponent(
             Name: ReleaseSource.TopologyComponent,
             Container: "",
             Repository: ReleaseSource.RepositoryOf(ReleaseSource.TopologyComponent),
             Tag: "",
             Digest: state.Digest,
-            Version: $"{state.Version}.0",
+            Version: version,
             Deps: new ComponentDeps
             {
                 Component = ReleaseSource.TopologyComponent,
-                Version = $"{state.Version}.0",
+                Version = version,
                 Provides = new Dictionary<string, ProvidedInterface>
                 {
                     [WellKnownInterfaces.Topology] = new() { Version = state.Version, MinCompat = 1 },
@@ -122,7 +134,7 @@ public sealed class TopologyManager
     /// flip the <c>current</c> symlink. Returns the keys added to <c>.env</c> so the UI can show them.
     /// </summary>
     public async Task<IReadOnlyList<string>> ApplyAsync(
-        string stagedDirectory, int version, string digest, CancellationToken ct)
+        string stagedDirectory, int version, string digest, string release, CancellationToken ct)
     {
         var addedKeys = await MergeEnvAsync(stagedDirectory, ct);
         CopyAssets(stagedDirectory);
@@ -140,10 +152,10 @@ public sealed class TopologyManager
         Directory.CreateDirectory(_options.StateDirectory);
         await File.WriteAllTextAsync(
             _options.TopologyStateFile,
-            JsonSerializer.Serialize(new TopologyState(version, digest, DateTimeOffset.UtcNow), Json),
+            JsonSerializer.Serialize(new TopologyState(version, digest, DateTimeOffset.UtcNow, release), Json),
             ct);
 
-        _logger.LogInformation("Топология переключена на v{Version}", version);
+        _logger.LogInformation("Топология переключена на v{Version} ({Release})", version, release);
         return addedKeys;
     }
 

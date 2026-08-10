@@ -173,13 +173,18 @@ public sealed class UpdateExecutor
             {
                 run = Step(run, "topology", "running", $"{topologyMove.FromVersion} → {topologyMove.ToVersion}");
 
+                // Прежнюю версию читаем ДО применения: после него `current` уже указывает на новую,
+                // и откат вернул бы систему ровно туда, откуда её пытаются откатить.
+                var previousTopology = _topology.GetApplied()?.Version;
+
                 var version = ParseMajor(topologyMove.ToVersion);
                 var staged = await _topology.StageAsync(topologyMove.Digest, version, ct);
-                var addedKeys = await _topology.ApplyAsync(staged, version, topologyMove.Digest, ct);
+                var addedKeys = await _topology.ApplyAsync(
+                    staged, version, topologyMove.Digest, topologyMove.ToVersion, ct);
 
                 run = run with
                 {
-                    TopologyFrom = _topology.GetApplied()?.Version,
+                    TopologyFrom = previousTopology,
                     TopologyTo = version,
                     EnvKeysAdded = addedKeys.ToList(),
                 };

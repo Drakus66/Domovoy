@@ -39,6 +39,17 @@ public sealed class RegistryClient
 
     private static readonly Regex VersionTag = new(@"^\d+\.\d+\.\d+(-dev)?$", RegexOptions.Compiled);
 
+    /// <summary>
+    /// Whether a registry tag is a version tag of the given channel. Public because it is one half of a
+    /// contract with the build side: <c>build/tools/plan-build.mjs</c> decides what tags exist, this
+    /// decides which of them the house can see. A tag outside this shape does not fail loudly — the
+    /// package simply disappears from the channel, which is exactly how the topology bundle went missing
+    /// (it shipped as <c>3.4</c>). <c>ReleaseTagFormatTests</c> holds the two halves together.
+    /// </summary>
+    public static bool IsChannelVersionTag(string tag, string channel) =>
+        VersionTag.IsMatch(tag)
+        && tag.EndsWith("-dev", StringComparison.Ordinal) == (channel == UpdateChannels.Dev);
+
     private readonly HttpClient _http;
     private readonly ILogger<RegistryClient> _logger;
     private readonly Dictionary<string, (string Token, DateTimeOffset Expires)> _tokens = new();
@@ -106,11 +117,9 @@ public sealed class RegistryClient
         if (!doc.RootElement.TryGetProperty("tags", out var tags) || tags.ValueKind != JsonValueKind.Array)
             return Array.Empty<string>();
 
-        var wantDev = channel == UpdateChannels.Dev;
-
         return tags.EnumerateArray()
             .Select(t => t.GetString() ?? "")
-            .Where(t => VersionTag.IsMatch(t) && t.EndsWith("-dev", StringComparison.Ordinal) == wantDev)
+            .Where(t => IsChannelVersionTag(t, channel))
             .OrderBy(t => t, SemVerComparer.Instance)
             .Reverse()
             .ToList();

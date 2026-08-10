@@ -167,7 +167,19 @@ public sealed class UpdateCatalog
             var versions = await _registry.ListAvailableAsync(
                 component, channel, _options.MaxVersionsPerComponent, ct);
 
-            if (versions.Count > 0) available[component] = versions;
+            if (versions.Count > 0)
+            {
+                available[component] = versions;
+            }
+            else
+            {
+                // Дыра в канале — не мелочь: решатель просто не увидит компонент и откажет фразой
+                // про «интерфейс, которого никто не предоставляет», не назвав настоящей причины.
+                // Ровно так пропал бандл топологии, публиковавшийся под тегом вне формата версий.
+                _logger.LogWarning(
+                    "В канале '{Channel}' нет ни одной пригодной версии компонента '{Component}' — " +
+                    "план обновления может оказаться неполным", channel, component);
+            }
         }
 
         return new UpdateCatalogSnapshot(channel, installed, available);

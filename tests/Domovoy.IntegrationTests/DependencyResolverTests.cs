@@ -227,6 +227,53 @@ public class DependencyResolverTests
     }
 
     [Fact]
+    public void TopologyNeverApplied_IsPulledInFromTheChannel_NotRefused()
+    {
+        // Установка, поднятая руками из репозитория: бандла топологии на диске нет, поэтому в
+        // installed его тоже нет. Провайдера интерфейса нужно найти среди доступного в канале —
+        // иначе первое же обновление отказывает фразой «topology никто не предоставляет», хотя
+        // бандл в канале лежит.
+        var installed = new Dictionary<string, InstalledComponent>
+        {
+            ["connectivity-service"] = Installed(
+                Deps("connectivity-service", "0.0.0", requires: ("topology", 2))),
+        };
+
+        var available = Channel(
+            Deps("connectivity-service", "1.2.4-dev", requires: ("topology", 2)),
+            Deps("topology", "3.0.4-dev", provides: ("topology", 3, 1)));
+
+        var plan = new DependencyResolver(installed, available).ResolveAll();
+
+        Assert.True(plan.Ok, plan.Refusal);
+        Assert.Equal("topology", plan.All[0].Component);
+        Assert.Contains(plan.All, m => m.Component == "connectivity-service");
+    }
+
+    [Fact]
+    public void AppliedTopology_MatchingTheChannel_IsNotOfferedAgain()
+    {
+        // Установленная топология объявляет себя полным тегом сборки. Если бы она отдавала только
+        // версию совместимости («3.0»), любой бандл «3.0.N» выглядел бы новее — и дом переустанавливал
+        // бы одну и ту же топологию при каждой проверке.
+        var installed = new Dictionary<string, InstalledComponent>
+        {
+            ["topology"] = Installed(Deps("topology", "3.0.4-dev", provides: ("topology", 3, 1))),
+            ["connectivity-service"] = Installed(
+                Deps("connectivity-service", "1.2.4-dev", requires: ("topology", 2))),
+        };
+
+        var available = Channel(
+            Deps("topology", "3.0.4-dev", provides: ("topology", 3, 1)),
+            Deps("connectivity-service", "1.2.4-dev", requires: ("topology", 2)));
+
+        var plan = new DependencyResolver(installed, available).ResolveAll();
+
+        Assert.True(plan.Ok, plan.Refusal);
+        Assert.True(plan.IsEmpty);
+    }
+
+    [Fact]
     public void AlreadyCurrent_ProducesAnEmptyPlan()
     {
         var installed = new Dictionary<string, InstalledComponent>

@@ -50,6 +50,9 @@ const changed = buildAll
 /** Полная версия компонента: MAJOR.MINOR из спецификации + PATCH = номер прогона CI. */
 function versionOf(component) {
   const base = `${component.version}.${runNumber}`;
+  // ВАЖНО: формат тега — часть контракта с домом. Служба обновлений отбирает теги регуляркой
+  // `^\d+\.\d+\.\d+(-dev)?$` и по суффиксу отделяет канал (RegistryClient.IsChannelVersionTag).
+  // Тег, не попавший под неё, для дома не существует — компонент молча пропадает из канала.
   // develop → пре-релиз: канал виден прямо в версии, и такой тег никогда не спутать с релизным.
   const semver = channel === 'release' ? base : `${base}-dev`;
   // `+sha` запрещён в docker-теге, поэтому в теге его нет, а в InformationalVersion и метке — есть.
@@ -162,13 +165,19 @@ const topologyAffected = buildAll
 
 if (topologyMissing) console.error(`plan: бандла топологии нет в канале '${channel}' — собираем`);
 
+// Бандл версионируется по тем же правилам, что и образы: MAJOR = версия топологии, MINOR = 0,
+// PATCH = номер прогона, пре-релизный суффикс — из канала. Это не косметика: дом отбирает теги
+// одной регуляркой на все пакеты, а `version` в метке читается в строковое поле (ComponentDeps.Version),
+// поэтому число вместо строки делает метку неразбираемой, а бандл — невидимым для решателя.
+const topologyVersion = versionOf({ version: `${spec.topology.version}.0` });
+
 const topology = topologyAffected
   ? {
       image: topologyImageOf(spec),
-      version: `${spec.topology.version}.${runNumber}`,
+      version: topologyVersion.tagVersion,
       deps: JSON.stringify({
         component: 'topology',
-        version: spec.topology.version,
+        version: topologyVersion.tagVersion,
         channel,
         provides: { topology: { version: spec.topology.version, minCompat: spec.topology.minCompat } },
         assets: topologyManifest.assets ?? [],

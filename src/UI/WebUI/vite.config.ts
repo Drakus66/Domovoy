@@ -57,11 +57,22 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    alias: {
+    alias: [
+      // Иконки: `@mui/icons-material` версии 5 не объявляет `exports`, поэтому подпуть
+      // `@mui/icons-material/Menu` резолвится в CJS-файл пакета (поле `module` действует только
+      // на корень). Rolldown (сборщик Vite 8) такой CJS-модуль не разворачивает при default-импорте
+      // — компонент приезжает объектом `{ default: … }`, и React валится с ошибкой #130 «element
+      // type is invalid», отдавая белый экран на любой странице с иконками. Ведём подпути прямо в
+      // ESM-сборку пакета, где default-экспорт настоящий. `esm` в шаблоне исключён, чтобы правило
+      // не сработало повторно на собственном результате.
+      {
+        find: /^@mui\/icons-material\/(?!esm\/)([A-Za-z0-9_]+)$/,
+        replacement: '@mui/icons-material/esm/$1',
+      },
       // import.meta.dirname вместо __dirname: последний не поддерживается нативным загрузчиком
       // конфига, который в Vite станет умолчанием.
-      '@': path.resolve(import.meta.dirname, './src'),
-    },
+      { find: '@', replacement: path.resolve(import.meta.dirname, './src') },
+    ],
   },
   server: {
     port: 3000,

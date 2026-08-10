@@ -231,6 +231,17 @@ public class ComponentDepsTests
     [InlineData("{\"version\":\"1.0.0\"}")] // без имени компонента метка бесполезна
     public void MalformedLabel_YieldsNull_RatherThanThrowing(string? label) =>
         Assert.Null(ComponentDeps.TryParse(label));
+
+    [Fact]
+    public void NumericVersion_MakesTheWholeLabelUnreadable()
+    {
+        // Не придирка к типам: ровно так метка бандла топологии и оказалась нечитаемой, а сам бандл —
+        // невидимым для решателя. Фиксируем поведение, чтобы «а вдруг число тоже прочитается» больше
+        // не было предположением.
+        const string label = """{"component":"topology","version":3,"provides":{"topology":{"version":3,"minCompat":1}}}""";
+
+        Assert.Null(ComponentDeps.TryParse(label));
+    }
 }
 
 /// <summary>
@@ -310,7 +321,7 @@ public class ReleaseSourceTests
         System.Text.Json.JsonDocument.Parse(
             File.ReadAllText(Path.Combine(RepositoryRoot(), "build", "components.json")));
 
-    private static string RepositoryRoot()
+    internal static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
 
@@ -319,5 +330,131 @@ public class ReleaseSourceTests
 
         Assert.NotNull(directory);
         return directory!.FullName;
+    }
+}
+
+/// <summary>
+/// Holds the publishing side and the consuming side of a release together (roadmap Epic 3K).
+///
+/// <para><b>Why this test exists.</b> <c>build/tools/plan-build.mjs</c> decides what tags and what
+/// <c>ru.domovoy.deps</c> labels exist in the channel; <see cref="RegistryClient"/> and
+/// <see cref="ComponentDeps"/> decide which of them the house can see. Disagreement between the two is
+/// silent by construction — a package that fails either check simply is not in the channel as far as
+/// the house is concerned, and the failure surfaces much later as a resolver refusal naming something
+/// else entirely.</para>
+///
+/// <para>That is not hypothetical: the topology bundle shipped as <c>3.4</c> (two numbers, no channel
+/// suffix) with <c>"version": 3</c> as a number in its label. Both made it invisible, and the first
+/// update attempt on a fresh installation refused with "connectivity-service requires the interface
+/// 'topology', which nobody provides" — while the bundle sat in the registry.</para>
+/// </summary>
+public class ReleaseTagFormatTests
+{
+    [Theory]
+    [InlineData("dev")]
+    [InlineData("release")]
+    public void EveryPublishedTagIsVisibleToTheHouse_AndEveryLabelParses(string channel)
+    {
+        var plan = RunPlanner(channel);
+        if (plan is null) return; // node недоступен — проверять нечего, см. RunPlanner
+
+        using (plan)
+        {
+            var packages = plan.RootElement
+                .GetProperty("matrix").GetProperty("include")
+                .EnumerateArray()
+                .Select(c => (Name: c.GetProperty("name").GetString()!,
+                              Version: c.GetProperty("version").GetString()!,
+                              Deps: c.GetProperty("deps").GetString()!))
+                .ToList();
+
+            var topology = plan.RootElement.GetProperty("topology");
+            Assert.Equal(System.Text.Json.JsonValueKind.Object, topology.ValueKind);
+
+            packages.Add((
+                "topology",
+                topology.GetProperty("version").GetString()!,
+                topology.GetProperty("deps").GetString()!));
+
+            foreach (var (name, version, depsLabel) in packages)
+            {
+                Assert.True(
+                    RegistryClient.IsChannelVersionTag(version, channel),
+                    $"Тег '{version}' компонента '{name}' не проходит отбор версий канала '{channel}' — " +
+                    "для дома этот пакет в канале не существует.");
+
+                var deps = ComponentDeps.TryParse(depsLabel);
+                Assert.True(deps is not null, $"Метка ru.domovoy.deps компонента '{name}' не разбирается: {depsLabel}");
+
+                Assert.Equal(name, deps!.Component);
+                Assert.Equal(version, deps.Version);
+            }
+        }
+    }
+
+    [Fact]
+    public void TopologyBundleDeclaresTheInterfaceComponentsDependOn()
+    {
+        // Бандл — единственный провайдер интерфейса `topology`. Потеря этого объявления мгновенно
+        // превращается в отказ обновления у всех, кто требует топологию.
+        var plan = RunPlanner("dev");
+        if (plan is null) return;
+
+        using (plan)
+        {
+            var deps = ComponentDeps.TryParse(
+                plan.RootElement.GetProperty("topology").GetProperty("deps").GetString());
+
+            Assert.NotNull(deps);
+            Assert.True(deps!.Provides.ContainsKey("topology"));
+            Assert.True(deps.Provides["topology"].MinCompat <= deps.Provides["topology"].Version);
+        }
+    }
+
+    /// <summary>
+    /// Runs the real build planner over the real specification. <c>--all</c> keeps it offline: the
+    /// "top up what is missing in the channel" probe only runs for a diff-driven plan.
+    /// <para>Returns null when node is absent, so a machine without it does not fail the suite — CI has
+    /// node (the WebUI needs it), which is where this check has to hold.</para>
+    /// </summary>
+    private static System.Text.Json.JsonDocument? RunPlanner(string channel)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("node")
+        {
+            WorkingDirectory = ReleaseSourceTests.RepositoryRoot(),
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        foreach (var argument in new[]
+                 {
+                     "build/tools/plan-build.mjs", "--all",
+                     "--channel", channel, "--run", "57", "--sha", "abc1234def",
+                 })
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        System.Diagnostics.Process? process;
+        try
+        {
+            process = System.Diagnostics.Process.Start(start);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        if (process is null) return null;
+
+        using (process)
+        {
+            var stdout = process.StandardOutput.ReadToEnd();
+            var stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.True(process.ExitCode == 0, $"plan-build.mjs завершился с кодом {process.ExitCode}: {stderr}");
+            return System.Text.Json.JsonDocument.Parse(stdout);
+        }
     }
 }
