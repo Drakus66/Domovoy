@@ -68,13 +68,26 @@ function affected(component) {
 }
 
 /**
- * Есть ли у компонента образ под тегом канала.
+ * Формат версионного тега — ровно тот, по которому дом отбирает версии
+ * (`RegistryClient.IsChannelVersionTag`). Дублирование намеренное: это граница между сборкой на
+ * Node и службой на .NET, и держит её не общий код, а тест `ReleaseTagFormatTests`.
+ */
+const VERSION_TAG = /^\d+\.\d+\.\d+(-dev)?$/;
+const wantsDevSuffix = channel !== 'release';
+
+/**
+ * Видит ли дом компонент в этом канале.
  *
  * Селективная сборка исходит из того, что непересобранный компонент уже лежит в реестре. Это верно
  * ровно до первого исключения: на пустом реестре или после упавшей сборки одного компонента
  * (fail-fast: false) в канале остаётся дыра, а следующий коммит его не затронет и не пересоберёт.
  * Дыра при этом молчаливая: сборка зелёная, а набор в канале неполный, и решатель на стороне дома
  * просто не увидит компонент. Поэтому отсутствующее в канале достраивается независимо от диффа.
+ *
+ * ВАЖНО: наличие проверяется теми же глазами, что у дома, — по версионным тегам канала, а не по
+ * подвижному тегу `dev`/`release`. Подвижный тег есть всегда, как только пакет опубликовали хоть раз,
+ * поэтому проверка по нему считала дыру закрытой, пока бандл топологии лежал под тегом `3.4`,
+ * невидимым для службы обновлений: дом отказывался обновляться, а достраивание молчало.
  *
  * Тот же анонимный pull-токен, что использует служба обновлений: пакеты публичные.
  */
@@ -89,18 +102,22 @@ async function missingInChannel(components) {
       );
       const { token } = await auth.json();
 
-      const head = await fetch(`https://ghcr.io/v2/${repository}/manifests/${channel}`, {
-        method: 'HEAD',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.oci.image.index.v1+json,'
-            + 'application/vnd.oci.image.manifest.v1+json,'
-            + 'application/vnd.docker.distribution.manifest.v2+json,'
-            + 'application/vnd.docker.distribution.manifest.list.v2+json',
-        },
+      const response = await fetch(`https://ghcr.io/v2/${repository}/tags/list`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
       });
 
-      if (!head.ok) missing.push(c.name);
+      // 404 — пакета нет вовсе (первое заполнение реестра или удалили руками).
+      if (!response.ok) {
+        missing.push(c.name);
+        continue;
+      }
+
+      const { tags } = await response.json();
+      const visible = (tags ?? []).filter(
+        (t) => VERSION_TAG.test(t) && t.endsWith('-dev') === wantsDevSuffix,
+      );
+
+      if (visible.length === 0) missing.push(c.name);
     } catch (error) {
       // Реестр недоступен — достраивать вслепую хуже, чем не достраивать: собрали бы всё на каждом
       // пуше при любом сетевом сбое. Пропускаем и полагаемся на дифф.

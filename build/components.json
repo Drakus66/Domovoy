@@ -48,10 +48,18 @@
     "_comment": "Держать в согласии с build/topology/manifest.json — там же и обоснование версии.",
     "version": 3,
     "minCompat": 1,
+    "_pathsComment": [
+      "Инструменты сборки бандла входят сюда наравне с его содержимым: они определяют не только",
+      "compose внутри, но и тег с меткой снаружи — то, по чему дом вообще видит бандл в канале.",
+      "Правка формата версии в plan-build.mjs один раз уже не пересобрала бандл, и в канале остался",
+      "образ под тегом, невидимым для службы обновлений."
+    ],
     "paths": [
       "docker-compose.yml",
       "build/topology/**",
-      "build/tools/gen-topology.mjs"
+      "build/tools/gen-topology.mjs",
+      "build/tools/plan-build.mjs",
+      "build/tools/spec.mjs"
     ]
   },
 
