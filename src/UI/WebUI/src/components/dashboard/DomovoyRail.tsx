@@ -13,6 +13,7 @@ import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import type { CapabilityDevice } from '../../api/capabilityDevices';
 import { activityApi, ActivityEntry } from '../../api/activity';
 import { proposalsApi, Proposal } from '../../api/proposals';
+import { pendingProposals } from '../../store/liveData';
 import { automationsApi, AutomationRule } from '../../api/automations';
 import { scenesApi, Scene } from '../../api/scenes';
 import { energyApi, EnergyCostResult } from '../../api/energy';
@@ -32,7 +33,6 @@ const REFRESH_INTERVAL_MS = 60_000;
 export default function DomovoyRail({ devices }: { devices: CapabilityDevice[] }) {
   const { t } = useTranslation(['dashboards', 'proposals', 'devices']);
   const [activity, setActivity] = useState<ActivityEntry[] | null>(null);
-  const [proposals, setProposals] = useState<Proposal[]>([]);
   const [rules, setRules] = useState<Map<string, AutomationRule>>(new Map());
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [energy, setEnergy] = useState<EnergyCostResult | null>(null);
@@ -45,10 +45,7 @@ export default function DomovoyRail({ devices }: { devices: CapabilityDevice[] }
     [devices],
   );
 
-  const loadProposals = useCallback(() => {
-    proposalsApi.list('Proposed')
-      .then(setProposals)
-      .catch(() => undefined);
+  const loadRules = useCallback(() => {
     automationsApi.getRules()
       .then((rs) => setRules(new Map(rs.map((r) => [r.id, r]))))
       .catch(() => undefined);
@@ -65,18 +62,21 @@ export default function DomovoyRail({ devices }: { devices: CapabilityDevice[] }
       energyApi.getCost({ from: midnight.toISOString() })
         .then((c) => { if (!cancelled) setEnergy(c); })
         .catch(() => undefined);
-      loadProposals();
+      loadRules();
     };
     load();
     scenesApi.getScenes().then((s) => { if (!cancelled) setScenes(s); }).catch(() => undefined);
     const interval = setInterval(load, REFRESH_INTERVAL_MS);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [loadProposals]);
+  }, [loadRules]);
 
   const activateScene = async (scene: Scene) => {
     setActivatingScene(scene.id);
     try { await scenesApi.activate(scene.id); } catch { /* transient — ignore */ } finally { setActivatingScene(null); }
   };
+
+  // Очередь предложений — общий ресурс: её же читают навигация, очаг в шапке и дайджест.
+  const proposals = pendingProposals.use().data ?? [];
 
   const pending = useMemo(
     () => proposals.filter((p) => !dismissed.has(p.id)),
@@ -85,12 +85,13 @@ export default function DomovoyRail({ devices }: { devices: CapabilityDevice[] }
 
   const approve = async (p: Proposal) => {
     setBusy(true);
-    // Optimistic: drop it from the queue immediately, restore on failure.
-    setProposals((prev) => prev.filter((x) => x.id !== p.id));
+    // Оптимистично убираем из очереди сразу — и, поскольку очередь общая, badge в навигации и очаг
+    // в шапке гаснут тем же движением; при ошибке возвращаем и перечитываем с сервера.
+    pendingProposals.set((prev) => prev?.filter((x) => x.id !== p.id));
     try {
       await proposalsApi.approve(p.id);
     } catch {
-      setProposals((prev) => [p, ...prev]);
+      await pendingProposals.refresh();
     } finally {
       setBusy(false);
     }

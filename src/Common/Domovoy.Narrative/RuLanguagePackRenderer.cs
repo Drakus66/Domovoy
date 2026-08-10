@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 
 using Domovoy.Contracts.Narrative;
+using Domovoy.Contracts.Home;
 
 namespace Domovoy.Narrative;
 
@@ -226,12 +227,7 @@ public sealed class RuLanguagePackRenderer : INarrativeRenderer
 
     private static string VerbKey(Beat beat) => $"{beat.ArchetypeKey}.{beat.CapabilityId}.{beat.Transition}";
 
-    private static TimeZoneInfo ResolveTimeZone(string? timeZoneId)
-    {
-        if (string.IsNullOrWhiteSpace(timeZoneId)) return TimeZoneInfo.Utc;
-        try { return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId); }
-        catch (Exception) { return TimeZoneInfo.Utc; }
-    }
+    private static TimeZoneInfo ResolveTimeZone(string? timeZoneId) => SiteTimeZone.Resolve(timeZoneId);
 
     private static string TimeOfDayBucket(DateTime utc, TimeZoneInfo tz)
     {

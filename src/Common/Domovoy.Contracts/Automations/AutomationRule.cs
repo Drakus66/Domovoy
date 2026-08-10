@@ -77,6 +77,13 @@ public class RequiredExpression
 /// often than a cooldown window — bounding actuation rate (blast radius) while trust is still building, the
 /// stage between Shadow and full Active. <see cref="Proposed"/>/<see cref="Approved"/>/<see cref="Disabled"/>
 /// are not evaluated. New members are appended so persisted (BSON) ordinals stay stable.
+///
+/// <para><b><see cref="Approved"/> — зарезервированный слот, не удалять.</b> Ссылок на него в коде нет
+/// (апрув предложения переводит правило сразу в <see cref="Shadow"/> или <see cref="Active"/>), но
+/// перечисление хранится в BSON <b>порядковым номером</b>: удаление среднего члена молча
+/// переинтерпретирует все существующие записи коллекции <c>automations</c> — <c>Active</c> станет
+/// <c>Approved</c>, <c>Shadow</c> станет <c>Disabled</c> и так далее. Снять его можно только вместе с
+/// <c>[BsonRepresentation(BsonType.String)]</c> и миграцией данных.</para>
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum RuleStatus { Proposed, Approved, Active, Disabled, Shadow, BoundedActive }

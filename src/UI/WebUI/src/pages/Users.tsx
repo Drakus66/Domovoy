@@ -18,6 +18,7 @@ import BadgeRoundedIcon from '@mui/icons-material/BadgeRounded';
 import LockRoundedIcon from '@mui/icons-material/LockRounded';
 import KeyRoundedIcon from '@mui/icons-material/KeyRounded';
 import { securityApi, Role, RoleInput, User, UserInput } from '../api/security';
+import { confirmAction } from '../store/confirmStore';
 
 const EMPTY_ROLE: RoleInput = { name: '', description: '', permissions: [] };
 const EMPTY_USER: UserInput = { displayName: '', email: '', username: '', roleIds: [], enabled: true };
@@ -92,7 +93,7 @@ export default function Users() {
     } catch { setError(t('errors.save')); }
   };
   const removeUser = async (u: User) => {
-    if (!window.confirm(i18n.t('users:deleteUserConfirm', { name: u.displayName }))) return;
+    if (!await confirmAction({ message: i18n.t('users:deleteUserConfirm', { name: u.displayName }) })) return;
     try { await securityApi.deleteUser(u.id); await fetchAll(); } catch { setError(t('errors.delete')); }
   };
   const toggleUserRole = (id: string) => {
@@ -130,7 +131,7 @@ export default function Users() {
     } catch { setError(t('errors.save')); }
   };
   const removeRole = async (r: Role) => {
-    if (!window.confirm(i18n.t('users:deleteRoleConfirm', { name: roleLabel(r) }))) return;
+    if (!await confirmAction({ message: i18n.t('users:deleteRoleConfirm', { name: roleLabel(r) }) })) return;
     try { await securityApi.deleteRole(r.id); await fetchAll(); } catch { setError(t('errors.deleteRole')); }
   };
   const toggleRolePerm = (perm: string) => {

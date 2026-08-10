@@ -17,108 +17,45 @@ namespace Domovoy.ApiGateway.Controllers;
 [ApiController]
 [Route("api/backup")]
 [Authorize(Policy = WellKnownPermissions.SystemAdmin)]
-public class BackupController : ControllerBase
+public class BackupController : ProxyController
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-
-    public BackupController(IHttpClientFactory httpClientFactory)
-        => _httpClientFactory = httpClientFactory;
+    public BackupController(IHttpClientFactory httpClientFactory) : base(httpClientFactory) { }
 
     [HttpGet("settings")]
     public Task<IActionResult> GetSettings(CancellationToken ct)
-        => Forward(HttpMethod.Get, "api/backup/settings", ct);
+        => Forward("api/backup/settings", ct);
 
     [HttpPut("settings")]
     public Task<IActionResult> PutSettings(CancellationToken ct)
-        => Forward(HttpMethod.Put, "api/backup/settings", ct, forwardBody: true);
+        => Forward("api/backup/settings", ct);
 
     [HttpGet("")]
     public Task<IActionResult> List(CancellationToken ct)
-        => Forward(HttpMethod.Get, "api/backup/", ct);
+        => Forward("api/backup/", ct);
 
     [HttpPost("run")]
     public Task<IActionResult> Run(CancellationToken ct)
-        => Forward(HttpMethod.Post, "api/backup/run", ct);
+        => Forward("api/backup/run", ct);
 
     [HttpDelete("{file}")]
     public Task<IActionResult> Delete(string file, CancellationToken ct)
-        => Forward(HttpMethod.Delete, $"api/backup/{Uri.EscapeDataString(file)}", ct);
+        => Forward($"api/backup/{Uri.EscapeDataString(file)}", ct);
 
     [HttpPost("{file}/restore")]
     public Task<IActionResult> Restore(string file, CancellationToken ct)
-        => Forward(HttpMethod.Post,
-            $"api/backup/{Uri.EscapeDataString(file)}/restore" + Request.QueryString.Value, ct);
+        => Forward($"api/backup/{Uri.EscapeDataString(file)}/restore", ct);
 
-    /// <summary>Stream the bundle through instead of buffering — bundles can be hundreds of MB.</summary>
+    /// <summary>
+    /// Скачивание бандла. Отдельного кода больше не требует: базовая прокачка и так переливает ответ
+    /// потоком и переносит заголовки содержимого, включая Content-Disposition с именем файла.
+    /// </summary>
     [HttpGet("{file}/download")]
-    public async Task<IActionResult> Download(string file, CancellationToken ct)
-    {
-        var client = _httpClientFactory.CreateClient("db-gateway");
-        var upstream = await client.GetAsync(
-            $"api/backup/{Uri.EscapeDataString(file)}/download",
-            HttpCompletionOption.ResponseHeadersRead, ct);
+    public Task<IActionResult> Download(string file, CancellationToken ct)
+        => Forward($"api/backup/{Uri.EscapeDataString(file)}/download", ct);
 
-        if (!upstream.IsSuccessStatusCode)
-        {
-            var error = await upstream.Content.ReadAsStringAsync(ct);
-            upstream.Dispose();
-            return new ContentResult
-            {
-                StatusCode = (int)upstream.StatusCode,
-                Content = string.IsNullOrEmpty(error) ? null : error,
-                ContentType = "application/json",
-            };
-        }
-
-        HttpContext.Response.RegisterForDispose(upstream);
-        var stream = await upstream.Content.ReadAsStreamAsync(ct);
-        return File(stream, "application/zip", fileDownloadName: file);
-    }
-
-    /// <summary>Host migration: relay the raw zip body upstream without a size cap.</summary>
+    /// <summary>Переезд на другой хост: сырое тело zip уходит наверх потоком, без ограничения размера.</summary>
     [HttpPost("upload")]
     [DisableRequestSizeLimit]
-    public async Task<IActionResult> Upload(CancellationToken ct)
-    {
-        var client = _httpClientFactory.CreateClient("db-gateway");
-        using var request = new HttpRequestMessage(HttpMethod.Post, "api/backup/upload")
-        {
-            Content = new StreamContent(Request.Body),
-        };
-        request.Content.Headers.TryAddWithoutValidation(
-            "Content-Type", Request.ContentType ?? "application/zip");
-
-        using var upstream = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        var body = await upstream.Content.ReadAsStringAsync(ct);
-        return new ContentResult
-        {
-            StatusCode = (int)upstream.StatusCode,
-            Content = string.IsNullOrEmpty(body) ? null : body,
-            ContentType = upstream.Content.Headers.ContentType?.ToString() ?? "application/json",
-        };
-    }
-
-    private async Task<IActionResult> Forward(
-        HttpMethod method, string relativePath, CancellationToken ct, bool forwardBody = false)
-    {
-        var client = _httpClientFactory.CreateClient("db-gateway");
-        using var request = new HttpRequestMessage(method, relativePath);
-
-        if (forwardBody)
-        {
-            request.Content = new StreamContent(Request.Body);
-            if (!string.IsNullOrEmpty(Request.ContentType))
-                request.Content.Headers.TryAddWithoutValidation("Content-Type", Request.ContentType);
-        }
-
-        using var upstream = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        var body = await upstream.Content.ReadAsStringAsync(ct);
-
-        return new ContentResult
-        {
-            StatusCode = (int)upstream.StatusCode,
-            Content = string.IsNullOrEmpty(body) ? null : body,
-            ContentType = upstream.Content.Headers.ContentType?.ToString() ?? "application/json",
-        };
-    }
+    public Task<IActionResult> Upload(CancellationToken ct)
+        => Forward("api/backup/upload", ct);
 }

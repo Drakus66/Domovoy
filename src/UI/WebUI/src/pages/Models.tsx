@@ -20,6 +20,7 @@ import MlTaskWizard from '../components/ml/MlTaskWizard';
 import MlApplyWizard from '../components/ml/MlApplyWizard';
 import MlLayerControls from '../components/ml/MlLayerControls';
 import MlJournal from '../components/ml/MlJournal';
+import { confirmAction } from '../store/confirmStore';
 
 /**
  * The ML hub (Epic 2P): one card per training task — WHAT the house learns, whether it trained (and why not),
@@ -99,7 +100,7 @@ export default function Models() {
   };
 
   const removeTask = async (task: MlTask) => {
-    if (!window.confirm(t('confirmDeleteTask', { name: task.name }))) return;
+    if (!await confirmAction({ message: t('confirmDeleteTask', { name: task.name }) })) return;
     setError(null);
     try {
       await mlApi.deleteTask(task.id);

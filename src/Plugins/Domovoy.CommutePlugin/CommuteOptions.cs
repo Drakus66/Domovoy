@@ -6,19 +6,18 @@ namespace Domovoy.CommutePlugin;
 
 /// <summary>
 /// Plugin configuration, bound from the <c>COMMUTE</c> section / environment (e.g.
-/// <c>COMMUTE__PROVIDER</c>, <c>COMMUTE__TOMTOMAPIKEY</c>). The supervisor does not inject env into
-/// plugins, so these are supplied on the <c>plugin-supervisor</c> service and inherited by the child
-/// process (see docker-compose). All values have working defaults so the plugin runs with zero config.
+/// <c>COMMUTE__SETTINGSBASEURL</c>). The supervisor does not inject env into plugins, so these are
+/// supplied on the <c>plugin-supervisor</c> service and inherited by the child process (see
+/// docker-compose). All values have working defaults so the plugin runs with zero config.
+/// <para>
+/// What is <b>not</b> here: the traffic backend and its API key. Those are plugin <b>settings</b>
+/// (<see cref="CommuteSettings"/>), edited from the plugins panel and applied live over the settings
+/// channel — an env variable would mean editing compose and restarting to change a provider.
+/// </para>
 /// </summary>
 public sealed class CommuteOptions
 {
     public const string SectionName = "Commute";
-
-    /// <summary>Traffic backend: <c>simulated</c> (default, offline) or <c>tomtom</c> (needs a key + internet).</summary>
-    public string Provider { get; set; } = "simulated";
-
-    /// <summary>TomTom API key; when set and <see cref="Provider"/> is <c>tomtom</c>, live traffic is used.</summary>
-    public string? TomTomApiKey { get; set; }
 
     /// <summary>Base URL of the public API gateway the plugin reads the site location + geocoder from (Epic 2K).</summary>
     public string SettingsBaseUrl { get; set; } = "http://api-gateway:8080";

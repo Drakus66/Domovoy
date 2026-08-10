@@ -15,7 +15,7 @@ import CircleIcon from '@mui/icons-material/Circle';
 import ArrowRightAltRoundedIcon from '@mui/icons-material/ArrowRightAltRounded';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import {
-  CapabilityDevice, capabilityDevicesApi, isUnassignedZone, DEVICE_ARCHETYPES, effectiveArchetype,
+  CapabilityDevice, capabilityDevicesApi, isUnassignedZone, DEVICE_ARCHETYPES_FALLBACK, effectiveArchetype,
 } from '../../api/capabilityDevices';
 import type { Zone } from '../../api/zones';
 import { historyApi, EventLogEntry } from '../../api/history';
@@ -32,6 +32,7 @@ import LoadSheddingProfileEditor from './LoadSheddingProfileEditor';
 import { fmtDateTime } from '../../i18n/format';
 import TelemetryChart from '../charts/TelemetryChart';
 import TriggerChip from '../common/TriggerChip';
+import { deviceArchetypes } from '../../store/liveData';
 
 const fmtValue = (v: unknown): string => {
   if (v === null || v === undefined || v === '') return '—';
@@ -89,6 +90,10 @@ function DrawerBody({
   const { accent, Icon } = describeDevice(device);
   const offline = !device.isOnline;
   const currentZone = isUnassignedZone(device.zoneId) ? '' : device.zoneId;
+
+  // Словарь типов приходит с сервера (общий ресурс, редкий опрос): локальная копия успела отстать
+  // на три значения и не предлагала типов, которые система назначает сама.
+  const archetypes = deviceArchetypes.use().data ?? DEVICE_ARCHETYPES_FALLBACK;
 
   // The panel is split into tabs (overview / history / settings) so the setup forms — alias, zone,
   // archetype, energy role, load-shedding profile — no longer sit above the live surface and squeeze
@@ -431,7 +436,7 @@ function DrawerBody({
                 fullWidth
               >
                 <MenuItem value=""><em>{t('type.auto', { value: device.autoArchetype ?? t('type.unknown') })}</em></MenuItem>
-                {DEVICE_ARCHETYPES.map((a) => (
+                {archetypes.map((a) => (
                   <MenuItem key={a} value={a}>{a.replace(/_/g, ' ')}</MenuItem>
                 ))}
               </TextField>

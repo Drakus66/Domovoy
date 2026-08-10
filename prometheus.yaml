@@ -18,11 +18,6 @@ scrape_configs:
       - targets: ["db-gateway:8080"]
 
   # Worker hosts (no Kestrel) — metrics exposed via a standalone MetricServer on :9090.
-  - job_name: "unified-device-service"
-    metrics_path: /metrics
-    static_configs:
-      - targets: ["unified-device-service:9090"]
-
   - job_name: "connectivity-service"
     metrics_path: /metrics
     static_configs:

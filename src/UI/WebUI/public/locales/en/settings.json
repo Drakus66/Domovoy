@@ -85,6 +85,10 @@
     "label": "User",
     "anonymous": "Not set (anonymous)"
   },
+  "updates": {
+    "title": "Updates",
+    "caption": "Update channel, component versions, and updating the system in one press."
+  },
   "tariff": {
     "title": "Electricity tariff",
     "caption": "Static tariff zones (T1/T2/T3) — for money and the cheap-hours block. Works offline.",

@@ -21,6 +21,7 @@ import { capabilityIcon, capabilityLabel } from '../../devices/deviceVisuals';
 import { deviceLabel } from '../../devices/deviceNaming';
 import { DASHBOARD_ICONS, dashboardIcon } from '../dashboardIcons';
 import AddItemDialog from './AddItemDialog';
+import { confirmAction } from '../../../store/confirmStore';
 
 const blankDraft = (): DashboardInput => ({ name: '', icon: null, sections: [] });
 
@@ -108,7 +109,7 @@ export default function DashboardEditorDialog({
 
   const del = async () => {
     if (!dashboard) return;
-    if (!window.confirm(t('editor.deleteConfirm', { name: dashboard.name }))) return;
+    if (!await confirmAction({ message: t('editor.deleteConfirm', { name: dashboard.name }) })) return;
     if (await remove(dashboard.id)) {
       onDeleted?.(dashboard.id);
       onClose();

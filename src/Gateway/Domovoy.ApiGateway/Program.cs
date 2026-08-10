@@ -81,7 +81,9 @@ internal static class Program
 
             if (jwtEnabled)
             {
-                var secretKey = jwtSettings["SecretKey"] ?? "DefaultDevelopmentSecretKeyThatShouldBeReplacedInProduction";
+                // Падает на старте, а не на первом входе: неверная настройка безопасности должна быть
+                // видна сразу и в журнале, а не проявляться подписью общеизвестным секретом.
+                var secretKey = Services.JwtTokenService.RequireSecret(builder.Configuration);
                 var issuer = jwtSettings["Issuer"] ?? "domovoy";
                 var audience = jwtSettings["Audience"] ?? "domovoy-clients";
 
@@ -155,6 +157,18 @@ internal static class Program
                 // Replay scans history; ML training (2P) pages telemetry + fits several templates per scope —
                 // a multi-zone train run takes tens of seconds, so give the proxy real headroom.
                 client.Timeout = TimeSpan.FromSeconds(180);
+            });
+
+            // Delivery service hosts the update API (roadmap Epic 3K); proxy to it. It publishes no ports
+            // outside domovoy-network, so this proxy — with its auth and system.admin policy — is the only
+            // way to reach it.
+            var updaterUrl = builder.Configuration["Updater:BaseUrl"] ?? "http://domovoy-updater:8080";
+            builder.Services.AddHttpClient("updater", client =>
+            {
+                client.BaseAddress = new Uri(updaterUrl);
+                // Checking the channel walks every component's manifest in the registry; over a slow
+                // home connection that is seconds, not milliseconds.
+                client.Timeout = TimeSpan.FromSeconds(120);
             });
 
             // PluginSupervisor hosts the plugin registry + lifecycle API (roadmap Epic 1C); proxy to it.
@@ -237,8 +251,13 @@ internal static class Program
             app.UseCors("CorsPolicy");
 
             app.UseMiddleware<Middleware.RequestLoggingMiddleware>();
-            app.UseMiddleware<Middleware.RequestCounterMiddleware>();
-            app.UseMiddleware<Middleware.RouteCounterMiddleware>();
+
+            // Prometheus по шаблону маршрута (как в DbGateway). Прежняя пара самописных middleware
+            // клеила метки из СЫРОГО пути — с GUID устройств и именами файлов бэкапов внутри, то есть
+            // выдавала новый временной ряд на каждое устройство и каждый бэкап. Это бомба кардинальности:
+            // ряды в Prometheus не истекают, память растёт молча. Заодно снято дублирование смысла:
+            // счётчик, гистограмма и «активные запросы» были расписаны дважды в двух middleware.
+            app.UseHttpMetrics();
 
             // Start Prometheus
             var metricServer = app.Services.GetRequiredService<MetricServer>();

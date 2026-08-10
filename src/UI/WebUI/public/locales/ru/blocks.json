@@ -202,7 +202,6 @@
     }
   },
   "chip": {
-    "disabled": "выключен",
     "stage": "уровень: {{stage}}"
   },
   "stageName": {

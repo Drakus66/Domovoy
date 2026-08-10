@@ -7,27 +7,6 @@ networks:
 services:
   # ============ Application Services ============
 
-  # Subscribes to the capability contract on the bus and re-emits normalized state for SignalR/persist.
-  # No HTTP/MQTT — RabbitMQ AMQP only.
-  unified-device-service:
-    container_name: unified-device-service
-    image: ${DOCKER_REGISTRY-}unified-device-service
-    build:
-      context: .
-      dockerfile: src/Services/Domovoy.UnifiedDeviceService/Dockerfile
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - domovoy-network
-    environment:
-      - RABBITMQ__HOSTNAME=rabbitmq
-      - RABBITMQ__PORT=5672
-      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
-      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
-      - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
-    restart: unless-stopped
-
   # Owns the MQTT client; runs Zigbee2MQTT + Domovoy Native adapters and publishes the capability
   # contract. Needs RabbitMQ (AMQP + MQTT broker), nothing else.
   connectivity-service:
@@ -46,8 +25,13 @@ services:
       - RABBITMQ__PORT=5672
       - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      # Device MQTT broker — a separate contour from the bus, with its own settings. Same container
+      # here only because RabbitMQ hosts both; pointing devices at a standalone broker is a change to
+      # these four variables and nothing else.
       - MQTT__BROKER=rabbitmq
       - MQTT__PORT=1883
+      - MQTT__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - MQTT__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
     restart: unless-stopped
 
@@ -118,12 +102,13 @@ services:
       - AUTOMATIONSERVICE__BASEURL=http://automation-service:8080
       - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
       # Local authentication (mobile-app / remote-access track). ON = the API is gated by login + permissions;
-      # this is the posture required before any external exposure (IPv6-direct / SSH-tunnel). ⚠️ Override the
-      # secret in .env (JWT_SECRET_KEY) with a long random value — e.g. `openssl rand -base64 48` — before
-      # exposing the system; the default below is a public placeholder. Set JWTSETTINGS__ENABLED=false to run
-      # the stack open on a trusted LAN.
+      # this is the posture required before any external exposure (IPv6-direct / SSH-tunnel).
+      # ⚠️ JWT_SECRET_KEY is REQUIRED in .env — a long random value, e.g. `openssl rand -base64 48`.
+      # There is no default: the gateway refuses to start without it (a secret shipped in the repository
+      # is a secret everyone has, i.e. authentication that only looks enabled). Set
+      # JWTSETTINGS__ENABLED=false to run the stack open on a trusted LAN.
       - JWTSETTINGS__ENABLED=true
-      - JWTSETTINGS__SECRETKEY=${JWT_SECRET_KEY:-YourSuperSecretKeyForDomovoyShouldBeVeryLongAndComplex}
+      - JWTSETTINGS__SECRETKEY=${JWT_SECRET_KEY:-}
       # Restrict CORS once exposed (array via indexed env, e.g. CORS__ALLOWEDORIGINS__0=https://home.example).
       # Same-origin (the UI served by nginx) needs no entry; the app / external hostnames do. Empty = dev-open.
       # - CORS__ALLOWEDORIGINS__0=https://home.example.com
@@ -233,12 +218,49 @@ services:
       - domovoy-network
     ports:
       - "80:80"
+    # >>> dev-only
     # UI translations are runtime-loaded static JSON (i18next-http-backend). Mounting
     # the source locales over the served folder means editing a language — or, later,
     # dropping a new one — takes effect on refresh with NO image rebuild. Read-only:
     # the container never writes here.
+    # Dev-only: a deployed host has no ./src, and the built image already carries the
+    # locales — the topology generator (Epic 3K) strips this block from the shipped compose.
     volumes:
       - ./src/UI/WebUI/public/locales:/usr/share/nginx/html/locales:ro
+    # <<< dev-only
+    restart: unless-stopped
+
+  # Delivery + self-update (Epic 3K). Watches the image registry for the channel the system is
+  # subscribed to (dev|release), resolves what a requested update pulls in via the declared
+  # interface versions, and applies it: backup → pull by digest → `docker compose up -d` per
+  # dependency group. Owns the installation directory (releases/, state/, .env) and the Docker
+  # socket; publishes no ports — it is reachable only from inside domovoy-network.
+  # ⚠️ docker.sock is root-equivalent host access. It lives HERE rather than on the
+  # internet-facing api-gateway on purpose: the privilege sits in one narrow service.
+  domovoy-updater:
+    container_name: domovoy-updater
+    image: ${DOCKER_REGISTRY-}domovoy-updater
+    build:
+      context: .
+      dockerfile: src/Services/Domovoy.Updater/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - domovoy-network
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # The installation root: releases/, state/, .env, docker-compose.override.yml.
+      # Read-write — applying a release writes a new release directory and flips `current`.
+      - ${DOMOVOY_INSTALL_DIR:-.}:/opt/domovoy
+    environment:
+      - RABBITMQ__HOSTNAME=rabbitmq
+      - RABBITMQ__PORT=5672
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
+      - UPDATES__INSTALLDIRECTORY=/opt/domovoy
+      - UPDATES__DBGATEWAYBASEURL=http://db-gateway:8080
     restart: unless-stopped
 
   # ============ Remote access (opt-in profiles) ============

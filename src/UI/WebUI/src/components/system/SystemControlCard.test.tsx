@@ -22,7 +22,6 @@ const mocked = vi.mocked(systemApi);
 describe('SystemControlCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mocked.getServices.mockResolvedValue({
       dockerEnabled: false,
       services: [

@@ -1,0 +1,150 @@
+{
+  "_comment": [
+    "Источник истины по версиям и совместимости компонентов Domovoy (Эпик 3K).",
+    "MAJOR.MINOR задаётся здесь вручную, PATCH подставляет CI (номер прогона).",
+    "",
+    "Модель совместимости — три вида ограничений:",
+    "  bus      — общая шина (Domovoy.Contracts живёт в каждом образе, провайдера нет).",
+    "             Набор совместим, когда max(understands) <= min(speaks).",
+    "  provides — именованный интерфейс, который компонент предоставляет по HTTP.",
+    "             Поддерживается диапазон [minCompat, version].",
+    "  requires — минимальная версия интерфейса, нужная компоненту.",
+    "             Совместимо, когда minCompat <= requires <= version у провайдера.",
+    "",
+    "Зависимости объявляются на ИНТЕРФЕЙС, а не на сервис — у каждого интерфейса ровно",
+    "один провайдер, поэтому произвольные циклы в графе структурно не возникают.",
+    "",
+    "Шина v3: снят UnifiedDeviceService и вместе с ним legacy-событие DeviceStateUpdatedEvent",
+    "на обменнике device.events. Изменение ЛОМАЮЩЕЕ, поэтому understands поднят у всех: старый",
+    "api-gateway, подписанный на снятое событие, рядом с новой топологией молча перестал бы",
+    "отдавать состояние устройств в SignalR. Поднятый understands приводит решатель к",
+    "«обновить всё» — это вывод модели, а не отдельный режим.",
+    "",
+    "ВАЖНО: правила обновления этого файла — docs/architecture/coding_standards_ru.md,",
+    "раздел «Контракты и совместимость». Незаявленное изменение контракта роняет CI",
+    "(job contract-guard) и, для публичной поверхности Domovoy.Contracts, локальную сборку.",
+    "",
+    "Что НЕ входит ни в один компонент и почему:",
+    "  src/Tools/**  — локальные инструменты разработчика (эмулятор устройств). Намеренно не",
+    "                  поставляются: в docker их нет, каналом обновлений им ехать некуда.",
+    "  tests/**, Arduino/**, docs/** — по той же причине.",
+    "Всё остальное под src/ обязано принадлежать компоненту, иначе правка даст пустую матрицу",
+    "сборки и молча не доедет до дома."
+  ],
+
+  "registry": "ghcr.io/drakus66",
+  "imagePrefix": "domovoy-",
+
+  "sharedPaths": [
+    "src/Common/**",
+    "Directory.Build.props",
+    "Directory.Packages.props",
+    "Domovoy.sln",
+    "build/components.json"
+  ],
+
+  "topology": {
+    "image": "topology",
+    "_comment": "Держать в согласии с build/topology/manifest.json — там же и обоснование версии.",
+    "version": 3,
+    "minCompat": 1,
+    "paths": [
+      "docker-compose.yml",
+      "build/topology/**",
+      "build/tools/gen-topology.mjs"
+    ]
+  },
+
+  "components": [
+    {
+      "name": "db-gateway",
+      "container": "db-gateway",
+      "dockerfile": "src/Gateway/Domovoy.DbGateway/Dockerfile",
+      "context": ".",
+      "runtime": "dotnet",
+      "version": "1.2",
+      "bus": { "speaks": 3, "understands": 3 },
+      "provides": { "db-api": { "version": 4, "minCompat": 1 } },
+      "requires": {},
+      "paths": ["src/Gateway/Domovoy.DbGateway/**"]
+    },
+    {
+      "name": "automation-service",
+      "container": "automation-service",
+      "dockerfile": "src/Services/Domovoy.AutomationService/Dockerfile",
+      "context": ".",
+      "runtime": "dotnet",
+      "version": "1.2",
+      "bus": { "speaks": 3, "understands": 3 },
+      "provides": { "automation-api": { "version": 1, "minCompat": 1 } },
+      "requires": { "db-api": 1 },
+      "paths": ["src/Services/Domovoy.AutomationService/**"]
+    },
+    {
+      "name": "connectivity-service",
+      "container": "connectivity-service",
+      "dockerfile": "src/Services/Domovoy.Connectivity/Dockerfile",
+      "context": ".",
+      "runtime": "dotnet",
+      "version": "1.2",
+      "bus": { "speaks": 3, "understands": 3 },
+      "provides": {},
+      "requires": { "topology": 2 },
+      "paths": ["src/Services/Domovoy.Connectivity/**"]
+    },
+    {
+      "name": "updater",
+      "container": "domovoy-updater",
+      "dockerfile": "src/Services/Domovoy.Updater/Dockerfile",
+      "context": ".",
+      "runtime": "dotnet",
+      "version": "1.2",
+      "bus": { "speaks": 3, "understands": 3 },
+      "provides": { "updater-api": { "version": 1, "minCompat": 1 } },
+      "requires": { "db-api": 1 },
+      "paths": ["src/Services/Domovoy.Updater/**"]
+    },
+    {
+      "name": "api-gateway",
+      "container": "api-gateway",
+      "dockerfile": "src/Gateway/Domovoy.ApiGateway/Dockerfile",
+      "context": ".",
+      "runtime": "dotnet",
+      "version": "1.2",
+      "bus": { "speaks": 3, "understands": 3 },
+      "provides": { "rest-api": { "version": 3, "minCompat": 1 } },
+      "requires": { "db-api": 4, "automation-api": 1, "updater-api": 1, "topology": 3 },
+      "paths": ["src/Gateway/Domovoy.ApiGateway/**"]
+    },
+    {
+      "name": "plugin-supervisor",
+      "container": "plugin-supervisor",
+      "dockerfile": "src/Services/Domovoy.PluginSupervisor/Dockerfile",
+      "context": ".",
+      "runtime": "dotnet",
+      "version": "1.2",
+      "bus": { "speaks": 3, "understands": 3 },
+      "provides": {},
+      "requires": { "rest-api": 1 },
+      "_pathsComment": [
+        "src/Plugins/** входит сюда намеренно: первопартийные плагины публикуются ВНУТРЬ образа",
+        "супервизора (его Dockerfile) и раскладываются им в plugins-root на старте. Плагин — папка",
+        "на томе хоста, а не compose-сервис, поэтому отдельным компонентом реестра он быть не может,",
+        "а без этой строки правка плагина давала пустую матрицу сборки и не доезжала до дома вовсе."
+      ],
+      "paths": ["src/Services/Domovoy.PluginSupervisor/**", "src/Plugins/**"]
+    },
+    {
+      "name": "webui",
+      "container": "webui",
+      "dockerfile": "Dockerfile",
+      "context": "src/UI/WebUI",
+      "runtime": "node",
+      "version": "1.2",
+      "bus": null,
+      "provides": {},
+      "requires": { "rest-api": 3 },
+      "paths": ["src/UI/WebUI/**"]
+    }
+  ]
+}

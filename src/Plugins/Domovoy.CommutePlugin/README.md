@@ -121,9 +121,12 @@ service and inherited by the child process. Keys (see `CommuteOptions`):
 | Env | Default | Meaning |
 |---|---|---|
 | `RABBITMQ__HOSTNAME` / `__PORT` / `__USERNAME` / `__PASSWORD` | `rabbitmq` / `5672` / `user` / `user` | Bus connection. |
-| `COMMUTE__PROVIDER` | `simulated` | `simulated` (offline) or `tomtom`. |
-| `COMMUTE__TOMTOMAPIKEY` | — | TomTom key; enables live traffic. |
 | `COMMUTE__SETTINGSBASEURL` | `http://api-gateway:8080` | Where to read the site location / geocoder. |
+
+The traffic backend and its API key are **not** env: they are plugin **settings** (`CommuteSettings`,
+keys `provider` / `tomTomApiKey`), edited from the plugins panel and applied live over the settings
+channel. `COMMUTE__PROVIDER` / `COMMUTE__TOMTOMAPIKEY` no longer exist — changing a provider must not
+mean editing compose and restarting the stack.
 
 The **traffic backend is a replaceable port** (`ITrafficProvider`): the default `SimulatedTrafficProvider`
 needs no key or network; `TomTomTrafficProvider` plugs in when a key is set. Swapping in HERE or a paid

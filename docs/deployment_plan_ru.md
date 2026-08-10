@@ -131,6 +131,31 @@
 6. **Перезапуск сервисов из UI (опционально).** Self-restart через шину live-verified только на `db-gateway`;
    для остальных (`connectivity`/`automation`/`unified`/`plugin-supervisor` + `webui`) нужна досборка образов.
    **Не блокер** — без неё рестарт делается `docker compose restart <svc>` вручную.
+7. **Одноразовое удаление старых очередей шины (только для уже работавшего стенда).** MQTT-ветки убраны из
+   `RabbitMqConnection`, поэтому очереди `domovoy.*` больше не объявляются с аргументом
+   `mqtt-subscription-qos`. Очередь, созданная прежней версией, при обновлении даст `PRECONDITION_FAILED 406`,
+   и сервис уйдёт в запасной путь **без dead-lettering** (сбойное сообщение будет крутиться вечно). В журнале
+   это видно как ERROR с готовой командой. Разово, после остановки стека:
+
+   ```bash
+   docker exec rabbitmq rabbitmqctl list_queues name arguments | grep mqtt-subscription-qos
+   docker exec rabbitmq rabbitmqctl delete_queue <очередь>   # для каждой найденной
+   ```
+
+   **Проверка после запуска:** у каждой очереди `domovoy.*` есть аргумент `x-dead-letter-exchange: domovoy.dlx`
+   и парная очередь `<queue>.dlq`. На чистой установке шаг не нужен.
+8. **`JWT_SECRET_KEY` стал обязательным.** Публичного значения по умолчанию у секрета подписи больше нет
+   ни в `appsettings.json`, ни в коде, ни в compose: при `JWTSETTINGS__ENABLED=true` и пустом секрете
+   api-gateway отказывается стартовать с внятным сообщением. Секрет, лежащий в репозитории, есть у всех —
+   аутентификация с ним только выглядела включённой. **До обновления** убедиться, что в `/opt/domovoy/.env`
+   задано:
+
+   ```bash
+   grep -q '^JWT_SECRET_KEY=..' /opt/domovoy/.env || \
+     echo "JWT_SECRET_KEY=$(openssl rand -base64 48)" >> /opt/domovoy/.env
+   ```
+
+   Смена секрета инвалидирует выданные токены — потребуется повторный вход в WebUI и в приложении.
 
 ---
 

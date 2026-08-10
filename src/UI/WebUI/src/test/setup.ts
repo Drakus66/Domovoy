@@ -11,7 +11,9 @@ import i18n, { type ResourceLanguage } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import { baseOptions } from '../i18n/config';
 import { DEFAULT_LANGUAGE } from '../i18n/languages';
+import { resetSharedResources } from '../store/sharedResource';
 import { useAuthStore } from '../store/authStore';
+import { useConfirmStore } from '../store/confirmStore';
 
 // Tests can't use http-backend (no static server under jsdom), so init i18next with
 // the real locale JSON loaded inline. Language is pinned to the Russian default, so
@@ -91,9 +93,6 @@ export const handlers = [
   http.get('/api/sensors', () => {
     return HttpResponse.json([]);
   }),
-  http.get('/api/logs', () => {
-    return HttpResponse.json({ data: [], totalCount: 0 });
-  }),
   // Custom dashboards: the main page loads these on every mount (wildcard host —
   // the axios client uses an absolute base URL).
   http.get('*/api/dashboards', () => {
@@ -116,12 +115,19 @@ beforeAll(() => {
 // re-confirms via the MSW handler above — same result.
 beforeEach(() => {
   useAuthStore.setState({ status: 'authenticated', user: { ...TEST_AUTH_USER } });
+  // Подтверждение опасного действия — общий диалог (store/confirmStore). В тестах он по умолчанию
+  // отвечает «да»: проверять хотят последствие действия, а не механику диалога. Тест, которому важен
+  // сам вопрос, подменяет `ask` у себя и смотрит на переданное сообщение.
+  useConfirmStore.setState({ request: null, resolve: null, ask: () => Promise.resolve(true) });
 });
 
 // Reset handlers after each test
 afterEach(() => {
   server.resetHandlers();
   cleanup();
+  // Общие ресурсы (store/sharedResource) живут в модуле и переживают отдельный тест: без сброса
+  // следующий тест увидел бы дом, оставшийся от предыдущего.
+  resetSharedResources();
 });
 
 // Close server after all tests

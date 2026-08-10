@@ -25,14 +25,14 @@ ZIGBEE_DEVICE_PATH=/dev/serial/by-id/usb-Itead_Sonoff_Zigbee_3.0_USB_Dongle_Plus
 ## 2. Запуск стека (без Zigbee)
 
 ```powershell
-docker compose up -d rabbitmq mongodb prometheus db-gateway api-gateway connectivity-service unified-device-service webui
+docker compose up -d rabbitmq mongodb prometheus db-gateway api-gateway connectivity-service webui
 ```
 
 Состояние:
 
 ```powershell
 docker compose ps
-docker compose logs -f connectivity-service unified-device-service db-gateway api-gateway
+docker compose logs -f connectivity-service db-gateway api-gateway
 ```
 
 ## 2b. Запуск с Zigbee USB-стиком (Windows + WSL2)
@@ -101,7 +101,7 @@ dotnet run
 |---|---|---|
 | 1 — UI сервера | список capability-устройств, контролы по capability, live по SignalR | http://localhost (`/devices`) |
 | 2 — UI эмулятора | сенсорные значения (ползунки), состояние актуаторов, лог MQTT | http://localhost:5080 |
-| 3 — Логи | сквозная диагностика | консоль `dotnet run` + `docker compose logs -f connectivity-service unified-device-service api-gateway db-gateway` |
+| 3 — Логи | сквозная диагностика | консоль `dotnet run` + `docker compose logs -f connectivity-service api-gateway db-gateway` |
 
 ## 5. Прогон сценария
 
@@ -139,7 +139,7 @@ dotnet run
 
 ```powershell
 # логи нужных сервисов
-docker compose logs -f api-gateway connectivity-service unified-device-service db-gateway
+docker compose logs -f api-gateway connectivity-service db-gateway
 
 # пересборка одного сервиса после правки кода
 docker compose up -d --build api-gateway

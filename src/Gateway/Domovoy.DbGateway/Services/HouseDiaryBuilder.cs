@@ -186,7 +186,7 @@ public sealed class HouseDiaryBuilder : BackgroundService
             var loc = await _db.GetCollection<SiteLocation>(SettingsEndpoints.Collection)
                 .Find(x => x.Id == SiteLocation.SingletonId).FirstOrDefaultAsync(ct);
             if (!string.IsNullOrWhiteSpace(loc?.TimeZoneId))
-                return TimeZoneInfo.FindSystemTimeZoneById(loc.TimeZoneId);
+                return SiteTimeZone.Resolve(loc.TimeZoneId);
         }
         catch (Exception ex)
         {

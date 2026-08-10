@@ -20,6 +20,7 @@ import BatteryFullRoundedIcon from '@mui/icons-material/BatteryFullRounded';
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
 import { presenceApi, Resident, ResidentInput, PresenceSettings, PresenceStatus } from '../api/presence';
 import { securityApi, User } from '../api/security';
+import { confirmAction } from '../store/confirmStore';
 
 const EMPTY_RESIDENT: ResidentInput = { displayName: '', userId: null, ownTracksId: null, trackingEnabled: true };
 
@@ -96,7 +97,7 @@ export default function Presence() {
     } catch { setError(t('errors.save')); }
   };
   const remove = async (r: Resident) => {
-    if (!window.confirm(i18n.t('presence:deleteConfirm', { name: r.displayName }))) return;
+    if (!await confirmAction({ message: i18n.t('presence:deleteConfirm', { name: r.displayName }) })) return;
     try { await presenceApi.deleteResident(r.id); await fetchAll(); loadStatus(); } catch { setError(t('errors.delete')); }
   };
 

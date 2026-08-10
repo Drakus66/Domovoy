@@ -172,7 +172,6 @@ describe('Settings page', () => {
   });
 
   it('restores a bundle after confirmation', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedBackups.restore.mockResolvedValue({
       restored: sampleBackup.fileName, collections: 20, documents: 1234,
       pluginSettings: 1, extrasStagingDirectory: null, restarting: true,
@@ -185,8 +184,6 @@ describe('Settings page', () => {
     fireEvent.click(restoreButton[0]);
 
     await waitFor(() => expect(mockedBackups.restore).toHaveBeenCalledWith(sampleBackup.fileName));
-    expect(confirmSpy).toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 
   it('geocodes a place search into results', async () => {

@@ -455,10 +455,6 @@ public sealed class MlTrainingService : BackgroundService
 
     // ===== Backtest (Epic 2B / 2P) =====
 
-    /// <summary>Backtest the options-default target's global model (back-compat overload).</summary>
-    public Task<Backtest> BacktestAsync(int days, CancellationToken ct) =>
-        BacktestAsync(_options.TrainCapability, null, null, days, ct);
-
     /// <summary>
     /// Score the serving model of (target, scope) against recent history (roadmap Epic 2B/2P) — "prediction vs
     /// fact". Numeric targets compare predicted vs measured values; boolean targets compare the predicted

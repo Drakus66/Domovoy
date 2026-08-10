@@ -88,8 +88,7 @@
   },
   "widgets": {
     "modes": "Home mode",
-    "scene": "Scene",
-    "energy": "Energy"
+    "scene": "Scene"
   },
   "band": {
     "mode": "Mode",
@@ -128,7 +127,6 @@
     },
     "cost": "Cost",
     "consumption": "Consumption",
-    "topConsumers": "Top consumers",
     "view": {
       "devices": "Devices",
       "circuits": "Circuits",

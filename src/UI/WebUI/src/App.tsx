@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
@@ -13,24 +13,31 @@ import AuthGate from './components/auth/AuthGate';
 import NotificationHubListener from './components/notifications/NotificationHubListener';
 import Layout from './components/layout/Layout';
 import Devices from './pages/Devices';
-import DeviceRegistry from './pages/DeviceRegistry';
-import Zones from './pages/Zones';
-import Modes from './pages/Modes';
-import Automations from './pages/Automations';
-import Scenes from './pages/Scenes';
-import Variables from './pages/Variables';
-import Blocks from './pages/Blocks';
-import Plugins from './pages/Plugins';
-import Models from './pages/Models';
-import Proposals from './pages/Proposals';
-import Users from './pages/Users';
-import Presence from './pages/Presence';
-import Logs from './pages/Logs';
-import SystemStatus from './pages/SystemStatus';
-import ZigbeeDevices from './pages/ZigbeeDevices';
-import Settings from './pages/Settings';
-import NotFound from './pages/NotFound';
 import { NotificationContainer } from './components/common';
+import ConfirmDialog from './components/common/ConfirmDialog';
+
+// Разбиение на части по маршрутам. Главная (`Devices`) остаётся в основном пакете — с неё начинается
+// любой визит. Остальное грузится по требованию: `Blocks` тянет за собой xyflow, `Settings` —
+// pigeon-maps, и до правки эти библиотеки лежали в основном пакете у каждого, кто просто открыл дом.
+// Загрузку прикрывает уже стоящий вокруг маршрутов <Suspense>.
+const DeviceRegistry = lazy(() => import('./pages/DeviceRegistry'));
+const Zones = lazy(() => import('./pages/Zones'));
+const Modes = lazy(() => import('./pages/Modes'));
+const Automations = lazy(() => import('./pages/Automations'));
+const Scenes = lazy(() => import('./pages/Scenes'));
+const Variables = lazy(() => import('./pages/Variables'));
+const Blocks = lazy(() => import('./pages/Blocks'));
+const Plugins = lazy(() => import('./pages/Plugins'));
+const Models = lazy(() => import('./pages/Models'));
+const Proposals = lazy(() => import('./pages/Proposals'));
+const Users = lazy(() => import('./pages/Users'));
+const Presence = lazy(() => import('./pages/Presence'));
+const Logs = lazy(() => import('./pages/Logs'));
+const SystemStatus = lazy(() => import('./pages/SystemStatus'));
+const ZigbeeDevices = lazy(() => import('./pages/ZigbeeDevices'));
+const Settings = lazy(() => import('./pages/Settings'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+
 
 function App() {
   const themeId = useThemeStore((s) => s.themeId);
@@ -73,6 +80,7 @@ function App() {
         </AuthGate>
       </Suspense>
       <NotificationContainer />
+      <ConfirmDialog />
     </CssVarsProvider>
   );
 }

@@ -202,7 +202,6 @@
     }
   },
   "chip": {
-    "disabled": "disabled",
     "stage": "stage: {{stage}}"
   },
   "stageName": {

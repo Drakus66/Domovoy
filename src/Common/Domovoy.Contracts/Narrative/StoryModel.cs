@@ -29,7 +29,7 @@ public enum PersonaRole
 /// <summary>The kind of change a capability underwent — drives verb selection (language-neutral).</summary>
 public enum Transition
 {
-    On, Off, Increase, Decrease, Open, Close, Lock, Unlock, Enter, Set, Reached,
+    On, Off, Increase, Decrease, Open, Close, Lock, Unlock, Enter, Set,
 }
 
 /// <summary>

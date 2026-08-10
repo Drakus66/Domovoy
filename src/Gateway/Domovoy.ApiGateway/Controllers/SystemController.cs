@@ -39,8 +39,10 @@ public class SystemController : ControllerBase
         new("db-gateway", "gateway"),
         new("connectivity-service", "service"),
         new("automation-service", "service"),
-        new("unified-device-service", "service"),
         new("plugin-supervisor", "service"),
+        // Epic 3K: the delivery service calls AddSystemControl("domovoy-updater") like the rest, so it
+        // self-restarts over the bus; it just needs to be listed to appear in the UI.
+        new("domovoy-updater", "service"),
     };
 
     public SystemController(IMessageBus bus, IContainerControl containers, ILogger<SystemController> logger)

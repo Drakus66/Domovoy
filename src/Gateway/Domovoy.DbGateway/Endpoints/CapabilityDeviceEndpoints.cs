@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using Domovoy.Contracts.Devices;
 using Domovoy.DbGateway.Models;
 using Domovoy.DbGateway.Services;
 
@@ -50,6 +51,11 @@ public static class CapabilityDeviceEndpoints
         var group = app.MapGroup("/api/capability-devices")
             .WithTags("CapabilityDevices")
             .WithOpenApi();
+
+        // Словарь архетипов — из контракта, а не из копии в интерфейсе. Копия в WebUI уже отстала на
+        // три значения (tariff, person, presence): список выбора не предлагал типов, которые система
+        // назначает сама. Образец — RolesEndpoints, отдающий WellKnownPermissions.All.
+        group.MapGet("/archetypes", () => Results.Ok(DeviceArchetypes.All));
 
         // List, optionally filtered by zone (?zoneId=...; empty string returns unassigned devices).
         group.MapGet("/", async (string? zoneId, IMongoDatabase db) =>

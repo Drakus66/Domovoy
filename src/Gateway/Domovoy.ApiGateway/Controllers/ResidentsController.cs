@@ -17,55 +17,27 @@ namespace Domovoy.ApiGateway.Controllers;
 [ApiController]
 [Route("api/residents")]
 [Authorize(Policy = WellKnownPermissions.UsersManage)]
-public class ResidentsController : ControllerBase
+public class ResidentsController : ProxyController
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-
-    public ResidentsController(IHttpClientFactory httpClientFactory)
-        => _httpClientFactory = httpClientFactory;
+    public ResidentsController(IHttpClientFactory httpClientFactory) : base(httpClientFactory) { }
 
     [HttpGet]
     public Task<IActionResult> List(CancellationToken ct)
-        => Forward(HttpMethod.Get, "api/residents", ct);
+        => Forward("api/residents", ct);
 
     [HttpGet("{id}")]
     public Task<IActionResult> Get(string id, CancellationToken ct)
-        => Forward(HttpMethod.Get, $"api/residents/{Uri.EscapeDataString(id)}", ct);
+        => Forward($"api/residents/{Uri.EscapeDataString(id)}", ct);
 
     [HttpPost]
     public Task<IActionResult> Create(CancellationToken ct)
-        => Forward(HttpMethod.Post, "api/residents", ct);
+        => Forward("api/residents", ct);
 
     [HttpPut("{id}")]
     public Task<IActionResult> Update(string id, CancellationToken ct)
-        => Forward(HttpMethod.Put, $"api/residents/{Uri.EscapeDataString(id)}", ct);
+        => Forward($"api/residents/{Uri.EscapeDataString(id)}", ct);
 
     [HttpDelete("{id}")]
     public Task<IActionResult> Delete(string id, CancellationToken ct)
-        => Forward(HttpMethod.Delete, $"api/residents/{Uri.EscapeDataString(id)}", ct);
-
-    private async Task<IActionResult> Forward(HttpMethod method, string relativePath, CancellationToken ct)
-    {
-        var client = _httpClientFactory.CreateClient("db-gateway");
-        using var request = new HttpRequestMessage(method, relativePath);
-
-        if (method == HttpMethod.Post || method == HttpMethod.Put)
-        {
-            Request.EnableBuffering();
-            Request.Body.Position = 0;
-            using var reader = new StreamReader(Request.Body, leaveOpen: true);
-            var body = await reader.ReadToEndAsync(ct);
-            request.Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
-        }
-
-        using var upstream = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        var responseBody = await upstream.Content.ReadAsStringAsync(ct);
-
-        return new ContentResult
-        {
-            StatusCode = (int)upstream.StatusCode,
-            Content = string.IsNullOrEmpty(responseBody) ? null : responseBody,
-            ContentType = upstream.Content.Headers.ContentType?.ToString() ?? "application/json",
-        };
-    }
+        => Forward($"api/residents/{Uri.EscapeDataString(id)}", ct);
 }

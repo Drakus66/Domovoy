@@ -123,15 +123,6 @@ public static class LoadShedPlanner
     }
 
     /// <summary>
-    /// Plan restores against a single household budget — the common case, kept as a thin wrapper over the
-    /// scope-aware overload below.
-    /// </summary>
-    public static RestorePlanResult PlanRestore(
-        IReadOnlyList<ShedStackEntry> stack, IReadOnlyDictionary<Guid, LoadCandidate> loadsById,
-        double measuredWatts, double limitWatts, double marginWatts, int minDwellSeconds, DateTime nowUtc) =>
-        PlanRestore(stack, loadsById, _ => (measuredWatts, limitWatts), marginWatts, minDwellSeconds, nowUtc);
-
-    /// <summary>
     /// Plan restores by popping the shed stack strictly in reverse (LIFO) order: stops at the first entry
     /// that either hasn't dwelled <paramref name="minDwellSeconds"/> yet, or whose restore would eat the
     /// required <paramref name="marginWatts"/> headroom — it never skips ahead to an older entry.

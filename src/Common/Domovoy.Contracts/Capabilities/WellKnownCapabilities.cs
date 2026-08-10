@@ -52,23 +52,11 @@ public static class WellKnownCapabilities
     public static Capability Humidity() =>
         Number(CapabilityIds.Humidity, "%", 0, 100, writable: false);
 
-    public static Capability Co2() =>
-        Number(CapabilityIds.Co2, "ppm", 0, null, writable: false);
-
-    public static Capability Valve() =>
-        Number(CapabilityIds.Valve, "%", 0, 100, step: 1, writable: true);
-
     public static Capability Battery() =>
         Number(CapabilityIds.Battery, "%", 0, 100, writable: false);
 
-    public static Capability Illuminance() =>
-        Number(CapabilityIds.Illuminance, "lux", 0, null, writable: false);
-
     public static Capability Power() =>
         Number(CapabilityIds.Power, "W", 0, null, writable: false);
-
-    public static Capability Energy() =>
-        Number(CapabilityIds.Energy, "kWh", 0, null, writable: false);
 
     // --- Energy domain (roadmap Epic 3C) — read-only, platform/tariff-reported ---
 
@@ -108,7 +96,7 @@ public static class WellKnownCapabilities
         Text(CapabilityIds.Clock, writable: false);
 
     /// <summary>Local day-of-week as an enum over English day names (Monday..Sunday).</summary>
-    public static readonly IReadOnlyList<string> DayNames =
+    private static readonly IReadOnlyList<string> DayNames =
         new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" };
 
     public static Capability DayOfWeek() =>
@@ -133,10 +121,6 @@ public static class WellKnownCapabilities
     /// values listed (grid/grid_peak/battery/solar/off).</summary>
     public static Capability PowerSourceCap() =>
         Enum(CapabilityIds.PowerSource, Home.WellKnownPowerSources.All, writable: true);
-
-    public static Capability Color(bool writable = true) =>
-        new(CapabilityIds.Color, CapabilityKind.Color,
-            new Dictionary<string, object?> { [CapabilityAttributeKeys.Writable] = writable });
 
     /// <summary>Builds a boolean capability.</summary>
     public static Capability Boolean(string id, bool writable) =>

@@ -96,7 +96,6 @@ public static class CapabilityAttributeKeys
     public const string Max = "max";
     public const string Step = "step";
     public const string Writable = "writable"; // bool — can be commanded
-    public const string Readable = "readable"; // bool — reports state
     public const string Values = "values";     // string[] — allowed values for Enum kind
     public const string Editor = "editor";     // string — UI editor hint for a writable value (see CapabilityEditors)
 }
@@ -130,8 +129,4 @@ public sealed record Capability(
     /// <summary>True when the capability can be written via a command.</summary>
     public bool IsWritable =>
         Attributes.TryGetValue(CapabilityAttributeKeys.Writable, out var w) && w is true;
-
-    /// <summary>True when the capability reports readable state.</summary>
-    public bool IsReadable =>
-        !Attributes.TryGetValue(CapabilityAttributeKeys.Readable, out var r) || r is true;
 }

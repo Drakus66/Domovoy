@@ -419,11 +419,6 @@ public static class EnergyEndpoints
             lo, hi, tariff.Currency, Math.Round(totalKwh, 3), Math.Round(totalCost, 2), zones);
     }
 
-    /// <summary>Resolve an IANA id to a timezone; unknown/blank ⇒ UTC (mirrors SiteContext, keeps money working offline).</summary>
-    private static TimeZoneInfo ResolveTimeZone(string? ianaId)
-    {
-        if (string.IsNullOrWhiteSpace(ianaId)) return TimeZoneInfo.Utc;
-        try { return TimeZoneInfo.FindSystemTimeZoneById(ianaId); }
-        catch { return TimeZoneInfo.Utc; }
-    }
+    /// <summary>Общее правило площадки: неизвестный/пустой идентификатор ⇒ UTC (деньги считаются и офлайн).</summary>
+    private static TimeZoneInfo ResolveTimeZone(string? ianaId) => SiteTimeZone.Resolve(ianaId);
 }

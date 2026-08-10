@@ -27,6 +27,7 @@ import BlockGraph from '../components/blocks/BlockGraph';
 import AddBlockPicker from '../components/blocks/AddBlockPicker';
 import { toNewBlock } from '../components/blocks/blockGraphModel';
 import { useFocusParam, scrollIntoViewRef } from '../hooks/useFocusParam';
+import { confirmAction } from '../store/confirmStore';
 
 const stageName = (s: number) =>
   i18n.t(s >= 2 ? 'blocks:stageName.full' : s === 1 ? 'blocks:stageName.bounded' : 'blocks:stageName.shadow');
@@ -179,7 +180,7 @@ export default function Blocks() {
   }, [load, t]);
 
   const remove = async (b: ControlBlock) => {
-    if (!window.confirm(t('confirmDelete', { name: b.name }))) return;
+    if (!await confirmAction({ message: t('confirmDelete', { name: b.name }) })) return;
     try { await blocksApi.deleteBlock(b.id); await load(); }
     catch { setError(t('errors.delete')); }
   };

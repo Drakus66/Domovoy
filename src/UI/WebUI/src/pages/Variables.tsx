@@ -20,6 +20,7 @@ import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DataObjectRoundedIcon from '@mui/icons-material/DataObjectRounded';
 import { variablesApi, GlobalVariable, NewVariable, VariableType } from '../api/variables';
 import { fmt } from '../components/automations/ruleValues';
+import { confirmAction } from '../store/confirmStore';
 
 const VARIABLE_TYPES: VariableType[] = ['Number', 'Boolean', 'String', 'DateTime', 'List'];
 
@@ -69,7 +70,7 @@ export default function Variables() {
   useEffect(() => { load(); }, [load]);
 
   const remove = async (v: GlobalVariable) => {
-    if (!window.confirm(t('confirm.delete', { name: v.name }))) return;
+    if (!await confirmAction({ message: t('confirm.delete', { name: v.name }) })) return;
     try { await variablesApi.deleteVariable(v.id); await load(); }
     catch { setError(t('errors.delete')); }
   };

@@ -24,7 +24,10 @@ RUN dotnet build "./Domovoy.Connectivity.csproj" -c $BUILD_CONFIGURATION -o /app
 # Publish stage
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./Domovoy.Connectivity.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+# Версия компонента (Эпик 3K) — см. комментарий в src/Gateway/Domovoy.ApiGateway/Dockerfile.
+ARG VERSION=0.0.0
+ARG INFORMATIONAL_VERSION=0.0.0
+RUN dotnet publish "./Domovoy.Connectivity.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:Version=$VERSION /p:InformationalVersion=$INFORMATIONAL_VERSION
 
 # Final stage
 FROM base AS final

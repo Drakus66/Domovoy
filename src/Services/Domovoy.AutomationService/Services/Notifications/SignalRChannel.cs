@@ -12,10 +12,12 @@ namespace Domovoy.AutomationService.Services.Notifications;
 
 /// <summary>
 /// First-party LAN notification channel (2M.2). The dispatcher lives here in the AutomationService but the
-/// SignalR hub (<c>DeviceHub</c>) lives in the ApiGateway, so this channel can't call the hub directly — it
-/// publishes <see cref="NotificationRaisedV1"/> on the bus and the ApiGateway's NotificationRelayService fans it
-/// out to connected clients as an in-app banner. Fully local, survives no-internet, and on by default (it's the
-/// primary notification surface, with no external dependency).
+/// SignalR hub lives in the ApiGateway, so this channel can't call it directly — it publishes
+/// <see cref="NotificationRaisedV1"/> on the bus and the ApiGateway's NotificationRelayService fans it out to
+/// connected clients as an in-app banner. The hub is <c>NotificationHub</c>, not <c>DeviceHub</c>: banners got
+/// their own hub so a client showing them isn't subscribed to the device-state firehose.
+/// Fully local, survives no-internet, and on by default (it's the primary notification surface, with no
+/// external dependency).
 /// </summary>
 public sealed class SignalRChannel : INotificationChannel
 {

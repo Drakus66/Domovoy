@@ -95,18 +95,6 @@ public sealed class LanguagePack
         using var reader = new StreamReader(stream);
         return Parse(reader.ReadToEnd());
     }
-
-    /// <summary>Locales for which a built-in pack ships (derived from embedded resources).</summary>
-    public static IReadOnlyList<string> AvailableLocales() =>
-        typeof(LanguagePack).Assembly.GetManifestResourceNames()
-            .Select(n =>
-            {
-                var i = n.IndexOf("Packs.", StringComparison.OrdinalIgnoreCase);
-                return i < 0 ? null : n.Substring(i + "Packs.".Length).Replace(".json", "", StringComparison.OrdinalIgnoreCase);
-            })
-            .Where(s => !string.IsNullOrEmpty(s))
-            .Select(s => s!)
-            .ToList();
 }
 
 /// <summary>A rotated pool of actor synonyms plus a cooldown (min entries before a form may repeat).</summary>

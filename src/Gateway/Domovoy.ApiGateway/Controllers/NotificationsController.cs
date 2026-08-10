@@ -20,26 +20,25 @@ namespace Domovoy.ApiGateway.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/notifications")]
-public class NotificationsController : ControllerBase
+public class NotificationsController : ProxyController
 {
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMessageBus _messageBus;
     private readonly ILogger<NotificationsController> _logger;
 
     public NotificationsController(IHttpClientFactory httpClientFactory, IMessageBus messageBus, ILogger<NotificationsController> logger)
+        : base(httpClientFactory)
     {
-        _httpClientFactory = httpClientFactory;
         _messageBus = messageBus;
         _logger = logger;
     }
 
     [HttpGet("channels")]
     public Task<IActionResult> Channels(CancellationToken ct)
-        => ForwardToAutomation(HttpMethod.Get, "api/notifications/channels", ct);
+        => ForwardTo("automation-service", "api/notifications/channels", ct);
 
     [HttpPost("test")]
     public Task<IActionResult> Test(CancellationToken ct)
-        => ForwardToAutomation(HttpMethod.Post, "api/notifications/test", ct);
+        => ForwardTo("automation-service", "api/notifications/test", ct);
 
     /// <summary>Execute an actionable-notification button. Body: a <see cref="NotificationAction"/>. The action's
     /// command is attributed to the tapping user (JWT <c>sub</c> / self-declared header), like a manual command.</summary>
@@ -69,7 +68,7 @@ public class NotificationsController : ControllerBase
         }
 
         // HTTP forward (approve/reject proposal, set mode).
-        var client = _httpClientFactory.CreateClient(plan.HttpClient!);
+        var client = HttpClientFactory.CreateClient(plan.HttpClient!);
         using var request = new HttpRequestMessage(new HttpMethod(plan.HttpMethod!), plan.HttpPath!);
         if (plan.HttpJsonBody is not null)
             request.Content = new StringContent(plan.HttpJsonBody, System.Text.Encoding.UTF8, "application/json");
@@ -95,21 +94,5 @@ public class NotificationsController : ControllerBase
                      ?? Request.Headers["X-Domovoy-User"].FirstOrDefault()?.Trim();
         if (string.IsNullOrEmpty(userId) || userId.Length > 64 || userId.Contains(':')) return "apigateway";
         return $"user:{userId}";
-    }
-
-    private async Task<IActionResult> ForwardToAutomation(HttpMethod method, string path, CancellationToken ct)
-    {
-        var http = _httpClientFactory.CreateClient("automation-service");
-        using var request = new HttpRequestMessage(method, path);
-
-        using var upstream = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        var responseBody = await upstream.Content.ReadAsStringAsync(ct);
-
-        return new ContentResult
-        {
-            StatusCode = (int)upstream.StatusCode,
-            Content = string.IsNullOrEmpty(responseBody) ? null : responseBody,
-            ContentType = upstream.Content.Headers.ContentType?.ToString() ?? "application/json",
-        };
     }
 }

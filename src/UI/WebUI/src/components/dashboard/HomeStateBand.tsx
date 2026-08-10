@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Box, Card, CardActionArea, Grid, Stack, Typography } from '@mui/material';
@@ -12,14 +12,13 @@ import ThermostatRoundedIcon from '@mui/icons-material/ThermostatRounded';
 import LockRoundedIcon from '@mui/icons-material/LockRounded';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import type { CapabilityDevice } from '../../api/capabilityDevices';
-import { modeApi } from '../../api/mode';
+import { homeMode } from '../../store/liveData';
 import { CATEGORY_ACCENT } from '../devices/deviceVisuals';
 import { fmtTime } from '../../i18n/format';
 import DomovoyDigest from '../common/DomovoyDigest';
 import HearthMark from '../common/HearthMark';
 import { summarizeHome } from './homeSummary';
 
-const REFRESH_INTERVAL_MS = 60_000;
 
 /**
  * "State of the home" hero band above the device list (roadmap dashboard fill, block A). Gives the house
@@ -30,19 +29,8 @@ export default function HomeStateBand({ devices }: { devices: CapabilityDevice[]
   const { t } = useTranslation('dashboards');
   const { t: tm } = useTranslation('modes');
   const navigate = useNavigate();
-  const [mode, setMode] = useState<{ mode: string; updatedAt: string } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = () => {
-      modeApi.getMode()
-        .then((s) => { if (!cancelled) setMode({ mode: s.mode, updatedAt: s.updatedAt }); })
-        .catch(() => undefined);
-    };
-    load();
-    const interval = setInterval(load, REFRESH_INTERVAL_MS);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+  // Из общего слоя: этот же режим независимо запрашивал вложенный сюда DomovoyDigest.
+  const mode = homeMode.use().data ?? null;
 
   const summary = useMemo(() => summarizeHome(devices), [devices]);
 

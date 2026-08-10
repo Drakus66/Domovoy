@@ -95,11 +95,12 @@ public sealed class BackupScheduler : BackgroundService
                 .Find(x => x.Id == SiteLocation.SingletonId)
                 .FirstOrDefaultAsync(ct);
             if (!string.IsNullOrWhiteSpace(location?.TimeZoneId))
-                return TimeZoneInfo.FindSystemTimeZoneById(location.TimeZoneId);
+                return SiteTimeZone.Resolve(location.TimeZoneId);
         }
-        catch (TimeZoneNotFoundException)
+        catch (Exception ex)
         {
-            _logger.LogWarning("Site timezone not resolvable — falling back to the server timezone");
+            // Раньше ловился только TimeZoneNotFoundException, а недоступный Mongo ронял планировщик.
+            _logger.LogWarning(ex, "Site timezone not resolvable — falling back to the server timezone");
         }
 
         return TimeZoneInfo.Local;

@@ -4,7 +4,7 @@
 
 using Domovoy.Common.Configuration;
 using Domovoy.Connectivity.Adapters;
-using Domovoy.MessageBus;
+using Domovoy.Connectivity.Configuration;
 
 using MQTTnet;
 using MQTTnet.Client;
@@ -28,7 +28,7 @@ public class AdapterManager : BackgroundService
 {
     private readonly IEnumerable<IProtocolAdapter> _adapters;
     private readonly ILogger<AdapterManager> _logger;
-    private readonly IOptions<RabbitMqConfig> _config;
+    private readonly DeviceBrokerOptions _broker;
 
     private IMqttClient? _mqttClient;
     private MqttClientOptions? _mqttOptions;
@@ -44,11 +44,11 @@ public class AdapterManager : BackgroundService
 
     public AdapterManager(
         IEnumerable<IProtocolAdapter> adapters,
-        IOptions<RabbitMqConfig> config,
+        IOptions<DeviceBrokerOptions> broker,
         ILogger<AdapterManager> logger)
     {
         _adapters = adapters;
-        _config = config;
+        _broker = broker.Value;
         _logger = logger;
     }
 
@@ -91,13 +91,13 @@ public class AdapterManager : BackgroundService
 
     private MqttClientOptions BuildMqttOptions()
     {
-        _brokerHost = Environment.GetEnvironmentVariable("MQTT__BROKER") ?? _config.Value.HostName ?? "localhost";
-        _brokerPort = int.TryParse(Environment.GetEnvironmentVariable("MQTT__PORT"), out var p) ? p : _config.Value.MqttPort;
+        _brokerHost = _broker.Broker;
+        _brokerPort = _broker.Port;
 
         return new MqttClientOptionsBuilder()
             .WithTcpServer(_brokerHost, _brokerPort)
             .WithClientId("Domovoy.Connectivity")
-            .WithCredentials(_config.Value.UserName, _config.Value.Password)
+            .WithCredentials(_broker.UserName, _broker.Password)
             .WithCleanSession()
             .Build();
     }
@@ -121,7 +121,7 @@ public class AdapterManager : BackgroundService
                 {
                     await _mqttClient!.ConnectAsync(_mqttOptions, token);
                     _logger.LogInformation(
-                        "Connected to MQTT broker at {Host}:{Port} as user {User}", _brokerHost, _brokerPort, _config.Value.UserName);
+                        "Connected to MQTT broker at {Host}:{Port} as user {User}", _brokerHost, _brokerPort, _broker.UserName);
                     return true;
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)

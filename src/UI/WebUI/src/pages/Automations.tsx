@@ -38,6 +38,7 @@ import { fmt } from '../components/automations/ruleValues';
 import { readableMatch } from '../components/automations/ruleReadable';
 import { capabilityLabel } from '../components/devices/deviceVisuals';
 import { useFocusParam, scrollIntoViewRef } from '../hooks/useFocusParam';
+import { confirmAction } from '../store/confirmStore';
 
 // User-selectable lifecycle (Proposed/Approved are reserved for ML proposals, Epic 1F/Phase 2).
 // BoundedActive (Epic 1F) = active but rate-limited — the stage between Shadow and full Active.
@@ -100,7 +101,7 @@ export default function Automations() {
   };
 
   const remove = async (rule: AutomationRule) => {
-    if (!window.confirm(t('confirm.delete', { name: rule.name }))) return;
+    if (!await confirmAction({ message: t('confirm.delete', { name: rule.name }) })) return;
     try { await automationsApi.deleteRule(rule.id); await load(); }
     catch { setError(t('errors.delete')); }
   };

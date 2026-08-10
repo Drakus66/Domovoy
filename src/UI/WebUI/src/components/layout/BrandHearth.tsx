@@ -7,9 +7,8 @@ import { Box, Tooltip } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { metricsApi } from '../../api/metrics';
-import { proposalsApi } from '../../api/proposals';
-import { modeApi } from '../../api/mode';
 import { activityApi } from '../../api/activity';
+import { homeMode, pendingProposals } from '../../store/liveData';
 import HearthAvatar, { HearthStatus } from '../common/HearthAvatar';
 
 const REFRESH_INTERVAL_MS = 30_000;
@@ -27,9 +26,11 @@ export default function BrandHearth() {
   const [services, setServices] = useState<{ up: number; total: number; reachable: boolean }>(
     { up: 0, total: 0, reachable: true },
   );
-  const [pending, setPending] = useState(0);
-  const [night, setNight] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Предложения и режим — из общего слоя (их читает ещё и навигация вокруг этого очага, и дайджест).
+  const pending = pendingProposals.use().data?.length ?? 0;
+  const night = homeMode.use().data?.mode === 'Night';
 
   useEffect(() => {
     let cancelled = false;
@@ -40,12 +41,7 @@ export default function BrandHearth() {
           setServices({ up: list.filter((s) => s.isUp).length, total: list.length, reachable: true });
         })
         .catch(() => { if (!cancelled) setServices({ up: 0, total: 0, reachable: false }); });
-      proposalsApi.list('Proposed')
-        .then((list) => { if (!cancelled) setPending(list.length); })
-        .catch(() => { if (!cancelled) setPending(0); });
-      modeApi.getMode()
-        .then((s) => { if (!cancelled) setNight(s.mode === 'Night'); })
-        .catch(() => { if (!cancelled) setNight(false); });
+      // Собственное короткое окно «только что сработало» — общего ресурса с такими границами нет.
       activityApi.get({ source: 'automation', from: new Date(Date.now() - ACTIVE_WINDOW_MS).toISOString(), limit: 5 })
         .then((entries) => { if (!cancelled) setBusy(entries.length > 0); })
         .catch(() => { if (!cancelled) setBusy(false); });

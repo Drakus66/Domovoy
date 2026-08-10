@@ -67,11 +67,18 @@ export interface CapabilityDevice {
   lastUpdated: string;
 }
 
-/** Well-known device archetypes (mirrors Domovoy.Contracts DeviceArchetypes, Epic 2D). */
-export const DEVICE_ARCHETYPES = [
+/**
+ * Запасной список архетипов — на случай, если словарь ещё не приехал с сервера.
+ *
+ * Раньше это была ЕДИНСТВЕННАЯ копия, и она успела отстать от `Domovoy.Contracts.DeviceArchetypes`
+ * на три значения (`tariff`, `person`, `presence`): выпадающий список не предлагал типов, которые
+ * система назначает сама. Авторитетный источник теперь один — `GET /api/capability-devices/archetypes`.
+ */
+export const DEVICE_ARCHETYPES_FALLBACK = [
   'light', 'switch', 'thermostat', 'climate_sensor', 'motion', 'contact',
-  'lock', 'valve', 'energy_meter', 'sensor', 'control_block', 'sun', 'clock', 'calendar', 'unknown',
-] as const;
+  'lock', 'valve', 'energy_meter', 'sensor', 'control_block', 'sun', 'clock', 'calendar',
+  'tariff', 'person', 'presence', 'unknown',
+];
 
 /** Effective archetype = manual override if set, else the auto-inferred value. */
 export const effectiveArchetype = (d: CapabilityDevice): string => d.archetype || d.autoArchetype || 'unknown';
@@ -80,6 +87,10 @@ export const capabilityDevicesApi = {
   /** List capability devices (Zigbee, native and emulator devices, normalized). */
   getDevices: (): Promise<CapabilityDevice[]> =>
     apiClient.get<CapabilityDevice[]>('/api/capability-devices').then((r) => r.data),
+
+  /** Известные архетипы прямо из контракта — чтобы интерфейс не хранил расходящуюся копию. */
+  getArchetypes: (): Promise<string[]> =>
+    apiClient.get<string[]>('/api/capability-devices/archetypes').then((r) => r.data),
 
   /**
    * Send a capability-addressed command, e.g. { on_off: true, brightness: 50 }.

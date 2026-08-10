@@ -11,8 +11,35 @@ on:
     branches: [master, develop, 'epic-*']
   pull_request:
   workflow_dispatch:
+  # Вызывается как функция из release.yml (Эпик 3K): тесты — обязательный гейт перед публикацией
+  # образов, и дублировать их описание в двух местах незачем.
+  workflow_call:
 
 jobs:
+  # Страж контракта (Эпик 3K). Решатель обновлений доверяет только тому, что объявлено в
+  # build/components.json, поэтому незаявленное изменение контракта — единственный способ тихо
+  # получить несовместимое обновление на боевом доме. Обход осознанный и видимый в истории:
+  # строка `Compat: none` в теле коммита.
+  contract-guard:
+    name: Contract guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # нужен диапазон коммитов, а не один снимок
+
+      - name: Check declared compatibility
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+          fi
+          bash build/tools/contract-guard.sh "$BASE" "${{ github.sha }}"
+
+      - name: Validate component set
+        run: node build/tools/validate-components.mjs
+
   build-test:
     name: Build + unit tests
     runs-on: ubuntu-latest
@@ -30,8 +57,10 @@ jobs:
       - name: Build
         run: dotnet build Domovoy.sln -c Release --no-restore
 
+      # Всё решение, а не один тестовый проект: указание конкретного .csproj однажды уже привело к
+      # тому, что тесты Domovoy.CommutePlugin.Tests не выполнялись в CI ни разу.
       - name: Unit tests (no Docker)
-        run: dotnet test tests/Domovoy.IntegrationTests/Domovoy.IntegrationTests.csproj -c Release --no-build --filter "Category!=Infra"
+        run: dotnet test Domovoy.sln -c Release --no-build --filter "Category!=Infra"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -66,4 +95,4 @@ jobs:
       # Runs the OfflineSmoke-tagged integration tests: adapter → bus → Mongo persistence, home-mode change,
       # proposal approval + BSON round-trip — all against local containers, exercising the offline invariant.
       - name: Offline-smoke tests
-        run: dotnet test tests/Domovoy.IntegrationTests/Domovoy.IntegrationTests.csproj -c Release --filter "Category=OfflineSmoke"
+        run: dotnet test Domovoy.sln -c Release --filter "Category=OfflineSmoke"

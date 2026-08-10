@@ -10,6 +10,8 @@ import {
 import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded';
 import PowerSettingsNewRoundedIcon from '@mui/icons-material/PowerSettingsNewRounded';
 import { systemApi, SystemServiceInfo, SystemServicesResponse } from '../../api/system';
+import { updatesApi } from '../../api/updates';
+import { confirmAction } from '../../store/confirmStore';
 
 /**
  * Restart services from the UI. Default is a safe self-restart over the bus (the service stops itself, the
@@ -21,9 +23,17 @@ export default function SystemControlCard() {
   const [data, setData] = useState<SystemServicesResponse | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
+  // Версии живут у службы обновлений (Эпик 3K). Подтягиваем мягко: без неё карточка работает
+  // ровно как раньше, просто без строки версии.
+  const [versions, setVersions] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
     systemApi.getServices().then(setData).catch(() => setData(null));
+    updatesApi.components()
+      .then((r) => setVersions(Object.fromEntries(
+        r.components.filter((c) => c.installed).map((c) => [c.name, c.installed as string]),
+      )))
+      .catch(() => setVersions({}));
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -41,13 +51,13 @@ export default function SystemControlCard() {
     }
   };
 
-  const restartAll = () => {
-    if (!window.confirm(t('control.confirmAll'))) return;
+  const restartAll = async () => {
+    if (!await confirmAction({ message: t('control.confirmAll') })) return;
     act('all', t('control.allServices'), () => systemApi.restartAll());
   };
 
-  const restartOne = (s: SystemServiceInfo) => {
-    if (!window.confirm(t('control.confirmOne', { name: s.name }))) return;
+  const restartOne = async (s: SystemServiceInfo) => {
+    if (!await confirmAction({ message: t('control.confirmOne', { name: s.name }) })) return;
     // A .NET service self-restarts over the bus; anything else needs the Docker path.
     act(s.name, s.name, () => systemApi.restartService(s.name, !s.selfRestart));
   };
@@ -89,7 +99,10 @@ export default function SystemControlCard() {
         >
           <Box minWidth={0}>
             <Typography variant="body2" fontWeight={500} noWrap>{s.name}</Typography>
-            <Typography variant="caption" color="text.secondary">{t(`control.kind.${s.kind}`, s.kind)}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {t(`control.kind.${s.kind}`, s.kind)}
+              {versions[s.name] ? ` · ${versions[s.name]}` : ''}
+            </Typography>
           </Box>
           <Box display="flex" alignItems="center" gap={1}>
             {s.state && (

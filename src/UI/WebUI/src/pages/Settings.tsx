@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { ChangeEvent, ReactNode, useCallback, useEffect, useState } from 'react';
+import { ChangeEvent, ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Container, Box, Typography, Stack, Button, TextField, Card, CardContent, CardActionArea, Collapse, Alert,
@@ -28,6 +28,7 @@ import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded';
 import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
 import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
 import NotificationsActiveRoundedIcon from '@mui/icons-material/NotificationsActiveRounded';
+import SystemUpdateAltRoundedIcon from '@mui/icons-material/SystemUpdateAltRounded';
 import { settingsApi, GeocodeResult } from '../api/settings';
 import { securityApi, User } from '../api/security';
 import { backupsApi, BackupListItem, BackupSettings } from '../api/backups';
@@ -38,18 +39,38 @@ import LoadManagementEditor from '../components/settings/LoadManagementEditor';
 import IntelligenceEditor from '../components/settings/IntelligenceEditor';
 import NotificationSettingsEditor from '../components/settings/NotificationSettingsEditor';
 import PowerTopologyEditor from '../components/settings/PowerTopologyEditor';
+import UpdatesEditor from '../components/settings/UpdatesEditor';
 
 // A collapsible settings card. Collapsed by default so a long section (e.g. the location
 // map) doesn't dominate the page — the header stays a compact, clickable summary row.
 // Children stay mounted (no unmountOnExit) so form state survives a collapse.
 function Section({
-  icon, title, caption, defaultOpen = false, children,
+  icon, title, caption, defaultOpen = false, id, lazy = false, children,
 }: {
-  icon: ReactNode; title: string; caption?: string; defaultOpen?: boolean; children: ReactNode;
+  icon: ReactNode; title: string; caption?: string; defaultOpen?: boolean; id?: string;
+  /** Не монтировать содержимое, пока секцию не раскрыли. Для секций, которые при монтировании
+   *  делают дорогие запросы: Collapse только прячет детей, но продолжает их рендерить. */
+  lazy?: boolean;
+  children: ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  // Секция с id адресуема якорем: уведомление «доступно обновление» ведёт на /settings#updates,
+  // и по такой ссылке нужная секция должна открыться сама, а не встретить свёрнутым заголовком.
+  const anchored = id !== undefined && typeof window !== 'undefined' && window.location.hash === `#${id}`;
+  const [open, setOpen] = useState(defaultOpen || anchored);
+  const ref = useRef<HTMLDivElement | null>(null);
+  // Раз открыв, содержимое больше не размонтируем — иначе сворачивание теряло бы введённое.
+  const [everOpened, setEverOpened] = useState(defaultOpen || anchored);
+
+  useEffect(() => {
+    if (open) setEverOpened(true);
+  }, [open]);
+
+  useEffect(() => {
+    if (anchored) ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [anchored]);
+
   return (
-    <Card variant="outlined" sx={{ mb: 3 }}>
+    <Card variant="outlined" sx={{ mb: 3 }} id={id} ref={ref}>
       <CardActionArea onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
           {icon}
@@ -64,7 +85,7 @@ function Section({
           {caption && (
             <Typography variant="caption" color="text.secondary" display="block" mb={2}>{caption}</Typography>
           )}
-          {children}
+          {lazy && !everOpened ? null : children}
         </CardContent>
       </Collapse>
     </Card>
@@ -87,6 +108,7 @@ import LocationMap from '../components/settings/LocationMap';
 import ColorModeToggle from '../components/theme/ColorModeToggle';
 import ThemePicker from '../components/theme/ThemePicker';
 import LanguagePicker from '../components/i18n/LanguagePicker';
+import { confirmAction } from '../store/confirmStore';
 
 export default function Settings() {
   const { t } = useTranslation('settings');
@@ -184,7 +206,7 @@ export default function Settings() {
   };
 
   const restoreBackup = async (file: string) => {
-    if (!window.confirm(t('backups.restoreConfirm', { file }))) return;
+    if (!await confirmAction({ message: t('backups.restoreConfirm', { file }) })) return;
     setBackupBusy(true); setError(null); setBackupNotice(null);
     try {
       const r = await backupsApi.restore(file);
@@ -197,7 +219,7 @@ export default function Settings() {
   };
 
   const deleteBackup = async (file: string) => {
-    if (!window.confirm(t('backups.deleteConfirm', { file }))) return;
+    if (!await confirmAction({ message: t('backups.deleteConfirm', { file }) })) return;
     setError(null); setBackupNotice(null);
     try {
       await backupsApi.remove(file);
@@ -667,6 +689,17 @@ export default function Settings() {
               ))}
             </List>
           )}
+        </Section>
+
+        {/* ── Updates (Epic 3K) ────────────────────────────────────── */}
+        <Section
+          id="updates"
+          lazy
+          icon={<SystemUpdateAltRoundedIcon color="primary" />}
+          title={t('updates.title')}
+          caption={t('updates.caption')}
+        >
+          <UpdatesEditor />
         </Section>
 
         {/* ── Tariff (Epic 3C) ─────────────────────────────────────── */}

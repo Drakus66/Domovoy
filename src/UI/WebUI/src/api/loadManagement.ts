@@ -45,8 +45,6 @@ export interface CircuitLimit {
 /** Single phases of a three-phase intake, in display order. */
 export const SINGLE_PHASES = ['l1', 'l2', 'l3'] as const;
 
-export type LoadSheddingTier = 'critical' | 'sheddable' | 'unmanaged';
-
 /** Per-device load-shedding profile (matches DbGateway LoadSheddingProfile). */
 export interface LoadSheddingProfile {
   enabled: boolean;

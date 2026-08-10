@@ -52,7 +52,6 @@ public sealed class InfraFixture : IAsyncLifetime
             UserName = Uri.UnescapeDataString(creds[0]),
             Password = Uri.UnescapeDataString(creds.Length > 1 ? creds[1] : string.Empty),
             VirtualHost = "/",
-            UseMqtt = false,
         };
         Bus = new RabbitMqConnection(Options.Create(cfg), NullLogger<RabbitMqConnection>.Instance);
 

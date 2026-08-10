@@ -74,13 +74,4 @@ namespace Domovoy.ApiGateway.Middleware
                 queryString, @"(access_token=)[^&]*", "$1***", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         }
     }
-
-    // Extension method to add the middleware to the pipeline
-    public static class RequestLoggingMiddlewareExtensions
-    {
-        public static IApplicationBuilder UseRequestLogging(this IApplicationBuilder builder)
-        {
-            return builder.UseMiddleware<RequestLoggingMiddleware>();
-        }
-    }
 }

@@ -29,6 +29,14 @@ public readonly record struct FeatureAdmission(bool Admissible, double Weight);
 /// greenhouse and vice versa, even if an in-sample correlation appears. This is the hard wall.</item>
 /// </list>
 /// A global-scoped model uses only ambient features, staying neutral across kinds.
+///
+/// <para><b>⚠ Спроектировано, но НЕ ПОДКЛЮЧЕНО (состояние на 2026-08-08).</b> Ни <c>MlTrainer</c>, ни
+/// один <c>IModelTemplate</c> эту политику не спрашивают: живые шаблоны обучаются на признаках времени
+/// и режима дома, многомерных зональных входов у них пока нет. То есть инвариант «жёсткой стены между
+/// видами зон» описан здесь, но ничем не обеспечен — до подключения на него нельзя ссылаться как на
+/// действующий. Подключение — Фаза 4 плана Эпика 2I (многомерные модели), вместе с ним и появятся
+/// кандидаты, которые есть что фильтровать. Тесты на политику (<c>FeatureLocalityTests</c>) держат её
+/// поведение зафиксированным, чтобы подключение свелось к вызову, а не к переписыванию.</para>
 /// </summary>
 public static class FeatureLocality
 {
