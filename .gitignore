@@ -37,3 +37,16 @@ CLAUDE.md
 # Generated release-topology bundle (Epic 3K) — built by build/tools/gen-topology.mjs in CI.
 # The source of truth is the root docker-compose.yml; this is a derived artifact.
 /build/topology/dist/
+
+# Installation directory of the delivery service (Epic 3K). DOMOVOY_INSTALL_DIR defaults to `.`
+# (see the domovoy-updater volume in docker-compose.yml), so a local bring-up makes the WORKING COPY
+# the installation root and the updater writes its host state straight into it: state/ (announced
+# fingerprint, pinned.yml, topology.json, history.json, current-run.json), the unpacked releases/
+# and the `current` symlink. Host state, not source — and committing it is not merely noise:
+# state/announced.json says "this version set has already been announced", so a checkout carrying
+# one would suppress the update notification a fresh house never saw (same reasoning as
+# /plugins/.builtin-state.json above). docker-compose.override.yml lives in the same directory but
+# IS source — a hand-written dev override — so it stays tracked.
+/state/
+/releases/
+/current
