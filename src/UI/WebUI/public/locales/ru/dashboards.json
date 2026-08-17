@@ -104,7 +104,17 @@
     "energy": "Энергия",
     "watts": "{{value}} Вт",
     "kwh": "всего {{value}} кВт·ч",
-    "empty": "—"
+    "empty": "—",
+    "back": {
+      "source": "Датчик: {{name}}",
+      "range12h": "за 12 ч: {{min}}…{{max}}",
+      "locksTotal": "Замков: {{count}}",
+      "allClosed": "Всё закрыто",
+      "open": "Открыто",
+      "unlocked": "Не заперто",
+      "topConsumers": "Больше всего сейчас",
+      "meterTotal": "Счётчики: {{value}} кВт·ч"
+    }
   },
   "rail": {
     "today": "Домовой сегодня",
@@ -130,7 +140,8 @@
     "view": {
       "devices": "Устройства",
       "circuits": "Линии",
-      "phases": "Фазы"
+      "phases": "Фазы",
+      "scheme": "Схема"
     },
     "rankTitle": {
       "devices": "Больше всего потребляют",
@@ -141,6 +152,33 @@
     "empty": "Нет устройств с учётом энергии",
     "mains": "ввод",
     "kwh": "кВт·ч",
-    "configure": "Настроить тариф и энергопрофили устройств"
+    "configure": "Настроить тариф и энергопрофили устройств",
+    "scheme": {
+      "root": "Дом",
+      "title": "Схема сети",
+      "expand": "Развернуть схему",
+      "metricKwh": "кВт·ч",
+      "metricWatts": "Вт сейчас",
+      "unaccounted": "Неучтённое",
+      "unmapped": "Не отнесено",
+      "device": "Устройство",
+      "limit": "автомат {{value}} Вт",
+      "meter": "счётчик: {{value}}",
+      "unaccountedValue": "неучтённое: {{value}}"
+    }
+  },
+  "flip": {
+    "stats": "Показатели"
+  },
+  "chartBack": {
+    "min": "Минимум",
+    "max": "Максимум",
+    "avg": "Среднее",
+    "last": "Последнее",
+    "period": "{{from}} — {{to}}",
+    "samples_one": "проба: {{count}}",
+    "samples_few": "пробы: {{count}}",
+    "samples_many": "проб: {{count}}",
+    "samples_other": "проб: {{count}}"
   }
 }

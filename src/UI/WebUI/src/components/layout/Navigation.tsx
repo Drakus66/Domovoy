@@ -29,10 +29,7 @@ import DataObjectRoundedIcon from '@mui/icons-material/DataObjectRounded';
 import GroupRoundedIcon from '@mui/icons-material/GroupRounded';
 import PeopleAltRoundedIcon from '@mui/icons-material/PeopleAltRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
-import ColorModeToggle from '../theme/ColorModeToggle';
-import ThemePicker from '../theme/ThemePicker';
-import LanguagePicker from '../i18n/LanguagePicker';
-import AccountMenu from '../auth/AccountMenu';
+import ProfileDropdown from './ProfileDropdown';
 import BrandHearth from './BrandHearth';
 
 const DRAWER_WIDTH = 248;
@@ -171,14 +168,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ px: 2.5, py: 2.5 }}><Brand /></Box>
       <NavList onNavigate={onNavigate} />
-      <Box sx={{ px: 2.5, py: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="caption" color="text.secondary">v1.0</Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <LanguagePicker />
-          <ThemePicker />
-          <ColorModeToggle />
-          <AccountMenu />
-        </Box>
+      <Box sx={{ px: 1.25, py: 1.25, borderTop: '1px solid', borderColor: 'divider' }}>
+        <ProfileDropdown variant="sidebar" />
       </Box>
     </Box>
   );
@@ -199,10 +190,7 @@ function Navigation() {
               <MenuIcon />
             </IconButton>
             <Box sx={{ flexGrow: 1 }}><Brand /></Box>
-            <LanguagePicker />
-            <ThemePicker />
-            <ColorModeToggle />
-            <AccountMenu />
+            <ProfileDropdown variant="bar" />
           </Toolbar>
         </AppBar>
         <Drawer

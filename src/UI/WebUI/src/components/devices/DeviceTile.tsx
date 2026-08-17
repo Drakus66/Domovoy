@@ -2,12 +2,14 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { Box, Card, CardActionArea, Chip, Stack, Switch, Typography, LinearProgress, Tooltip, useTheme } from '@mui/material';
+import { Box, Button, Card, CardActionArea, CardContent, Chip, Stack, Switch, Typography, LinearProgress, Tooltip, useTheme } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import CircleIcon from '@mui/icons-material/Circle';
 import type { CapabilityDevice } from '../../api/capabilityDevices';
 import type { CommandFn } from './CapabilityControls';
-import { asBool, asNum, describeDevice, primaryCapability, trendCapability } from './deviceVisuals';
+import {
+  asBool, asNum, capabilityLabel, describeDevice, formatCapabilityValue, primaryCapability, trendCapability,
+} from './deviceVisuals';
 import { deviceLabel } from './deviceNaming';
 import { useTelemetryBatch } from '../charts/useTelemetryBatch';
 import Sparkline from '../charts/Sparkline';
@@ -15,6 +17,8 @@ import { useDeviceProvenance } from './useDeviceProvenance';
 import { describeProvenance } from './deviceProvenance';
 import { useInViewport } from '../../hooks/useInViewport';
 import { fmtRelativeShort } from '../../i18n/format';
+import { zones as zonesResource } from '../../store/liveData';
+import FlipCard from '../common/FlipCard';
 
 /**
  * Homey-style device tile: an icon badge that glows when the device is "on", a headline state line, and a
@@ -46,7 +50,7 @@ export default function DeviceTile({
   const lastEvent = useDeviceProvenance(device.id);
   const prov = lastEvent ? describeProvenance(lastEvent) : null;
 
-  return (
+  const face = (
     <Card
       ref={ref}
       sx={{
@@ -140,5 +144,80 @@ export default function DeviceTile({
         </Stack>
       </CardActionArea>
     </Card>
+  );
+
+  // Tiles without a numeric trend render exactly as before — no flip, no trigger.
+  if (!trendCap) return face;
+
+  return (
+    <FlipCard
+      front={face}
+      back={<DeviceBack device={device} offline={offline} onOpen={onOpen} />}
+      flipLabel={t('tile.details')}
+      backLabel={t('common:flip.back')}
+      // Top-right belongs to the quick toggle / status dot; the trigger sits bottom-right.
+      triggerSx={{ top: 'auto', bottom: 4, right: 4 }}
+      // Until the first flip the tile's DOM is byte-identical to the plain card — grids stay cheap
+      // and text queries (device name, provenance chip) keep finding exactly one node.
+      lazyBack
+    />
+  );
+}
+
+/** Flip side of a device tile: the passport rows the face has no room for. */
+function DeviceBack({
+  device, offline, onOpen,
+}: { device: CapabilityDevice; offline: boolean; onOpen: (d: CapabilityDevice) => void }) {
+  const { t } = useTranslation('devices');
+  // Zone NAME, not the raw GUID; the shared resource is already loaded by any device page.
+  const zoneList = zonesResource.use().data;
+  const zoneName = device.zoneId
+    ? (zoneList?.find((z) => z.id === device.zoneId)?.name ?? device.zoneId)
+    : '—';
+  return (
+    // minHeight (not height): overflow must reach FlipCard's scroll container, not clip in the Card.
+    <Card sx={{ minHeight: '100%', opacity: offline ? 0.55 : 1 }}>
+      <CardContent sx={{ p: 2, height: '100%', '&:last-child': { pb: 2 } }}>
+        <Stack height="100%" spacing={1}>
+          <Typography variant="subtitle1" fontWeight={700} noWrap title={deviceLabel(device)}>
+            {deviceLabel(device)}
+          </Typography>
+          <Stack spacing={0.25} flex={1}>
+            <BackRow label={t('tile.model')} value={device.model || '—'} />
+            <BackRow label={t('tile.adapter')} value={device.adapterSource} />
+            <BackRow label={t('tile.zone')} value={zoneName} />
+            <BackRow
+              label={t('tile.lastSeen')}
+              value={device.lastUpdated ? fmtRelativeShort(device.lastUpdated) : '—'}
+            />
+          </Stack>
+          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+            {device.capabilities.slice(0, 6).map((cap) => (
+              <Chip
+                key={cap.id}
+                size="small"
+                label={`${capabilityLabel(cap.id)}: ${formatCapabilityValue(cap, device.state?.[cap.id])}`}
+                sx={{ height: 20, fontSize: '.66rem', '& .MuiChip-label': { px: 0.75 } }}
+              />
+            ))}
+          </Stack>
+          {/* pr clears the flip trigger in the bottom-right corner. */}
+          <Button size="small" onClick={() => onOpen(device)} sx={{ alignSelf: 'flex-start', mr: 4 }}>
+            {t('tile.open')}
+          </Button>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BackRow({ label, value }: { label: string; value: string }) {
+  return (
+    <Stack direction="row" spacing={1} alignItems="baseline">
+      <Typography variant="caption" color="text.secondary" sx={{ minWidth: 76, flexShrink: 0 }}>
+        {label}
+      </Typography>
+      <Typography variant="caption" noWrap>{value}</Typography>
+    </Stack>
   );
 }

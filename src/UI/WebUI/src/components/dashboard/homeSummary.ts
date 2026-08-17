@@ -38,3 +38,47 @@ export function summarizeHome(devices: CapabilityDevice[]): HomeSummary {
     energy: { watts: Math.round(watts), kwh: Math.round(kwh * 10) / 10 },
   };
 }
+
+/** The device whose temperature series stands in for the climate card's trend. */
+export function pickClimateTrendDevice(devices: CapabilityDevice[]): CapabilityDevice | undefined {
+  return devices.find(
+    (d) => 'temperature' in (d.state ?? {}) && Number.isFinite(asNum(d.state.temperature)),
+  );
+}
+
+/** The heaviest current consumer — its power series stands in for the home's energy trend. */
+export function pickEnergyTrendDevice(devices: CapabilityDevice[]): CapabilityDevice | undefined {
+  let best: CapabilityDevice | undefined;
+  let bestW = -Infinity;
+  for (const d of devices) {
+    if (!('power' in (d.state ?? {}))) continue;
+    const w = asNum(d.state.power);
+    if (Number.isFinite(w) && w > bestW) { best = d; bestW = w; }
+  }
+  return best;
+}
+
+export interface OpenSecurityItem { device: CapabilityDevice; kind: 'lock' | 'contact' }
+
+/** Unlocked locks and open contacts — the same semantics summarizeHome counts as "open". */
+export function openSecurityItems(devices: CapabilityDevice[]): OpenSecurityItem[] {
+  const items: OpenSecurityItem[] = [];
+  for (const d of devices) {
+    const s = d.state ?? {};
+    if ('lock' in s && !asBool(s.lock)) items.push({ device: d, kind: 'lock' });
+    if ('contact' in s && asBool(s.contact)) items.push({ device: d, kind: 'contact' });
+  }
+  return items;
+}
+
+/** Top current consumers by watts, heaviest first. */
+export function topPowerConsumers(
+  devices: CapabilityDevice[], n = 4,
+): { device: CapabilityDevice; watts: number }[] {
+  return devices
+    .filter((d) => 'power' in (d.state ?? {}))
+    .map((d) => ({ device: d, watts: asNum(d.state.power) }))
+    .filter((x) => Number.isFinite(x.watts) && x.watts > 0)
+    .sort((a, b) => b.watts - a.watts)
+    .slice(0, n);
+}

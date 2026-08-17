@@ -285,5 +285,13 @@
     "save": "Save profile",
     "saved": "Profile saved",
     "saveError": "Could not save. Please try again."
+  },
+  "tile": {
+    "details": "About device",
+    "model": "Model",
+    "adapter": "Source",
+    "zone": "Zone",
+    "lastSeen": "Updated",
+    "open": "Open"
   }
 }

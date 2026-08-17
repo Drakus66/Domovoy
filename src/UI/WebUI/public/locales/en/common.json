@@ -27,6 +27,10 @@
     "toDark": "Switch to dark",
     "ariaLabel": "toggle color mode"
   },
+  "flip": {
+    "details": "Details",
+    "back": "Back"
+  },
   "actions": {
     "refresh": "Refresh",
     "save": "Save",
@@ -107,5 +111,11 @@
     "title": "I haven't been in this room yet",
     "body": "There is nothing at {{path}}.",
     "back": "Back to the dashboard"
+  },
+  "profile": {
+    "menu": "Profile & settings",
+    "local": "Local access",
+    "localHint": "No sign-in required",
+    "settings": "Settings"
   }
 }

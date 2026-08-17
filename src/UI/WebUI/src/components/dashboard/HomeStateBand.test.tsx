@@ -3,7 +3,9 @@
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
 import { describe, it, expect } from 'vitest';
-import { summarizeHome } from './homeSummary';
+import {
+  summarizeHome, pickClimateTrendDevice, pickEnergyTrendDevice, openSecurityItems, topPowerConsumers,
+} from './homeSummary';
 import type { CapabilityDevice } from '../../api/capabilityDevices';
 
 const dev = (state: Record<string, unknown>): CapabilityDevice => ({
@@ -54,5 +56,39 @@ describe('summarizeHome (band aggregates)', () => {
     expect(s.climate.temp).toBeUndefined();
     expect(s.security.locks).toBe(0);
     expect(s.energy.watts).toBe(0);
+  });
+});
+
+describe('band flip-side helpers', () => {
+  it('picks the first device with a finite temperature for the climate trend', () => {
+    const noTemp = dev({ humidity: 40 });
+    const withTemp = dev({ temperature: 21 });
+    expect(pickClimateTrendDevice([noTemp, withTemp, dev({ temperature: 25 })])).toBe(withTemp);
+    expect(pickClimateTrendDevice([noTemp])).toBeUndefined();
+  });
+
+  it('picks the heaviest current consumer for the energy trend', () => {
+    const heavy = dev({ power: 1500 });
+    expect(pickEnergyTrendDevice([dev({ power: 95 }), heavy, dev({ on_off: true })])).toBe(heavy);
+    expect(pickEnergyTrendDevice([dev({ on_off: true })])).toBeUndefined();
+  });
+
+  it('lists unlocked locks and open contacts with their kind', () => {
+    const unlocked = dev({ lock: false });
+    const open = dev({ contact: true });
+    const items = openSecurityItems([dev({ lock: true }), unlocked, open, dev({ contact: false })]);
+    expect(items).toEqual([
+      { device: unlocked, kind: 'lock' },
+      { device: open, kind: 'contact' },
+    ]);
+  });
+
+  it('ranks consumers by watts, drops idle devices and caps the list', () => {
+    const devices = [
+      dev({ power: 10 }), dev({ power: 300 }), dev({ power: 0 }),
+      dev({ power: 150 }), dev({ power: 40 }), dev({ power: 25 }),
+    ];
+    const top = topPowerConsumers(devices, 4);
+    expect(top.map((c) => c.watts)).toEqual([300, 150, 40, 25]);
   });
 });

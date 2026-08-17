@@ -3,7 +3,9 @@
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import { render, screen, waitFor, fireEvent } from '../../../test/utils';
+import { server } from '../../../test/setup';
 import EnergyTile from './EnergyTile';
 import { energyApi } from '../../../api/energy';
 
@@ -63,5 +65,18 @@ describe('EnergyTile', () => {
     expect(await screen.findByText('Кухня')).toBeInTheDocument();
     // 1 kWh the circuit meter saw but no device explains + 1 kWh from devices with no circuit.
     expect(screen.getByText(/Не отнесено к устройствам: 2\.00/)).toBeInTheDocument();
+  });
+
+  it('offers the sunburst scheme view once the topology exists', async () => {
+    server.use(http.get('*/api/capability-devices', () => HttpResponse.json([])));
+    const { container } = render(<EnergyTile />);
+    await waitFor(() => expect(mocked.getBreakdown).toHaveBeenCalled());
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Схема' }));
+
+    // The drillable sunburst: the home total in the center, the circuit as a sector.
+    expect(await screen.findAllByText('Дом')).not.toHaveLength(0);
+    expect(container.querySelector('g[aria-label="Кухня"] path')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Развернуть схему' })).toBeInTheDocument();
   });
 });

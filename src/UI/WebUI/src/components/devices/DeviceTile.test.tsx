@@ -63,4 +63,15 @@ describe('DeviceTile enrichment (block C)', () => {
     await waitFor(() => expect(screen.queryByText('Правило')).not.toBeInTheDocument());
     expect(screen.queryByText('Вы')).not.toBeInTheDocument();
   });
+
+  it('offers the flip only on tiles with a numeric trend', async () => {
+    seed([]);
+    const { unmount } = render(<DeviceTile device={tempDevice} onOpen={() => {}} onCommand={() => {}} />);
+    expect(await screen.findByRole('button', { name: 'Об устройстве' })).toBeInTheDocument();
+    unmount();
+
+    render(<DeviceTile device={switchDevice} onOpen={() => {}} onCommand={() => {}} />);
+    expect(await screen.findByText('Розетка')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Об устройстве' })).not.toBeInTheDocument();
+  });
 });

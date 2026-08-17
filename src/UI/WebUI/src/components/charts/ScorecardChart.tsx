@@ -4,12 +4,14 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, Typography, Skeleton, Stack, Chip, useTheme } from '@mui/material';
+import { Box, Typography, Skeleton, Stack, Chip } from '@mui/material';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from 'recharts';
 import { mlApi, Backtest } from '../../api/ml';
-import { fmtDateTime, fmtTime } from '../../i18n/format';
+import { fmtTime } from '../../i18n/format';
+import { useChartPalette, gridProps, xAxisProps, yAxisProps, cursorProps } from './chartKit';
+import { ChartCrosshairTooltip } from './chartChrome';
 
 interface Props {
   /** Look-back window in days (default 7). */
@@ -29,7 +31,7 @@ interface Props {
  */
 export default function ScorecardChart({ days = 7, height = 240, target, level, scopeKey }: Props) {
   const { t } = useTranslation('models');
-  const theme = useTheme();
+  const palette = useChartPalette();
   const [data, setData] = useState<Backtest | null>(null);
   const [error, setError] = useState(false);
 
@@ -73,9 +75,6 @@ export default function ScorecardChart({ days = 7, height = 240, target, level, 
   const fmtAxis = (t: number) =>
     fmtTime(t, { month: 'short', day: 'numeric', hour: '2-digit' });
 
-  const accent = theme.palette.primary.main;
-  const factColor = theme.palette.text.secondary;
-
   return (
     <Box>
       <Stack direction="row" spacing={1} mb={1} flexWrap="wrap" useFlexGap>
@@ -86,27 +85,25 @@ export default function ScorecardChart({ days = 7, height = 240, target, level, 
       <Box sx={{ width: '100%', height }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={series} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} vertical={false} />
+            <CartesianGrid {...gridProps(palette)} />
             <XAxis
               dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']}
-              tickFormatter={fmtAxis} tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
-              minTickGap={48} stroke={theme.palette.divider}
+              tickFormatter={fmtAxis} minTickGap={48}
+              {...xAxisProps(palette)}
             />
-            <YAxis
-              width={44} tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
-              stroke={theme.palette.divider} domain={['auto', 'auto']}
+            <YAxis width={44} domain={['auto', 'auto']} {...yAxisProps(palette)} />
+            <Tooltip content={<ChartCrosshairTooltip />} cursor={cursorProps(palette)} />
+            <Legend iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
+            <Line
+              type="monotone" dataKey="actual" name={t('chart.legend.actual')}
+              stroke={palette.reference} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"
+              dot={false} isAnimationActive={false}
             />
-            <Tooltip
-              contentStyle={{
-                background: theme.palette.background.paper,
-                border: `1px solid ${theme.palette.divider}`,
-                borderRadius: 8, fontSize: 12,
-              }}
-              labelFormatter={(label) => fmtDateTime(new Date(Number(label)).toISOString())}
+            <Line
+              type="monotone" dataKey="predicted" name={t('chart.legend.predicted')}
+              stroke={palette.series} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+              dot={false} isAnimationActive={false}
             />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Line type="monotone" dataKey="actual" name={t('chart.legend.actual')} stroke={factColor} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-            <Line type="monotone" dataKey="predicted" name={t('chart.legend.predicted')} stroke={accent} strokeWidth={2} dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </Box>

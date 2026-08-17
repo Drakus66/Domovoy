@@ -11,13 +11,21 @@ import {
 } from '@mui/material';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
+import OpenInFullRoundedIcon from '@mui/icons-material/OpenInFullRounded';
 import {
   energyApi,
   type EnergyBreakdownResult, type EnergyConsumptionResult, type EnergyCostResult,
 } from '../../../api/energy';
+import { asNum, CATEGORY_ACCENT } from '../../devices/deviceVisuals';
+import { deviceLabel } from '../../devices/deviceNaming';
+import { capabilityDevices } from '../../../store/liveData';
+import HierarchySunburst from '../../charts/HierarchySunburst';
+import PowerSunburstDialog from './PowerSunburstDialog';
+import { usePowerSunburst } from './usePowerSunburst';
+import type { PowerDeviceRow } from './powerSunburst';
 
-/** Energy accent (matches the `energy` device category in deviceVisuals). */
-const ACCENT = '#2DD4BF';
+/** Energy accent — the single source of truth for the category color. */
+const ACCENT = CATEGORY_ACCENT.energy;
 
 /** Period presets → look-back hours + the rollup bucket the consumption query uses. */
 const PERIODS: Record<string, { hours: number; bucket: 'hour' | 'day' }> = {
@@ -28,15 +36,16 @@ const PERIODS: Record<string, { hours: number; bucket: 'hour' | 'day' }> = {
 
 const MAX_ROWS = 6;
 
-/** Breakdown views — by device, by circuit of the electrical tree, or by phase (Epic 3C-D). */
-const VIEWS = ['devices', 'circuits', 'phases'] as const;
+/** Breakdown views — by device, by circuit, by phase, or the drillable sunburst scheme (Epic 3C-D). */
+const VIEWS = ['devices', 'circuits', 'phases', 'scheme'] as const;
 type View = (typeof VIEWS)[number];
 
 /**
  * Energy dashboard widget (Epic 3C / 3C-D): whole-home cost + kWh for a period, a per-tariff-zone money
- * breakdown, and consumption seen three ways — Top Consumers, per circuit (with what the line's own meter
- * measured but no device explains) and per phase. Not device-scoped: it renders on any custom tab and owns
- * its period toggle. Data comes from the on-the-fly energy endpoints; Sankey flows are a later polish.
+ * breakdown, and consumption seen four ways — Top Consumers, per circuit (with what the line's own meter
+ * measured but no device explains), per phase, and the sunburst scheme of the electrical tree
+ * (supply → panels → circuits → devices) with drill-down. Not device-scoped: it renders on any custom
+ * tab and owns its period toggle. Data comes from the on-the-fly energy endpoints.
  */
 export default function EnergyTile() {
   const { t } = useTranslation('dashboards');
@@ -46,6 +55,9 @@ export default function EnergyTile() {
   const [cost, setCost] = useState<EnergyCostResult | null>(null);
   const [breakdown, setBreakdown] = useState<EnergyBreakdownResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [schemeOpen, setSchemeOpen] = useState(false);
+  // Shared device list (20s TTL): the scheme joins devices onto circuits via energyProfile.circuitId.
+  const allDevices = capabilityDevices.use().data;
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +98,22 @@ export default function EnergyTile() {
     [breakdown],
   );
   const hasTopology = circuits.length > 0 || phases.length > 0;
+
+  // Devices hanging on circuits — the sunburst's outer ring.
+  const schemeDevices: PowerDeviceRow[] = useMemo(() => {
+    const kwhByDevice = new Map((consumption?.devices ?? []).map((d) => [d.deviceId, d.kwh]));
+    return (allDevices ?? [])
+      .filter((d) => d.energyProfile?.circuitId)
+      .map((d) => ({
+        id: d.id,
+        name: deviceLabel(d),
+        circuitId: d.energyProfile!.circuitId!,
+        kwh: kwhByDevice.get(d.id) ?? 0,
+        watts: 'power' in (d.state ?? {}) ? asNum(d.state.power) : 0,
+      }));
+  }, [allDevices, consumption]);
+
+  const scheme = usePowerSunburst(breakdown, schemeDevices, 'kwh');
 
   // Rows of the active view, as (key, label, kWh) so one renderer covers all three.
   const rows = useMemo(() => {
@@ -169,8 +197,33 @@ export default function EnergyTile() {
               </ToggleButtonGroup>
             )}
 
-            {/* Ranking for the active view (devices / circuits / phases). */}
-            {rows.length === 0 ? (
+            {/* The drillable sunburst of the electrical tree, or the ranking of the active view.
+                A zero-total tree (no telemetry in the period) would render degenerate arcs. */}
+            {view === 'scheme' ? (
+              scheme.root && scheme.root.value > 0 ? (
+                <Box>
+                  <Stack direction="row" justifyContent="flex-end">
+                    <Tooltip title={t('energy.scheme.expand')}>
+                      <IconButton
+                        size="small"
+                        onClick={() => setSchemeOpen(true)}
+                        aria-label={t('energy.scheme.expand')}
+                      >
+                        <OpenInFullRoundedIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                  <HierarchySunburst
+                    root={scheme.root}
+                    size={300}
+                    valueFormatter={scheme.valueFormatter}
+                    hintFormatter={scheme.hintFormatter}
+                  />
+                </Box>
+              ) : (
+                <Typography variant="body2" color="text.secondary">{t('energy.empty')}</Typography>
+              )
+            ) : rows.length === 0 ? (
               <Typography variant="body2" color="text.secondary">{t('energy.empty')}</Typography>
             ) : (
               <Box>
@@ -206,6 +259,16 @@ export default function EnergyTile() {
             )}
           </Stack>
         )}
+
+        <PowerSunburstDialog
+          open={schemeOpen}
+          onClose={() => setSchemeOpen(false)}
+          breakdown={breakdown}
+          devices={schemeDevices}
+          period={period}
+          periods={Object.keys(PERIODS)}
+          onPeriodChange={(p) => setPeriod(p as keyof typeof PERIODS)}
+        />
       </CardContent>
     </Card>
   );

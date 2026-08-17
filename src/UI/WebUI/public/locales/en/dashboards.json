@@ -104,7 +104,17 @@
     "energy": "Energy",
     "watts": "{{value}} W",
     "kwh": "{{value}} kWh total",
-    "empty": "—"
+    "empty": "—",
+    "back": {
+      "source": "Sensor: {{name}}",
+      "range12h": "12 h: {{min}}…{{max}}",
+      "locksTotal": "Locks: {{count}}",
+      "allClosed": "All closed",
+      "open": "Open",
+      "unlocked": "Unlocked",
+      "topConsumers": "Top consumers now",
+      "meterTotal": "Meters: {{value}} kWh"
+    }
   },
   "rail": {
     "today": "Domovoy today",
@@ -130,7 +140,8 @@
     "view": {
       "devices": "Devices",
       "circuits": "Circuits",
-      "phases": "Phases"
+      "phases": "Phases",
+      "scheme": "Scheme"
     },
     "rankTitle": {
       "devices": "Top consumers",
@@ -141,6 +152,31 @@
     "empty": "No devices with energy metering",
     "mains": "mains",
     "kwh": "kWh",
-    "configure": "Configure tariff and device energy profiles"
+    "configure": "Configure tariff and device energy profiles",
+    "scheme": {
+      "root": "Home",
+      "title": "Grid scheme",
+      "expand": "Expand scheme",
+      "metricKwh": "kWh",
+      "metricWatts": "W now",
+      "unaccounted": "Unaccounted",
+      "unmapped": "Unassigned",
+      "device": "Device",
+      "limit": "breaker {{value}} W",
+      "meter": "meter: {{value}}",
+      "unaccountedValue": "unaccounted: {{value}}"
+    }
+  },
+  "flip": {
+    "stats": "Stats"
+  },
+  "chartBack": {
+    "min": "Min",
+    "max": "Max",
+    "avg": "Mean",
+    "last": "Last",
+    "period": "{{from}} — {{to}}",
+    "samples_one": "{{count}} sample",
+    "samples_other": "{{count}} samples"
   }
 }
