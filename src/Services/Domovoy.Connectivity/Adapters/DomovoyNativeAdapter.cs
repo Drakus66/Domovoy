@@ -12,7 +12,6 @@ using Domovoy.Contracts.Native;
 using Domovoy.MessageBus;
 
 using MQTTnet;
-using MQTTnet.Client;
 
 namespace Domovoy.Connectivity.Adapters;
 

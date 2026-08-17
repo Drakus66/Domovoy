@@ -11,7 +11,6 @@ using Domovoy.DeviceEmulator.Configuration;
 using Domovoy.DeviceEmulator.Devices;
 
 using MQTTnet;
-using MQTTnet.Client;
 using MQTTnet.Protocol;
 
 namespace Domovoy.DeviceEmulator;
@@ -343,7 +342,7 @@ public sealed class EmulatorEngine : IHostedService
         var host = parts[0];
         var port = parts.Length > 1 && int.TryParse(parts[1], out var p) ? p : 1883;
 
-        _client = new MqttFactory().CreateMqttClient();
+        _client = new MqttClientFactory().CreateMqttClient();
         _client.ApplicationMessageReceivedAsync += OnMqttMessageAsync;
 
         var optionsBuilder = new MqttClientOptionsBuilder()

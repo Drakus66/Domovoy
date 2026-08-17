@@ -2,12 +2,10 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-using Domovoy.Common.Configuration;
 using Domovoy.Connectivity.Adapters;
 using Domovoy.Connectivity.Configuration;
 
 using MQTTnet;
-using MQTTnet.Client;
 
 using Microsoft.Extensions.Options;
 
@@ -58,7 +56,7 @@ public class AdapterManager : BackgroundService
         _logger.LogInformation("AdapterManager starting with {Count} adapters...", _adapters.Count());
 
         _mqttOptions = BuildMqttOptions();
-        _mqttClient = new MqttFactory().CreateMqttClient();
+        _mqttClient = new MqttClientFactory().CreateMqttClient();
         _mqttClient.ApplicationMessageReceivedAsync += HandleMqttMessage;
         _mqttClient.DisconnectedAsync += OnMqttDisconnected;
 
@@ -173,7 +171,7 @@ public class AdapterManager : BackgroundService
     private async Task HandleMqttMessage(MqttApplicationMessageReceivedEventArgs args)
     {
         var topic = args.ApplicationMessage.Topic;
-        var payload = System.Text.Encoding.UTF8.GetString(args.ApplicationMessage.PayloadSegment);
+        var payload = args.ApplicationMessage.ConvertPayloadToString() ?? string.Empty;
 
         foreach (var adapter in _adapters)
         {
