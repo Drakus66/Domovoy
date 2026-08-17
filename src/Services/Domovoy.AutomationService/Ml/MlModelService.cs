@@ -52,9 +52,11 @@ public sealed class MlModelService
     private Dictionary<string, (double? Min, double? Max)> _clampsByTarget = new(StringComparer.Ordinal);
 
     // A scope's loaded model exposes whichever predictor matches its kind: a scalar (regression value / binary
-    // probability) for setpoint/toggle governors, or a class (enum label) for the selector governor.
+    // probability) for setpoint/toggle governors, or a class (enum label) for the selector governor. The
+    // scalar's second argument is a context-mode override: null = "condition on the live home mode" (serving),
+    // a value = "condition on this mode" (backtesting a past moment, where the live mode is the wrong answer).
     private sealed record Loaded(
-        string ModelId, Func<DateTimeOffset, double>? Scalar, Func<DateTimeOffset, string?>? Class, MlModel Meta);
+        string ModelId, Func<DateTimeOffset, string?, double>? Scalar, Func<DateTimeOffset, string?>? Class, MlModel Meta);
 
     public MlModelService(
         DbGatewayClient db, HomeModeState mode, MlRuntimeState runtime, IOptions<AutomationOptions> options, ILogger<MlModelService> logger)
@@ -201,7 +203,7 @@ public sealed class MlModelService
 
     // Build the predictor matching a model's kind: regression → scalar value, binary → scalar probability,
     // multiclass → class label.
-    private (Func<DateTimeOffset, double>? Scalar, Func<DateTimeOffset, string?>? Class) BuildPredictors(
+    private (Func<DateTimeOffset, string?, double>? Scalar, Func<DateTimeOffset, string?>? Class) BuildPredictors(
         ITransformer model, string kind)
     {
         switch (kind)
@@ -209,7 +211,7 @@ public sealed class MlModelService
             case MlModelKinds.ScheduleRegression:
             {
                 var engine = _ml.Model.CreatePredictionEngine<MlSample, MlPrediction>(model);
-                return (now =>
+                return ((now, _) =>
                 {
                     var (hour, dow) = Features(now);
                     return engine.Predict(new MlSample { Hour = hour, Dow = dow }).Value;
@@ -217,16 +219,19 @@ public sealed class MlModelService
             }
             case MlModelKinds.ScheduleRegressionContext:
             {
-                // Train/serve parity (Epic 2B): condition on the CURRENT home mode at inference — the same
-                // ambient feature the context-join attached to each training row. Home mode is global, so the
-                // predictor reads it here rather than threading it through the block tick.
+                // Train/serve parity (Epic 2B): condition on the home mode that was in effect at the predicted
+                // moment — the same ambient feature the context-join attached to each training row. Serving asks
+                // about "now", so the live mode is that answer and the predictor reads it here rather than
+                // threading it through the block tick; a backtest asks about a past timestamp and passes the mode
+                // from the historical mode timeline, because scoring yesterday's evening with today's mode is
+                // not a backtest of anything.
                 var engine = _ml.Model.CreatePredictionEngine<
                     Templates.ContextScheduleRegressionTemplate.ContextSample,
                     Templates.ContextScheduleRegressionTemplate.ContextPrediction>(model);
-                return (now =>
+                return ((now, contextMode) =>
                 {
                     var (hour, dow) = Features(now);
-                    var mode = _mode.Current ?? Templates.ContextScheduleRegressionTemplate.NoMode;
+                    var mode = contextMode ?? _mode.Current ?? Templates.ContextScheduleRegressionTemplate.NoMode;
                     return engine.Predict(new Templates.ContextScheduleRegressionTemplate.ContextSample
                     {
                         Hour = hour, Dow = dow, Mode = mode,
@@ -236,7 +241,7 @@ public sealed class MlModelService
             case MlModelKinds.ScheduleBinary:
             {
                 var engine = _ml.Model.CreatePredictionEngine<MlBinarySample, MlBinaryPrediction>(model);
-                return (now =>
+                return ((now, _) =>
                 {
                     var (hour, dow) = Features(now);
                     return engine.Predict(new MlBinarySample { Hour = hour, Dow = dow }).Probability;
@@ -276,7 +281,18 @@ public sealed class MlModelService
     /// &gt; 0 the serving scope's pinned version is used if loaded (Epic 2C model_selection); otherwise the pin
     /// is queued for the next refresh and the scope's latest model is used meanwhile.
     /// </summary>
-    public bool TryPredict(string target, DateTimeOffset now, IReadOnlyList<ModelScope> chain, int pinnedVersion, out float value)
+    public bool TryPredict(string target, DateTimeOffset now, IReadOnlyList<ModelScope> chain, int pinnedVersion, out float value) =>
+        TryPredict(target, now, chain, pinnedVersion, contextMode: null, out value);
+
+    /// <summary>
+    /// As <see cref="TryPredict(string, DateTimeOffset, IReadOnlyList{ModelScope}, int, out float)"/>, but with
+    /// the ambient context (home mode) stated explicitly — for scoring a <i>past</i> moment (Epic 2B backtest),
+    /// where the live mode is not the mode that was in effect. <paramref name="contextMode"/> null keeps the
+    /// serving behaviour (condition on the live mode); it is ignored by models without mode features.
+    /// </summary>
+    public bool TryPredict(
+        string target, DateTimeOffset now, IReadOnlyList<ModelScope> chain, int pinnedVersion, string? contextMode,
+        out float value)
     {
         value = 0;
         // Epic 3I: the master switch turns serving off — governors then see "no model" and auto-demote to Shadow.
@@ -289,7 +305,7 @@ public sealed class MlModelService
                 var scopeKey = scope.AsKey();
                 if (!_byScope.TryGetValue(Key(target, scopeKey), out var latest) || latest.Scalar is null) continue;
                 var serving = ResolvePinned(targetKey, scopeKey, pinnedVersion, latest) ?? latest;
-                value = (float)Clamp(targetKey, serving.Meta.Kind, serving.Scalar!(now));
+                value = (float)Clamp(targetKey, serving.Meta.Kind, serving.Scalar!(now, contextMode));
                 return true;
             }
         }

@@ -47,19 +47,20 @@ public sealed class ScheduleBinaryTemplate : IModelTemplate
         return new TemplateResult(stream.ToArray(), inSample.LogLoss, rows.Count, auc, holdoutCount);
     }
 
-    // Chronological holdout: fit on the older split, score AUC on the most recent unseen split.
-    private static (double Auc, int Count) Backtest(IReadOnlyList<BinaryRow> rows, int minSamples)
+    // Chronological holdout: fit on the older split, score AUC on the most recent unseen split. Null score =
+    // could not be evaluated (see TemplateResult.HoldoutScore) — never a placeholder number.
+    private static (double? Auc, int Count) Backtest(IReadOnlyList<BinaryRow> rows, int minSamples)
     {
         var ordered = rows.OrderBy(r => r.Timestamp).ToList();
         var holdout = (int)Math.Round(ordered.Count * 0.2);
         var trainCount = ordered.Count - holdout;
-        if (holdout == 0 || trainCount < minSamples) return (0, 0);
+        if (holdout == 0 || trainCount < minSamples) return (null, 0);
 
         var train = ordered.Take(trainCount).ToList();
         var test = ordered.Skip(trainCount).ToList();
         // AUC is undefined unless both classes appear in each split.
         if (train.All(r => r.Label) || train.All(r => !r.Label) || test.All(r => r.Label) || test.All(r => !r.Label))
-            return (0, 0);
+            return (null, 0);
 
         var ml = new MLContext(seed: 0);
         var model = BuildPipeline(ml).Fit(ml.Data.LoadFromEnumerable(train));

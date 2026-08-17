@@ -91,6 +91,7 @@ internal static class Program
             builder.Services.AddSingleton<IModelTemplate, ScheduleBinaryTemplate>();
             builder.Services.AddSingleton<IModelTemplate, ScheduleMulticlassTemplate>();
             builder.Services.AddSingleton<ModelTemplateRegistry>();
+            builder.Services.AddSingleton<CapabilityKindResolver>(); // 2I: capability id→value type from the live read-model
             builder.Services.AddSingleton<ZoneCache>();        // 2I: zone id→kind for model-scope chains
             builder.Services.AddSingleton<MlModelService>();   // 2A/2I: load/serve per-scope models for inference
             builder.Services.AddSingleton<BlockCatalog>();    // 1H: built-in control-block types (incl. ml_setpoint)

@@ -4,8 +4,8 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  applicableTypesFor, boundOutputOf, consumerBlocksFor, governorTypesFor, measuredSourceCandidates,
-  suitableDevicesFor,
+  applicableTypesFor, boundOutputOf, consumerBlocksFor, governorTypesFor, holdoutScoreOf, holdoutText,
+  measuredSourceCandidates, suitableDevicesFor,
 } from './mlHub';
 import type { BlockCatalogEntry, ControlBlock } from '../../api/blocks';
 import type { CapabilityDevice } from '../../api/capabilityDevices';
@@ -104,5 +104,21 @@ describe('mlHub applicability joins (Epic 2P, Р9)', () => {
     const withSelf = measuredSourceCandidates(thermostatType, [...devices, governedSensor], governedSensor).map((d) => d.id);
     expect(withSelf[0]).toBe('gov'); // same-device signal wins
     expect(withSelf[1]).toBe('sensor-attic'); // then same zone
+  });
+});
+
+describe('holdout score honesty (Epic 2I)', () => {
+  it('reports "not evaluated" when the model has no held-out samples', () => {
+    // A model trained on a window too thin to split is registered with a placeholder 0 score. Printing that 0
+    // reads as a flawless MAE — the opposite of the truth — so the UI must say it was never measured.
+    const unscored = { holdoutScore: 0, holdoutMae: 0, holdoutSampleCount: 0 };
+    expect(holdoutScoreOf(unscored)).toBeNull();
+    expect(holdoutText(unscored, 2, 'не оценена')).toBe('не оценена');
+  });
+
+  it('formats a measured score, preferring holdoutScore over the legacy MAE field', () => {
+    expect(holdoutText({ holdoutScore: 1.234, holdoutMae: 1.234, holdoutSampleCount: 40 }, 2, 'n/a')).toBe('1.23');
+    // Older regression models persisted only holdoutMae.
+    expect(holdoutText({ holdoutScore: 0, holdoutMae: 0.5, holdoutSampleCount: 12 }, 3, 'n/a')).toBe('0.500');
   });
 });

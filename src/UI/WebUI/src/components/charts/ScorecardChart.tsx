@@ -12,6 +12,7 @@ import { mlApi, Backtest } from '../../api/ml';
 import { fmtTime } from '../../i18n/format';
 import { useChartPalette, gridProps, xAxisProps, yAxisProps, cursorProps } from './chartKit';
 import { ChartCrosshairTooltip } from './chartChrome';
+import { holdoutText } from '../ml/mlHub';
 
 interface Props {
   /** Look-back window in days (default 7). */
@@ -58,7 +59,9 @@ export default function ScorecardChart({ days = 7, height = 240, target, level, 
         <Chip size="small" variant="outlined" color="primary"
           label={t('chart.chip.hitRate', { value: (data.hitRate * 100).toFixed(0) })} />
         <Chip size="small" variant="outlined"
-          label={t('chart.chip.metricScore', { metric: data.model.metric, value: data.model.holdoutScore.toFixed(3) })} />
+          label={t('chart.chip.metricScore', {
+            metric: data.model.metric, value: holdoutText(data.model, 3, t('notEvaluated')),
+          })} />
       </Stack>
     );
   }
@@ -78,7 +81,12 @@ export default function ScorecardChart({ days = 7, height = 240, target, level, 
   return (
     <Box>
       <Stack direction="row" spacing={1} mb={1} flexWrap="wrap" useFlexGap>
-        <Chip size="small" variant="outlined" label={t('chart.chip.mae', { value: data.model.holdoutMae.toFixed(3) })} />
+        {/* The holdout metric is the template's own (MAE for a regression, AUC for a binary schedule), so the
+            chip is labelled by it rather than hard-coded to MAE. */}
+        <Chip size="small" variant="outlined"
+          label={t('chart.chip.metricScore', {
+            metric: data.model.metric, value: holdoutText(data.model, 3, t('notEvaluated')),
+          })} />
         <Chip size="small" variant="outlined" label={t('chart.chip.rmse', { value: data.model.rmse.toFixed(3) })} />
         <Chip size="small" variant="outlined" label={t('chart.chip.points', { count: data.points.length, days })} />
       </Stack>

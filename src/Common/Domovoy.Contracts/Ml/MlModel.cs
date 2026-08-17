@@ -48,17 +48,23 @@ public class MlModel
     /// </summary>
     public double HoldoutMae { get; set; }
 
-    /// <summary>Number of held-out samples the backtest score was computed on (provenance).</summary>
+    /// <summary>
+    /// Number of held-out samples the backtest score was computed on (provenance). <b>0 means the holdout could
+    /// not be evaluated</b> (too little history to split honestly) — read it before trusting
+    /// <see cref="HoldoutScore"/>, which is then a placeholder 0 and not a perfect score.
+    /// </summary>
     public int HoldoutSampleCount { get; set; }
 
     /// <summary>
     /// Honest holdout score in the template's own <see cref="Metric"/> (Epic 2I) — the signal both the
     /// approval scorecard and the model-selection / zone auto-promotion compare on. For regression equals
-    /// <see cref="HoldoutMae"/>; classification templates report AUC / macro-F1 here.
+    /// <see cref="HoldoutMae"/>; classification templates report AUC / macro accuracy here. Meaningful only
+    /// when <see cref="HoldoutSampleCount"/> &gt; 0 (see there); an unevaluated model stores 0 and is never
+    /// compared against an evaluated one.
     /// </summary>
     public double HoldoutScore { get; set; }
 
-    /// <summary>Name of the holdout metric (<c>MAE</c>, <c>AUC</c>, <c>MacroF1</c>) — disambiguates <see cref="HoldoutScore"/>.</summary>
+    /// <summary>Name of the holdout metric (<c>MAE</c>, <c>AUC</c>, <c>MacroAccuracy</c>) — disambiguates <see cref="HoldoutScore"/>.</summary>
     public string Metric { get; set; } = "MAE";
 
     /// <summary>Feature set the model was trained on (Epic 2I), e.g. <c>time</c> or <c>time+mode+occupancy</c>.</summary>

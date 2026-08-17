@@ -1,6 +1,7 @@
 {
   "title": "ML",
   "caption": "Training tasks: what the house learns, from which data, and where it is applied. The model proposes — the deterministic loop executes — the safety floor clamps.",
+  "notEvaluated": "not evaluated",
   "empty": "No training tasks yet.",
   "emptyHint": "Create a task: pick which quantity to predict (e.g. temperature) and the house starts learning from its history.",
   "tabs": {
@@ -197,7 +198,6 @@
     "noModel": "No model loaded yet — train one first.",
     "noTelemetry": "No history in the last {{days}}d to score against.",
     "chip": {
-      "mae": "Backtest MAE {{value}}",
       "rmse": "Train RMSE {{value}}",
       "points": "{{count}} points · {{days}}d",
       "hitRate": "class hit-rate: {{value}}%",

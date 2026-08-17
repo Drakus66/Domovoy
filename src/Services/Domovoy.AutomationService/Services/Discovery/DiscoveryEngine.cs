@@ -35,16 +35,20 @@ public sealed class DiscoveryEngine : BackgroundService
 
     private readonly DbGatewayClient _db;
     private readonly MlProposerGate _gate;
+    private readonly SiteContext _site;
     private readonly AutomationOptions _options;
     private readonly ILogger<DiscoveryEngine> _logger;
 
     // The event-log endpoint caps a single response; the engine works off a recent window, so one page suffices.
     private const int MaxEvents = 40000;
 
-    public DiscoveryEngine(DbGatewayClient db, MlProposerGate gate, IOptions<AutomationOptions> options, ILogger<DiscoveryEngine> logger)
+    public DiscoveryEngine(
+        DbGatewayClient db, MlProposerGate gate, SiteContext site, IOptions<AutomationOptions> options,
+        ILogger<DiscoveryEngine> logger)
     {
         _db = db;
         _gate = gate;
+        _site = site;
         _options = options.Value;
         _logger = logger;
     }
@@ -104,8 +108,9 @@ public sealed class DiscoveryEngine : BackgroundService
 
         // Epic 2F × 3B: a repeatedly hand-arranged zone state → a scene proposal; an existing scene the user keeps
         // activating at a consistent time → a schedule-rule proposal.
-        var sceneCandidates = SceneConfigurationMiner.Mine(events, devices, scenes, _options);
-        var sceneSchedules = SceneActivationMiner.Mine(events, scenes, _options);
+        // Both mine a time of day, so they read the clock the site lives on (and the one cron is matched against).
+        var sceneCandidates = SceneConfigurationMiner.Mine(events, devices, scenes, _options, _site.TimeZone);
+        var sceneSchedules = SceneActivationMiner.Mine(events, scenes, _options, _site.TimeZone);
 
         // Epic 3J "living rules": rules the household systematically overrides → a "retire this rule?" proposal.
         var deadRules = InterventionMiner.Mine(events, _options);

@@ -52,9 +52,14 @@ public static class ThresholdDriftMiner
             if (!overridesByRule.TryGetValue(rule.Id, out var overrideTimes) || overrideTimes.Count < options.DriftMinOverrides)
                 continue;
 
-            // The trigger capability's numeric readings over the window, chronological.
+            // The readings of the trigger's OWN sensor over the window, chronological. Scoping matters: a
+            // capability-only filter mixes every device reporting it (three illuminance sensors in three rooms
+            // would average into one meaningless "lived-in value"). A device-scoped trigger reads that device, a
+            // zone-scoped one reads that zone, and only a house-wide trigger (neither set) reads them all — the
+            // same breadth the trigger itself watches.
             var series = events
                 .Where(e => string.Equals(e.CapabilityId, trigger.CapabilityId, StringComparison.OrdinalIgnoreCase)
+                    && MatchesTriggerScope(e, trigger)
                     && TryDoubleJson(e.NewValue, out _))
                 .Select(e => (e.Timestamp, Value: JsonDouble(e.NewValue)))
                 .OrderBy(x => x.Timestamp)
@@ -77,6 +82,17 @@ public static class ThresholdDriftMiner
 
     private static bool IsThresholdOp(string? op) =>
         op is "lt" or "gt" or "lte" or "gte";
+
+    // Whether an event comes from the source the trigger actually watches: its device, else its zone, else
+    // anything (a trigger naming neither is house-wide by design).
+    private static bool MatchesTriggerScope(DbGatewayClient.EventLogEntry e, RuleTrigger trigger)
+    {
+        if (!string.IsNullOrEmpty(trigger.DeviceId))
+            return string.Equals(e.DeviceId, trigger.DeviceId, StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(trigger.ZoneId))
+            return string.Equals(e.ZoneId, trigger.ZoneId, StringComparison.OrdinalIgnoreCase);
+        return true;
+    }
 
     // The most recent reading at or before an override moment (the sensor value the household disagreed with).
     private static double? LastValueAtOrBefore(List<(DateTime Timestamp, double Value)> series, DateTime at)

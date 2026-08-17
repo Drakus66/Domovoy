@@ -10,18 +10,29 @@ namespace Domovoy.AutomationService.Services;
 /// Time + sun trigger scheduler (roadmap Epic 1A). Ticks once per minute and fires any active
 /// rule whose cron schedule matches the current minute, or whose sunrise/sunset (± offset) falls in it.
 /// Per-minute resolution keeps it dependency-free and is ample for irrigation/outdoor-lighting.
+///
+/// <para><b>Cron is wall-clock time at the site</b> (<see cref="SiteContext.TimeZone"/>, persisted with the site
+/// location in Epic 2K), not the container's clock. "Water the greenhouse at 07:00" has to mean 07:00 where the
+/// house is; matching against the process-local time made the meaning depend on the container's <c>TZ</c> (UTC in
+/// the shipped compose), so a household in another timezone got its schedules shifted. It also lets the
+/// scene-schedule discovery (Epic 2F × 3B) propose a cron from the local time it observed and have it fire at
+/// exactly that time. Until a site timezone is configured, <see cref="SiteContext"/> is UTC — the same behaviour
+/// as before.</para>
 /// </summary>
 public sealed class AutomationScheduler : BackgroundService
 {
     private readonly RuleStore _store;
     private readonly SunCalculator _sun;
+    private readonly SiteContext _site;
     private readonly RuleRunner _runner;
     private readonly ILogger<AutomationScheduler> _logger;
 
-    public AutomationScheduler(RuleStore store, SunCalculator sun, RuleRunner runner, ILogger<AutomationScheduler> logger)
+    public AutomationScheduler(
+        RuleStore store, SunCalculator sun, SiteContext site, RuleRunner runner, ILogger<AutomationScheduler> logger)
     {
         _store = store;
         _sun = sun;
+        _site = site;
         _runner = runner;
         _logger = logger;
     }
@@ -37,7 +48,7 @@ public sealed class AutomationScheduler : BackgroundService
 
             try
             {
-                Tick(DateTimeOffset.Now, stoppingToken);
+                Tick(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, _site.TimeZone), stoppingToken);
             }
             catch (Exception ex)
             {
@@ -46,6 +57,7 @@ public sealed class AutomationScheduler : BackgroundService
         }
     }
 
+    // `now` is site-local (its offset is the site's); cron reads its wall-clock fields, sun triggers its UTC instant.
     private void Tick(DateTimeOffset now, CancellationToken ct)
     {
         var nowUtc = now.ToUniversalTime();

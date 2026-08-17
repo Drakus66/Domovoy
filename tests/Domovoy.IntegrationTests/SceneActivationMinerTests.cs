@@ -68,6 +68,19 @@ public sealed class SceneActivationMinerTests
     }
 
     [Fact]
+    public void MinuteOfDay_IsSiteWallClock_NotUtc()
+    {
+        // The household presses the tile at 23:00 local in a UTC+3 site; the event-log stamps 20:00 UTC. The
+        // proposal has to say (and the cron has to fire at) 23:00 — the scheduler matches cron on the site clock.
+        var plusThree = TimeZoneInfo.CreateCustomTimeZone("Test/Plus3", TimeSpan.FromHours(3), "Test +3", "Test +3");
+
+        var s = Assert.Single(SceneActivationMiner.Mine(
+            DailyActivations(days: 5, hour: 20), Scenes, Options, plusThree));
+
+        Assert.InRange(s.Minute, 1375, 1390); // ~23:00 local, not ~20:00 UTC
+    }
+
+    [Fact]
     public void BelowSupport_ProposesNothing()
     {
         Assert.Empty(SceneActivationMiner.Mine(DailyActivations(days: 3, hour: 20), Scenes, Options)); // 3 < 4

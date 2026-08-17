@@ -5,6 +5,7 @@
 using Domovoy.AutomationService.Blocks;
 using Domovoy.AutomationService.Configuration;
 using Domovoy.AutomationService.Ml;
+using Domovoy.AutomationService.Ml.Templates;
 using Domovoy.AutomationService.Services.Notifications;
 
 using Microsoft.Extensions.Options;
@@ -32,6 +33,7 @@ public sealed class RefreshLoop : BackgroundService
     private readonly LoadManager _loadManager;
     private readonly DeviceEnergyService _deviceEnergy;
     private readonly MlRuntimeState _mlRuntime;
+    private readonly CapabilityKindResolver _capabilityKinds;
     private readonly NotificationRuntimeState _notifications;
     private readonly AutomationOptions _options;
     private readonly ILogger<RefreshLoop> _logger;
@@ -39,7 +41,8 @@ public sealed class RefreshLoop : BackgroundService
     public RefreshLoop(
         RuleStore store, SceneStore scenes, BlockStore blocks, VariableStore variables, DeviceRegistry registry, DbGatewayClient db, HomeModeState mode,
         SunCalculator sun, SiteContext site, CalendarContext calendar, TariffContext tariff, LoadManager loadManager,
-        DeviceEnergyService deviceEnergy, MlRuntimeState mlRuntime, NotificationRuntimeState notifications, IOptions<AutomationOptions> options,
+        DeviceEnergyService deviceEnergy, MlRuntimeState mlRuntime, CapabilityKindResolver capabilityKinds,
+        NotificationRuntimeState notifications, IOptions<AutomationOptions> options,
         ILogger<RefreshLoop> logger)
     {
         _store = store;
@@ -56,6 +59,7 @@ public sealed class RefreshLoop : BackgroundService
         _loadManager = loadManager;
         _deviceEnergy = deviceEnergy;
         _mlRuntime = mlRuntime;
+        _capabilityKinds = capabilityKinds;
         _notifications = notifications;
         _options = options.Value;
         _logger = logger;
@@ -91,6 +95,10 @@ public sealed class RefreshLoop : BackgroundService
     {
         var devices = await _db.GetDevicesAsync(ct);
         if (devices is null) return null;
+
+        // 2I: capability id → declared value type, so the ML trainer types its target from the live descriptor
+        // (an enum target picks the multiclass template) instead of a static Boolean/Number guess.
+        _capabilityKinds.Sync(devices);
 
         foreach (var d in devices)
         {

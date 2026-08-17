@@ -795,6 +795,11 @@ public sealed class DbGatewayClient
     public sealed class CapabilitySnapshot
     {
         public string Id { get; set; } = string.Empty;
+
+        /// <summary>Value type the adapter declared (<c>Boolean</c>/<c>Number</c>/<c>Enum</c>/…) — the
+        /// descriptor the ML trainer types its target from (Epic 2I, <see cref="Ml.Templates.CapabilityKindResolver"/>).</summary>
+        public string Kind { get; set; } = string.Empty;
+
         public bool Writable { get; set; }
 
         /// <summary>True for a series the platform maintains rather than the adapter reporting it (Epic 3C-D)

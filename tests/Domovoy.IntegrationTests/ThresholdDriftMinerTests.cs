@@ -36,9 +36,9 @@ public sealed class ThresholdDriftMinerTests
         },
     };
 
-    private static DbGatewayClient.EventLogEntry Lux(int minute, double value) => new()
+    private static DbGatewayClient.EventLogEntry Lux(int minute, double value, string deviceId = "sensor1") => new()
     {
-        Timestamp = Base.AddMinutes(minute), CapabilityId = "illuminance", DeviceId = "sensor1",
+        Timestamp = Base.AddMinutes(minute), CapabilityId = "illuminance", DeviceId = deviceId,
         Kind = "state_change", TriggerSource = "device", NewValue = Num(value),
     };
 
@@ -81,6 +81,33 @@ public sealed class ThresholdDriftMinerTests
         }
 
         Assert.Empty(ThresholdDriftMiner.Mine(events, new[] { DarkRule() }, firings, new AutomationOptions()));
+    }
+
+    [Fact]
+    public void ReadsOnlyTheTriggersOwnSensor_WhenTheTriggerNamesADevice()
+    {
+        // The rule watches sensor1 (a dark hallway, ~80 lux at override time). Another room's sensor reports the
+        // same capability at ~10 lux all evening — mixing the two would drag the median to a value neither
+        // sensor ever showed. The proposal must reflect the sensor the rule actually triggers on.
+        var rule = DarkRule();
+        rule.Triggers[0].DeviceId = "sensor1";
+
+        var events = new List<DbGatewayClient.EventLogEntry>();
+        for (var m = 0; m < 60; m++)
+        {
+            events.Add(Lux(m, 80));
+            events.Add(Lux(m, 10, deviceId: "sensor2"));
+        }
+
+        var firings = new List<InterventionMiner.Firing>();
+        for (var i = 0; i < 5; i++)
+        {
+            var at = Base.AddMinutes(10 + i * 5);
+            firings.Add(new InterventionMiner.Firing("ruleA", "light1", "on_off", at, true, at.AddSeconds(20)));
+        }
+
+        var d = Assert.Single(ThresholdDriftMiner.Mine(events, new[] { rule }, firings, new AutomationOptions()));
+        Assert.Equal(80, d.SuggestedThreshold);
     }
 
     [Fact]

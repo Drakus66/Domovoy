@@ -54,9 +54,12 @@ public static class SceneConfigurationMiner
         IReadOnlyList<DbGatewayClient.EventLogEntry> events,
         IReadOnlyList<DbGatewayClient.DeviceSnapshot> devices,
         IReadOnlyList<Scene> existingScenes,
-        AutomationOptions options)
+        AutomationOptions options,
+        TimeZoneInfo? siteZone = null)
     {
         if (events.Count == 0 || devices.Count == 0) return new();
+
+        var siteClock = siteZone ?? TimeZoneInfo.Utc;
 
         var stateCaps = new HashSet<string>(options.SceneStateCapabilities, StringComparer.OrdinalIgnoreCase);
         var minDevices = Math.Max(2, options.SceneMinDevices);
@@ -152,7 +155,7 @@ public static class SceneConfigurationMiner
 
             if (existingByDevices.Contains(DeviceSetKey(targets.Select(t => t.DeviceId)))) continue; // already a scene
 
-            var (minute, spread) = Schedule(cl.Times, options);
+            var (minute, spread) = Schedule(cl.Times, options, siteClock);
             candidates.Add(new SceneCandidate(cl.Zone, targets, cl.Times.Count, minute, spread));
         }
 
@@ -260,15 +263,24 @@ public static class SceneConfigurationMiner
         string.Join(",", deviceIds.Distinct().OrderBy(x => x, StringComparer.Ordinal));
 
     // Do the arrangement times cluster around one time of day? Then suggest a daily minute for a schedule rule.
-    private static (int? Minute, double Spread) Schedule(List<DateTime> times, AutomationOptions options)
+    // "Time of day" is wall-clock time at the site: event timestamps are UTC, and a household that arranges the
+    // living room at 21:00 local must get a rule that says (and fires at) 21:00, not the UTC hour behind it.
+    private static (int? Minute, double Spread) Schedule(List<DateTime> times, AutomationOptions options, TimeZoneInfo siteZone)
     {
         if (times.Count < Math.Max(2, options.SceneScheduleMinSupport)) return (null, 0);
 
-        var minutes = times.Select(t => (double)(t.Hour * 60 + t.Minute)).ToList();
+        var minutes = times.Select(t => (double)SiteMinuteOfDay(t, siteZone)).ToList();
         var mean = minutes.Average();
         var std = Math.Sqrt(minutes.Sum(m => (m - mean) * (m - mean)) / minutes.Count);
         if (std > options.SceneScheduleMaxSpreadMinutes) return (null, 0);
         return ((int)Math.Round(mean) % (24 * 60), Math.Round(std, 1));
+    }
+
+    /// <summary>Minute of day (0..1439) of a UTC event timestamp as read on the site's wall clock.</summary>
+    internal static int SiteMinuteOfDay(DateTime utc, TimeZoneInfo siteZone)
+    {
+        var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), siteZone);
+        return local.Hour * 60 + local.Minute;
     }
 
     private static bool IsOn(object? v) => v switch

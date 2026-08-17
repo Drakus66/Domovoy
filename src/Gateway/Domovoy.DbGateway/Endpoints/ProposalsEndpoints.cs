@@ -134,7 +134,7 @@ public static class ProposalApplication
     {
         ProposalKind.Rule => ApplyRuleAsync(db, p),
         ProposalKind.BlockPromotion => ApplyBlockParamAsync(db, p, "stage", p.ToStage),
-        ProposalKind.ModelSelection => ApplyBlockParamAsync(db, p, "model_version", p.ModelVersion),
+        ProposalKind.ModelSelection => ApplyBlockParamAsync(db, p, MlEndpoints.ModelVersionParam, p.ModelVersion),
         ProposalKind.MlTask => ApplyMlTaskAsync(db, p),
         ProposalKind.Scene => ApplySceneAsync(db, p),
         ProposalKind.RuleAmendment => ApplyRuleAmendmentAsync(db, p),

@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using Domovoy.Contracts.Blocks;
 using Domovoy.Contracts.Ml;
 using Domovoy.DbGateway.Models;
 
@@ -17,6 +18,12 @@ namespace Domovoy.DbGateway.Endpoints;
 public static class MlEndpoints
 {
     public const string Collection = "ml_models";
+
+    /// <summary>
+    /// Control-block parameter holding a pinned model version (Epic 2C <c>model_selection</c>): a person decided
+    /// this instance serves exactly that version. Retention must not delete it behind their back.
+    /// </summary>
+    public const string ModelVersionParam = "model_version";
 
     /// <summary>Register payload: metadata + base64-encoded ML.NET artifact.</summary>
     public record RegisterRequest(MlModel Model, string ArtifactBase64);
@@ -69,10 +76,9 @@ public static class MlEndpoints
             return r.DeletedCount == 0 ? Results.NotFound() : Results.NoContent();
         });
 
-        // Prune old versions across (kind, target, scope) lines, keeping the N most recent of each (Epic 2P).
-        // Age-based only — pin-awareness (reading blocks' model_version params) is deliberately deferred;
-        // the UI warns before deleting a pinned version by hand.
-        group.MapPost("/models/prune", async (PruneRequest req, IMongoDatabase db) =>
+        // Prune old versions across (kind, target, scope) lines, keeping the N most recent of each (Epic 2P) and
+        // never a version a control block pins (Epic 2C) — see PruneAsync.
+        group.MapPost("/models/prune", async (PruneRequest req, IMongoDatabase db, ILoggerFactory loggers) =>
         {
             if (req.KeepLast < 1) return Results.BadRequest(new { error = "keepLast must be at least 1" });
 
@@ -81,13 +87,13 @@ public static class MlEndpoints
                 ? FilterDefinition<MlModelDocument>.Empty
                 : b.Eq(x => x.TargetCapability, req.Target);
 
-            var deleted = await PruneAsync(db, filter, req.KeepLast);
+            var deleted = await PruneAsync(db, filter, req.KeepLast, loggers.CreateLogger(nameof(MlEndpoints)));
             return Results.Ok(new { deleted });
         });
 
         // Register a freshly trained model (from the AutomationService trainer). `keepLast` > 0 auto-prunes
         // the registered model's own (kind, target, scope) line right after the insert (Epic 2P retention).
-        group.MapPost("/models", async (RegisterRequest req, int? keepLast, IMongoDatabase db) =>
+        group.MapPost("/models", async (RegisterRequest req, int? keepLast, IMongoDatabase db, ILoggerFactory loggers) =>
         {
             if (req.Model is null || string.IsNullOrEmpty(req.ArtifactBase64))
                 return Results.BadRequest(new { error = "model and artifact are required" });
@@ -127,7 +133,7 @@ public static class MlEndpoints
                     b.Eq(x => x.TargetCapability, model.TargetCapability),
                     b.Eq(x => x.Scope.Level, model.Scope.Level),
                     b.Eq(x => x.Scope.Key, model.Scope.Key));
-                await PruneAsync(db, line, keepLast.Value);
+                await PruneAsync(db, line, keepLast.Value, loggers.CreateLogger(nameof(MlEndpoints)));
             }
 
             return Results.Created($"/api/ml/models/{doc.Id}", ToMetadata(doc));
@@ -138,23 +144,78 @@ public static class MlEndpoints
     /// Delete everything older than the <paramref name="keepLast"/> most recent versions of each
     /// (kind, target, scope) line matching <paramref name="filter"/>. Metadata-only scan (artifact projected
     /// out), then a single DeleteMany by id. Public so retention tests exercise it against a real Mongo.
+    ///
+    /// <para><b>Pin-aware</b> (Epic 2C): a version pinned by a control block's <see cref="ModelVersionParam"/>
+    /// is never deleted, even when it falls outside the retention window. A pin is a person's decision that this
+    /// instance serves exactly that version; retention silently deleting it would drop the instance back to
+    /// "latest" — the opposite of what they asked for, and invisible until behaviour changed. Keeping a pinned
+    /// version means a line can hold slightly more than <paramref name="keepLast"/> versions; that is the
+    /// intended trade, and it is logged.</para>
     /// </summary>
-    public static async Task<long> PruneAsync(IMongoDatabase db, FilterDefinition<MlModelDocument> filter, int keepLast)
+    public static async Task<long> PruneAsync(
+        IMongoDatabase db, FilterDefinition<MlModelDocument> filter, int keepLast, ILogger? logger = null)
     {
         var metas = await Models(db).Find(filter)
             .Project(x => new { x.Id, x.Kind, x.TargetCapability, x.Scope, x.Version })
             .ToListAsync();
 
-        var stale = metas
+        var pins = await LoadPinnedVersionsAsync(db);
+        var expired = metas
             .GroupBy(m => (m.Kind, Target: m.TargetCapability.ToLowerInvariant(), Key: (m.Scope ?? ModelScope.Global).AsKey()))
             .SelectMany(g => g.OrderByDescending(m => m.Version).Skip(keepLast))
+            .ToList();
+
+        var stale = expired
+            .Where(m => !IsPinned(pins, m.TargetCapability, m.Version))
             .Select(m => m.Id)
             .ToList();
+
+        var kept = expired.Count - stale.Count;
+        if (kept > 0)
+            logger?.LogInformation("Retention kept {Count} expired model version(s) pinned by a control block", kept);
         if (stale.Count == 0) return 0;
 
         var r = await Models(db).DeleteManyAsync(Builders<MlModelDocument>.Filter.In(x => x.Id, stale));
         return r.DeletedCount;
     }
+
+    /// <summary>
+    /// Model versions pinned by control blocks, as (target, version) pairs. A governor block names its ML target
+    /// through its measured input (the port id and its capability id are the same capability — see the apply
+    /// wizard), so the pin can be scoped to that target's lines. A pinned block with no readable input protects
+    /// the version number on every line (target <c>""</c>): over-keeping a version is recoverable, deleting a
+    /// pinned one is not. Scope is deliberately not matched — which scope in the zone→zone_kind→global chain ends
+    /// up serving is a runtime decision, so all scopes of the target keep the version.
+    /// </summary>
+    private static async Task<HashSet<(string Target, int Version)>> LoadPinnedVersionsAsync(IMongoDatabase db)
+    {
+        var pins = new HashSet<(string, int)>();
+        var blocks = await db.GetCollection<ControlBlock>(BlockEndpoints.Collection)
+            .Find(FilterDefinition<ControlBlock>.Empty).ToListAsync();
+
+        foreach (var block in blocks)
+        {
+            // Disabled instances count too: re-enabling one must not find its pinned version gone.
+            if (!block.Params.TryGetValue(ModelVersionParam, out var raw)) continue;
+            var version = (int)Math.Round(raw);
+            if (version <= 0) continue; // 0 = "serve latest", nothing to protect
+
+            var targets = block.Inputs
+                .SelectMany(i => new[] { i.Key, i.Value?.CapabilityId })
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s!.ToLowerInvariant())
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            if (targets.Count == 0) pins.Add((string.Empty, version));
+            else foreach (var target in targets) pins.Add((target, version));
+        }
+        return pins;
+    }
+
+    private static bool IsPinned(HashSet<(string Target, int Version)> pins, string target, int version) =>
+        pins.Count > 0
+        && (pins.Contains((target.ToLowerInvariant(), version)) || pins.Contains((string.Empty, version)));
 
     private static MlModel ToMetadata(MlModelDocument d) => new()
     {

@@ -30,9 +30,14 @@ public static class SceneActivationMiner
     public static List<SceneSchedule> Mine(
         IReadOnlyList<DbGatewayClient.EventLogEntry> events,
         IReadOnlyList<Scene> existingScenes,
-        AutomationOptions options)
+        AutomationOptions options,
+        TimeZoneInfo? siteZone = null)
     {
         if (events.Count == 0 || existingScenes.Count == 0) return new();
+
+        // Wall-clock time at the site, not UTC: the proposed cron and the "you press it around 21:00" wording
+        // both have to mean the hour the household actually presses the tile.
+        var zone = siteZone ?? TimeZoneInfo.Utc;
 
         var nameById = existingScenes
             .GroupBy(s => s.Id, StringComparer.Ordinal)
@@ -64,7 +69,7 @@ public static class SceneActivationMiner
         {
             if (times.Count < minSupport) continue;
 
-            var minutes = times.Select(t => (double)(t.Hour * 60 + t.Minute)).ToList();
+            var minutes = times.Select(t => (double)SceneConfigurationMiner.SiteMinuteOfDay(t, zone)).ToList();
             var mean = minutes.Average();
             var std = Math.Sqrt(minutes.Sum(m => (m - mean) * (m - mean)) / minutes.Count);
             if (std > options.SceneScheduleMaxSpreadMinutes) continue; // activated at scattered times → not schedulable

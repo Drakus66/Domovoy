@@ -21,6 +21,7 @@ import { blocksApi, BlockCatalogEntry, ControlBlock } from '../../api/blocks';
 import { toNewBlock } from '../blocks/blockGraphModel';
 import { fmtDateTime } from '../../i18n/format';
 import MlTaskDetail from './MlTaskDetail';
+import { holdoutText } from './mlHub';
 
 const stageKey = (s: number) => (s >= 2 ? 'stage.full' : s === 1 ? 'stage.bounded' : 'stage.shadow');
 
@@ -87,7 +88,7 @@ export default function MlTaskCard({
                   <Chip size="small" variant="outlined" color="primary"
                     label={t('card.quality', {
                       metric: latestGlobal.metric || 'MAE',
-                      score: (latestGlobal.holdoutScore || latestGlobal.holdoutMae).toFixed(2),
+                      score: holdoutText(latestGlobal, 2, t('notEvaluated')),
                     })} />
                 </Tooltip>
               )}
