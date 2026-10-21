@@ -354,22 +354,30 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Official image (topology v4). bitnami/rabbitmq is no longer pullable since the Bitnami catalogue was
+  # frozen, and its default loopback_users.<user> refused every non-localhost login of the configured user.
   rabbitmq:
-    image: bitnami/rabbitmq:latest
+    image: rabbitmq:4.2-management
     container_name: rabbitmq
+    # The node name (rabbit@<hostname>) names the data directory: a random container hostname would
+    # orphan the broker state on every recreate.
+    hostname: rabbitmq
     networks:
       - domovoy-network
     ports:
       - "1883:1883" # MQTT
       - "5672:5672" # AMQP
       - "15672:15672" # Management UI
-      - "15675:15675" # MQTT over WebSocket
     environment:
-      - RABBITMQ_USERNAME=${RABBITMQ_DEFAULT_USER}
-      - RABBITMQ_PASSWORD=${RABBITMQ_DEFAULT_PASS}
-      - RABBITMQ_PLUGINS=rabbitmq_mqtt,rabbitmq_management,rabbitmq_prometheus
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+    configs:
+      - source: rabbitmq_enabled_plugins
+        target: /etc/rabbitmq/enabled_plugins
     volumes:
-      - rabbitmq_data:/bitnami/rabbitmq/mnesia
+      # New volume, not a rename: the bitnami data layout differs, and the services re-declare their
+      # queues and exchanges on connect.
+      - rabbitmq4_data:/var/lib/rabbitmq
 
     healthcheck:
       test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
@@ -419,9 +427,14 @@ services:
       rabbitmq:
         condition: service_healthy
 
+configs:
+  # Inline, so the topology bundle needs no extra asset on the host.
+  rabbitmq_enabled_plugins:
+    content: "[rabbitmq_management,rabbitmq_mqtt,rabbitmq_prometheus]."
+
 volumes:
   mongodb_data:
-  rabbitmq_data:
+  rabbitmq4_data:
   prometheus_data:
   caddy_data:
   caddy_config:

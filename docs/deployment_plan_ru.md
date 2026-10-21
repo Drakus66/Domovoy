@@ -118,10 +118,12 @@
 
 1. **MongoDB:** пин `image: mongo:7` (сейчас `mongo:latest`; драйвер 2.23.1 поддерживает сервер до 7.0) +
    `--wiredTigerCacheSizeGB 1` + `mem_limit`.
-2. **RabbitMQ:** `bitnami/rabbitmq:latest` (каталог Bitnami заморожен Broadcom, 2025) → официальный
-   **`rabbitmq:4-management`** + mount `enabled_plugins` (`rabbitmq_management,rabbitmq_mqtt,rabbitmq_prometheus`;
-   для порта 15675 нужен ещё `rabbitmq_web_mqtt` — проверить, используется ли web-mqtt, иначе убрать). Внимание:
-   другие имена env (`RABBITMQ_DEFAULT_USER/PASS`) и путь тома по сравнению с bitnami.
+2. ✅ **RabbitMQ (сделано 2026-10-22, топология v4):** `bitnami/rabbitmq:latest` → официальный
+   `rabbitmq:4.2-management`, плагины (`management`, `mqtt`, `prometheus`) — inline-config в compose, том
+   `rabbitmq4_data` на `/var/lib/rabbitmq`, `hostname: rabbitmq` (имя узла = каталог данных). Порт 15675
+   (web-mqtt) снят — не использовался. Причина не только в замороженном каталоге: bitnami по умолчанию
+   ставил `loopback_users.<user> = true`, и на чистой установке шину не видел ни один сервис. Старый том
+   `rabbitmq_data` после перехода удалить вручную.
 3. **Наблюдаемость → opt-in.** `prometheus` + `mongodb-exporter` вынести в compose-профиль **`monitoring`**
    (по умолчанию выключен — Grafana/алертов нет, собранное сейчас никто не смотрит). `/metrics`-эндпоинты в
    сервисах остаются; доустановка = `docker compose --profile monitoring up`.

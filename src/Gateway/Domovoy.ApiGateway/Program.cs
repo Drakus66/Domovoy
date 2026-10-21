@@ -181,6 +181,9 @@ internal static class Program
             });
 
             builder.Services.AddSignalR();
+            // Without the section binding the bus falls back to the user/user defaults — invisible in dev
+            // (whose .env uses exactly those), fatal on any real install.
+            builder.Services.Configure<MessageBus.RabbitMqConfig>(builder.Configuration.GetSection("RabbitMQ"));
             builder.Services.AddSingleton<MessageBus.IMessageBus, MessageBus.RabbitMqConnection>();
             MessageBus.SystemControlExtensions.AddSystemControl(builder.Services, "api-gateway"); // UI-issued restart
 

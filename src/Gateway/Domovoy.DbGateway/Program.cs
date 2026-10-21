@@ -72,7 +72,9 @@ internal static class Program
             builder.Services.AddSingleton<Services.BackupService>();
             builder.Services.AddHostedService<Services.BackupScheduler>();
 
-            // Configure RabbitMQ
+            // Configure RabbitMQ. Without the section binding the connection silently falls back to the
+            // user/user defaults — invisible in dev (whose .env uses exactly those), fatal on any real install.
+            builder.Services.Configure<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMQ"));
             builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
             builder.Services.AddSystemControl("db-gateway"); // UI-issued restart (self-stop → restart policy)
 
