@@ -458,3 +458,60 @@ public class ReleaseTagFormatTests
         }
     }
 }
+
+/// <summary>
+/// A rollback must return every component of the last run, not just the last group (roadmap Epic 3K).
+/// It once restored <c>pinned.prev.yml</c>, which a run rewrites before every group — so the live rollback
+/// of a seven-component update reverted the updater alone and left the other six on the new version.
+/// </summary>
+public class RollbackPinsTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "domovoy-pins-" + Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public async Task Rollback_RestoresThePinsOfTheRunStart_NotOfTheLastGroup()
+    {
+        var compose = new ComposeRunner(
+            new Domovoy.Updater.Configuration.UpdaterOptions { InstallDirectory = _root },
+            NullLogger<ComposeRunner>.Instance);
+
+        await compose.WritePinsAsync(Pins("old", "old", "old"), CancellationToken.None);
+
+        compose.SnapshotForRollback();
+        await compose.WritePinsAsync(Pins("new", "old", "old"), CancellationToken.None);
+        await compose.WritePinsAsync(Pins("new", "new", "old"), CancellationToken.None);
+        await compose.WritePinsAsync(Pins("new", "new", "new"), CancellationToken.None);
+
+        compose.RestoreRollbackPins();
+
+        Assert.Equal(Pins("old", "old", "old"), compose.ReadPins());
+    }
+
+    [Fact]
+    public async Task WithoutASnapshot_FallsBackToThePreviousWrite()
+    {
+        // Дом, обновлённый до появления снимка: лучшее, что есть, — состояние перед последней записью.
+        var compose = new ComposeRunner(
+            new Domovoy.Updater.Configuration.UpdaterOptions { InstallDirectory = _root },
+            NullLogger<ComposeRunner>.Instance);
+
+        await compose.WritePinsAsync(Pins("old", "old", "old"), CancellationToken.None);
+        await compose.WritePinsAsync(Pins("new", "new", "new"), CancellationToken.None);
+
+        compose.RestoreRollbackPins();
+
+        Assert.Equal(Pins("old", "old", "old"), compose.ReadPins());
+    }
+
+    private static Dictionary<string, string> Pins(string gateway, string automation, string updater) => new()
+    {
+        ["db-gateway"] = $"ghcr.io/x/db-gateway@sha256:{gateway}",
+        ["automation-service"] = $"ghcr.io/x/automation-service@sha256:{automation}",
+        ["domovoy-updater"] = $"ghcr.io/x/updater@sha256:{updater}",
+    };
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
+    }
+}

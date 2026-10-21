@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
 
 using Domovoy.Updater.Configuration;
 using Domovoy.Updater.Model;
@@ -33,6 +34,8 @@ namespace Domovoy.Updater.Services;
 /// </summary>
 public sealed class ComposeRunner
 {
+    private static readonly Regex ServiceName = new("^[a-zA-Z0-9][a-zA-Z0-9_.-]*$", RegexOptions.Compiled);
+
     private readonly UpdaterOptions _options;
     private readonly ILogger<ComposeRunner> _logger;
 
@@ -66,11 +69,33 @@ public sealed class ComposeRunner
         await File.WriteAllTextAsync(_options.PinnedFile, sb.ToString(), ct);
     }
 
-    /// <summary>Restores the previous pin overlay — the first move of any rollback.</summary>
+    /// <summary>Restores the pin overlay as it was before the last write — undoes one failed group.</summary>
     public void RestorePreviousPins()
     {
         if (File.Exists(_options.PreviousPinnedFile))
             File.Copy(_options.PreviousPinnedFile, _options.PinnedFile, overwrite: true);
+    }
+
+    /// <summary>
+    /// Remembers the pins as they stand before a run touches them. <see cref="RestorePreviousPins"/> is not
+    /// enough for a rollback: a run writes pins once per group, so "previous" is the state before the LAST
+    /// group, and rolling back to it reverted only the updater while every other component stayed new.
+    /// </summary>
+    public void SnapshotForRollback()
+    {
+        Directory.CreateDirectory(_options.StateDirectory);
+        if (File.Exists(_options.PinnedFile))
+            File.Copy(_options.PinnedFile, _options.RollbackPinnedFile, overwrite: true);
+    }
+
+    /// <summary>Restores the pins of the last run's start — the first move of a rollback.</summary>
+    public void RestoreRollbackPins()
+    {
+        // Установка, обновлённая до появления снимка, его не имеет — тогда лучшее, что есть, это prev.
+        if (File.Exists(_options.RollbackPinnedFile))
+            File.Copy(_options.RollbackPinnedFile, _options.PinnedFile, overwrite: true);
+        else
+            RestorePreviousPins();
     }
 
     /// <summary>Reads the current pins, so a partial update only rewrites what it changes.</summary>
@@ -112,13 +137,29 @@ public sealed class ComposeRunner
         return RunAsync(args, ct);
     }
 
-    /// <summary>Full convergence — used after a topology change, which may add or remove services.</summary>
-    public Task<string> UpAllAsync(CancellationToken ct)
+    /// <summary>
+    /// Full convergence — used after a topology change, which may add or remove services — of every service
+    /// except <paramref name="excluded"/>. The updater excludes itself: a bare <c>up -d</c> recreates the
+    /// container this very compose process runs in whenever its pin moved, killing it half-way and leaving the
+    /// replacement stuck in <c>Created</c>. The updater's own move is the self-replace agent's job.
+    /// </summary>
+    public async Task<string> UpAllExceptAsync(string excluded, CancellationToken ct)
     {
+        var listArgs = new List<string> { "compose" };
+        listArgs.AddRange(FileArguments());
+        listArgs.AddRange(new[] { "config", "--services" });
+
+        // Вывод склеен со stderr, где бывают предупреждения compose, — имя сервиса не содержит пробелов и '='.
+        var services = (await RunAsync(listArgs, ct))
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(s => ServiceName.IsMatch(s) && s != excluded)
+            .ToList();
+
         var args = new List<string> { "compose" };
         args.AddRange(FileArguments());
         args.AddRange(new[] { "up", "-d", "--remove-orphans" });
-        return RunAsync(args, ct);
+        args.AddRange(services);
+        return await RunAsync(args, ct);
     }
 
     /// <summary>Validates the effective configuration before anything is applied.</summary>

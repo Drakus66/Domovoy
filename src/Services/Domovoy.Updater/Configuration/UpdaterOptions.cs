@@ -56,6 +56,7 @@ public sealed class UpdaterOptions
     public string OverrideFile => Path.Combine(InstallDirectory, "docker-compose.override.yml");
     public string PinnedFile => Path.Combine(StateDirectory, "pinned.yml");
     public string PreviousPinnedFile => Path.Combine(StateDirectory, "pinned.prev.yml");
+    public string RollbackPinnedFile => Path.Combine(StateDirectory, "pinned.rollback.yml");
     public string CurrentRunFile => Path.Combine(StateDirectory, "current-run.json");
     public string TopologyStateFile => Path.Combine(StateDirectory, "topology.json");
     public string HistoryFile => Path.Combine(StateDirectory, "history.json");

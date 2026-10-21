@@ -38,6 +38,9 @@ public sealed class UpdateExecutor
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
+    /// <summary>The updater's own container — also its compose service and pin key.</summary>
+    private static readonly string SelfContainer = ReleaseSource.ContainerOf(ReleaseSource.SelfComponent);
+
     private readonly UpdaterOptions _options;
     private readonly DockerInventory _inventory;
     private readonly TopologyManager _topology;
@@ -152,6 +155,7 @@ public sealed class UpdateExecutor
                 throw new InvalidOperationException("Docker недоступен — обновление невозможно.");
 
             EnsureDiskSpace();
+            _compose.SnapshotForRollback();
             run = Step(run, "preflight", "ok");
 
             // --- бэкап -----------------------------------------------------------------
@@ -243,7 +247,7 @@ public sealed class UpdateExecutor
             if (topologyMove is not null)
             {
                 run = Step(run, "converge", "running");
-                await _compose.UpAllAsync(ct);
+                await _compose.UpAllExceptAsync(SelfContainer, ct);
                 run = Step(run, "converge", "ok");
             }
 
@@ -258,7 +262,8 @@ public sealed class UpdateExecutor
                 Persist(run);
                 Archive(run);
 
-                await LaunchSelfReplaceAgentAsync(selfMove, ct);
+                await LaunchSelfReplaceAgentAsync(
+                    selfMove.Container, pins[selfMove.Container], selfMove.ToVersion, ct);
                 return run;
             }
 
@@ -304,7 +309,9 @@ public sealed class UpdateExecutor
         try
         {
             run = Step(run, "rollback:pins", "running");
-            _compose.RestorePreviousPins();
+            var selfPinBefore = _compose.ReadPins().GetValueOrDefault(SelfContainer);
+            _compose.RestoreRollbackPins();
+            var selfPinAfter = _compose.ReadPins().GetValueOrDefault(SelfContainer);
             run = Step(run, "rollback:pins", "ok");
 
             if (last.TopologyFrom is { } previousTopology)
@@ -323,12 +330,20 @@ public sealed class UpdateExecutor
             }
 
             run = Step(run, "rollback:converge", "running");
-            await _compose.UpAllAsync(ct);
+            await _compose.UpAllExceptAsync(SelfContainer, ct);
             run = Step(run, "rollback:converge", "ok");
+
+            // Свой пин сдвинулся — как и при обновлении, себя пересоздаёт агент, переживающий этот контейнер.
+            var selfMoves = selfPinAfter is not null && selfPinAfter != selfPinBefore;
+            if (selfMoves) run = Step(run, "self-rollback", "running", "запуск одноразового агента");
 
             run = run with { Status = "rolled-back", FinishedAt = DateTimeOffset.UtcNow };
             Persist(run);
             Archive(run);
+
+            if (selfMoves)
+                await LaunchSelfReplaceAgentAsync(SelfContainer, selfPinAfter!, "прежнюю версию", ct);
+
             return run;
         }
         catch (Exception ex)
@@ -407,22 +422,23 @@ public sealed class UpdateExecutor
     /// A container genuinely cannot recreate itself — the moment it stops, whatever it was running
     /// stops too — so the last step has to be delegated to a process that outlives it.
     /// </summary>
-    private async Task LaunchSelfReplaceAgentAsync(PlannedUpdate move, CancellationToken ct)
+    private async Task LaunchSelfReplaceAgentAsync(
+        string container, string image, string versionLabel, CancellationToken ct)
     {
         using var docker = new DockerClientConfiguration(new Uri(_options.DockerSocket)).CreateClient();
 
-        var self = await docker.Containers.InspectContainerAsync(move.Container, ct);
+        var self = await docker.Containers.InspectContainerAsync(container, ct);
 
         var agent = await docker.Containers.CreateContainerAsync(new CreateContainerParameters
         {
-            Image = $"{ReleaseSource.Registry}/{move.Repository}@{move.Digest}",
+            Image = image,
             Name = $"domovoy-updater-self-replace-{DateTime.UtcNow:HHmmss}",
             Env = new List<string>
             {
                 $"UPDATES__INSTALLDIRECTORY={_options.InstallDirectory}",
                 $"UPDATES__DBGATEWAYBASEURL={_options.DbGatewayBaseUrl}",
             },
-            Cmd = new List<string> { "--self-replace", move.Container },
+            Cmd = new List<string> { "--self-replace", container },
             HostConfig = new HostConfig
             {
                 // Тот же сокет и тот же каталог установки, что у основного контейнера: агенту нужно
@@ -435,7 +451,7 @@ public sealed class UpdateExecutor
 
         await docker.Containers.StartContainerAsync(agent.ID, new ContainerStartParameters(), ct);
         _logger.LogWarning(
-            "Запущен агент самообновления — этот контейнер сейчас будет заменён на {Version}", move.ToVersion);
+            "Запущен агент самообновления — этот контейнер сейчас будет заменён на {Version}", versionLabel);
     }
 
     private static int ParseMajor(string version) =>
