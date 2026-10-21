@@ -158,9 +158,9 @@ public sealed class UpdateExecutor
             if (backupFirst)
             {
                 run = Step(run, "backup", "running");
-                var file = await RequestBackupAsync(ct);
+                var (file, failure) = await RequestBackupAsync(ct);
                 run = run with { BackupFile = file };
-                run = Step(run, "backup", file is null ? "skipped" : "ok", file);
+                run = Step(run, "backup", file is null ? "skipped" : "ok", file ?? failure);
             }
             else
             {
@@ -343,7 +343,11 @@ public sealed class UpdateExecutor
 
     // ---------------------------------------------------------------- шаги
 
-    private async Task<string?> RequestBackupAsync(CancellationToken ct)
+    /// <summary>
+    /// Returns the backup file, or the reason there is none. The reason goes into the run's step detail:
+    /// a bare "skipped" hid that every backup on a fresh Linux host was failing on directory permissions.
+    /// </summary>
+    private async Task<(string? File, string? Failure)> RequestBackupAsync(CancellationToken ct)
     {
         try
         {
@@ -354,18 +358,18 @@ public sealed class UpdateExecutor
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Бэкап перед обновлением не создан: {Status}", response.StatusCode);
-                return null;
+                return (null, $"бэкап не создан: db-gateway ответил {(int)response.StatusCode}");
             }
 
             var payload = await response.Content.ReadFromJsonAsync<BackupRunDto>(cancellationToken: ct);
-            return payload?.File;
+            return payload?.File is { } file ? (file, null) : (null, "бэкап не создан: пустой ответ db-gateway");
         }
         catch (Exception ex)
         {
             // Бэкап — страховка, а не условие. Если db-gateway недоступен, честнее сказать об этом
             // в журнале прогона, чем отменить обновление, которое владелец сознательно запустил.
             _logger.LogWarning(ex, "Бэкап перед обновлением не создан");
-            return null;
+            return (null, $"бэкап не создан: {ex.Message}");
         }
     }
 

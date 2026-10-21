@@ -46,6 +46,8 @@ services:
         condition: service_healthy
       mongodb:
         condition: service_healthy
+      volume-permissions:
+        condition: service_completed_successfully
     networks:
       - domovoy-network
     ports:
@@ -203,7 +205,28 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      volume-permissions:
+        condition: service_completed_successfully
     restart: unless-stopped
+
+  # One-shot (topology v4): hands the host bind directories to the non-root user of the .NET images
+  # (APP_UID 1654). Docker creates a missing bind source as root, so on a fresh Linux host db-gateway
+  # could not write a single backup and plugin-supervisor could not lay out the first-party plugin —
+  # invisible on Windows, where NTFS bind mounts ignore ownership. Idempotent; reruns on every full `up`.
+  volume-permissions:
+    image: alpine:3.22
+    container_name: volume-permissions
+    user: root
+    volumes:
+      - ./data/backups:/mnt/backups
+      - ./plugins:/mnt/plugins
+    # Non-fatal on purpose: a filesystem that refuses chown (dev bind mounts on Windows) must not keep the
+    # house down — the warning lands in this container's log.
+    command:
+      - sh
+      - -c
+      - 'mkdir -p /mnt/plugins/.settings && chown 1654:1654 /mnt/backups /mnt/plugins /mnt/plugins/.settings || echo "WARNING: chown failed - backups and plugin installs may be denied"'
+    restart: "no"
 
   webui:
     container_name: webui
