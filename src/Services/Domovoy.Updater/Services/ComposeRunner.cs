@@ -125,14 +125,20 @@ public sealed class ComposeRunner
         return pins;
     }
 
-    /// <summary>Brings up specific services without touching their dependencies.</summary>
-    public Task<string> UpAsync(IReadOnlyCollection<string> services, CancellationToken ct)
+    /// <summary>
+    /// Brings up specific services. A point update leaves dependencies alone (<c>--no-deps</c>); after a
+    /// topology change <paramref name="withDependencies"/> lets compose start what the new topology put in
+    /// front of them first — without it plugin-supervisor came up on topology v4 before the one-shot
+    /// <c>volume-permissions</c> had run, and the first-party plugin was not laid out.
+    /// </summary>
+    public Task<string> UpAsync(
+        IReadOnlyCollection<string> services, CancellationToken ct, bool withDependencies = false)
     {
         var args = new List<string> { "compose" };
         args.AddRange(FileArguments());
         args.Add("up");
         args.Add("-d");
-        args.Add("--no-deps");
+        if (!withDependencies) args.Add("--no-deps");
         args.AddRange(services);
         return RunAsync(args, ct);
     }

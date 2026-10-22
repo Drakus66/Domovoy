@@ -229,8 +229,10 @@ public sealed class UpdateExecutor
 
                 try
                 {
-                    // Атомарная группа поднимается одной командой: compose пересоздаёт её разом.
-                    await _compose.UpAsync(members.Select(m => m.Container).ToList(), ct);
+                    // Атомарная группа поднимается одной командой: compose пересоздаёт её разом. После смены
+                    // топологии — вместе с зависимостями: новая инфраструктура и init-шаги идут первыми.
+                    await _compose.UpAsync(
+                        members.Select(m => m.Container).ToList(), ct, withDependencies: topologyMove is not null);
                 }
                 catch (ComposeException ex)
                 {
