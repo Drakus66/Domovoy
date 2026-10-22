@@ -18,8 +18,10 @@ import type { CapabilityDevice } from '../../../api/capabilityDevices';
 import type { Dashboard, DashboardInput, DashboardItem, DashboardSection } from '../../../api/dashboards';
 import { useDashboardStore } from '../../../store/dashboardStore';
 import { capabilityIcon, capabilityLabel } from '../../devices/deviceVisuals';
+import { deviceLabel } from '../../devices/deviceNaming';
 import { DASHBOARD_ICONS, dashboardIcon } from '../dashboardIcons';
 import AddItemDialog from './AddItemDialog';
+import { confirmAction } from '../../../store/confirmStore';
 
 const blankDraft = (): DashboardInput => ({ name: '', icon: null, sections: [] });
 
@@ -74,15 +76,19 @@ export default function DashboardEditorDialog({
       sections: d.sections.map((s, i) => (i === index ? { ...s, ...patch } : s)),
     }));
 
-  const deviceName = (id?: string | null) =>
-    (id && devices.find((d) => d.id === id)?.name) || id || '';
+  const deviceName = (id?: string | null) => {
+    const d = id ? devices.find((x) => x.id === id) : null;
+    return d ? deviceLabel(d) : (id || '');
+  };
 
   const itemPrimary = (item: DashboardItem) =>
     item.type === 'modes'
       ? t('widgets.modes')
-      : item.capabilityId
-        ? `${deviceName(item.deviceId)} · ${capabilityLabel(item.capabilityId)}`
-        : deviceName(item.deviceId);
+      : item.type === 'scene'
+        ? t('widgets.scene')
+        : item.capabilityId
+          ? `${deviceName(item.deviceId)} · ${capabilityLabel(item.capabilityId)}`
+          : deviceName(item.deviceId);
 
   const save = async () => {
     setSaving(true);
@@ -103,7 +109,7 @@ export default function DashboardEditorDialog({
 
   const del = async () => {
     if (!dashboard) return;
-    if (!window.confirm(t('editor.deleteConfirm', { name: dashboard.name }))) return;
+    if (!await confirmAction({ message: t('editor.deleteConfirm', { name: dashboard.name }) })) return;
     if (await remove(dashboard.id)) {
       onDeleted?.(dashboard.id);
       onClose();

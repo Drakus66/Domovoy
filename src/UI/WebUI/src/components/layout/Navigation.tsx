@@ -5,30 +5,32 @@
 import { useState } from 'react';
 import {
   AppBar, Toolbar, Typography, Box, IconButton, Drawer, List, ListItem,
-  ListItemButton, ListItemIcon, ListItemText, Collapse, useMediaQuery, useTheme,
+  ListItemButton, ListItemIcon, ListItemText, Collapse, Badge, useMediaQuery, useTheme,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
+import { pendingProposals as pendingProposalsResource } from '../../store/liveData';
 import MenuIcon from '@mui/icons-material/Menu';
 import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import SpaceDashboardRoundedIcon from '@mui/icons-material/SpaceDashboardRounded';
 import ArticleRoundedIcon from '@mui/icons-material/ArticleRounded';
 import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
 import BluetoothSearchingRoundedIcon from '@mui/icons-material/BluetoothSearchingRounded';
+import DevicesRoundedIcon from '@mui/icons-material/DevicesRounded';
 import RoomRoundedIcon from '@mui/icons-material/RoomRounded';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
+import MovieFilterRoundedIcon from '@mui/icons-material/MovieFilterRounded';
 import HomeWorkRoundedIcon from '@mui/icons-material/HomeWorkRounded';
 import AccountTreeRoundedIcon from '@mui/icons-material/AccountTreeRounded';
 import ExtensionRoundedIcon from '@mui/icons-material/ExtensionRounded';
-import AccountTreeRoundedIcon2 from '@mui/icons-material/SchemaRounded';
 import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
 import RuleRoundedIcon from '@mui/icons-material/RuleRounded';
+import DataObjectRoundedIcon from '@mui/icons-material/DataObjectRounded';
 import GroupRoundedIcon from '@mui/icons-material/GroupRounded';
+import PeopleAltRoundedIcon from '@mui/icons-material/PeopleAltRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
-import ColorModeToggle from '../theme/ColorModeToggle';
-import ThemePicker from '../theme/ThemePicker';
-import LanguagePicker from '../i18n/LanguagePicker';
-import HearthIndicator from './HearthIndicator';
+import ProfileDropdown from './ProfileDropdown';
+import BrandHearth from './BrandHearth';
 
 const DRAWER_WIDTH = 248;
 
@@ -48,15 +50,17 @@ const navGroups = [
     key: 'automation',
     items: [
       { key: 'automations', path: '/automations', icon: <BoltRoundedIcon /> },
-      { key: 'flow', path: '/flow', icon: <AccountTreeRoundedIcon2 /> },
+      { key: 'scenes', path: '/scenes', icon: <MovieFilterRoundedIcon /> },
       { key: 'blocks', path: '/blocks', icon: <AccountTreeRoundedIcon /> },
       { key: 'models', path: '/models', icon: <PsychologyRoundedIcon /> },
       { key: 'proposals', path: '/proposals', icon: <RuleRoundedIcon /> },
+      { key: 'variables', path: '/variables', icon: <DataObjectRoundedIcon /> },
     ],
   },
   {
     key: 'devices',
     items: [
+      { key: 'registry', path: '/devices', icon: <DevicesRoundedIcon /> },
       { key: 'plugins', path: '/plugins', icon: <ExtensionRoundedIcon /> },
       { key: 'zigbee', path: '/zigbee', icon: <BluetoothSearchingRoundedIcon /> },
     ],
@@ -65,6 +69,7 @@ const navGroups = [
     key: 'system',
     items: [
       { key: 'users', path: '/users', icon: <GroupRoundedIcon /> },
+      { key: 'presence', path: '/presence', icon: <PeopleAltRoundedIcon /> },
       { key: 'status', path: '/status', icon: <MonitorHeartRoundedIcon /> },
       { key: 'logs', path: '/logs', icon: <ArticleRoundedIcon /> },
       { key: 'settings', path: '/settings', icon: <SettingsRoundedIcon /> },
@@ -73,17 +78,11 @@ const navGroups = [
 ];
 
 function Brand() {
+  // One mark instead of the old gradient square + ember pair: the avatar is the status now.
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-      <Box
-        sx={{
-          width: 30, height: 30, borderRadius: 2,
-          background: 'linear-gradient(135deg, var(--mui-palette-primary-main), var(--mui-palette-secondary-main))',
-          flexShrink: 0,
-        }}
-      />
+      <BrandHearth />
       <Typography variant="h6" fontWeight={800} letterSpacing="-0.02em">Domovoy</Typography>
-      <HearthIndicator />
     </Box>
   );
 }
@@ -91,6 +90,9 @@ function Brand() {
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { t } = useTranslation('nav');
+  // Epic 3I: постоянно видимый признак, что слой интеллекта что-то поставил в очередь.
+  // Значение из общего слоя — тот же список читают очаг в шапке, дайджест и рельса.
+  const pending = pendingProposalsResource.use().data?.length ?? 0;
   const activeGroup = navGroups.find((g) => g.items.some((i) => i.path === location.pathname))?.key;
   // Start with the active section open; the user can toggle any section freely afterwards.
   const [open, setOpen] = useState<Record<string, boolean>>(
@@ -139,7 +141,11 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
                           },
                         }}
                       >
-                        <ListItemIcon sx={{ minWidth: 34, color: 'text.secondary' }}>{item.icon}</ListItemIcon>
+                        <ListItemIcon sx={{ minWidth: 34, color: 'text.secondary' }}>
+                          {item.key === 'proposals' && pending > 0 ? (
+                            <Badge badgeContent={pending} color="primary">{item.icon}</Badge>
+                          ) : item.icon}
+                        </ListItemIcon>
                         <ListItemText
                           primary={t(item.key)}
                           primaryTypographyProps={{ fontWeight: selected ? 700 : 500, noWrap: true }}
@@ -162,13 +168,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ px: 2.5, py: 2.5 }}><Brand /></Box>
       <NavList onNavigate={onNavigate} />
-      <Box sx={{ px: 2.5, py: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="caption" color="text.secondary">v1.0</Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <LanguagePicker />
-          <ThemePicker />
-          <ColorModeToggle />
-        </Box>
+      <Box sx={{ px: 1.25, py: 1.25, borderTop: '1px solid', borderColor: 'divider' }}>
+        <ProfileDropdown variant="sidebar" />
       </Box>
     </Box>
   );
@@ -189,9 +190,7 @@ function Navigation() {
               <MenuIcon />
             </IconButton>
             <Box sx={{ flexGrow: 1 }}><Brand /></Box>
-            <LanguagePicker />
-            <ThemePicker />
-            <ColorModeToggle />
+            <ProfileDropdown variant="bar" />
           </Toolbar>
         </AppBar>
         <Drawer

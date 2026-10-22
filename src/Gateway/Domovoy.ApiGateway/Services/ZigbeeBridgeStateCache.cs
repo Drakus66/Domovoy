@@ -105,28 +105,31 @@ public class ZigbeeBridgeCacheUpdater : BackgroundService
         _logger = logger;
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _messageBus.SubscribeAsync<ZigbeeBridgeStateEvent>(
+        // Awaited, with the stopping token — see EventRelayService for why fire-and-forget here is a trap.
+        await _messageBus.SubscribeAsync<ZigbeeBridgeStateEvent>(
             "apigateway-zigbee-state",
             MessageBusConfiguration.ZigbeeBridgeExchange,
             MessageBusConfiguration.ZigbeeBridgeStateRoutingKey,
-            HandleBridgeState);
+            HandleBridgeState,
+            stoppingToken);
 
-        _messageBus.SubscribeAsync<ZigbeeBridgeInfoEvent>(
+        await _messageBus.SubscribeAsync<ZigbeeBridgeInfoEvent>(
             "apigateway-zigbee-info",
             MessageBusConfiguration.ZigbeeBridgeExchange,
             MessageBusConfiguration.ZigbeeBridgeInfoRoutingKey,
-            HandleBridgeInfo);
+            HandleBridgeInfo,
+            stoppingToken);
 
-        _messageBus.SubscribeAsync<ZigbeeNetworkEvent>(
+        await _messageBus.SubscribeAsync<ZigbeeNetworkEvent>(
             "apigateway-zigbee-network",
             MessageBusConfiguration.ZigbeeBridgeExchange,
             MessageBusConfiguration.ZigbeeNetworkEventRoutingKey,
-            HandleNetworkEvent);
+            HandleNetworkEvent,
+            stoppingToken);
 
         _logger.LogInformation("ZigbeeBridgeCacheUpdater subscriptions active");
-        return Task.CompletedTask;
     }
 
     private async Task HandleBridgeState(ZigbeeBridgeStateEvent ev)

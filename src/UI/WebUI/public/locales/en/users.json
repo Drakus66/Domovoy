@@ -1,6 +1,6 @@
 {
   "title": "Users & roles",
-  "subtitle": "Local household members and what they're allowed to do. Model only — nothing is enforced yet.",
+  "subtitle": "Local household members and what they're allowed to do. Set a username and password to allow sign-in.",
   "tabs": {
     "users": "Users",
     "roles": "Roles"
@@ -31,10 +31,20 @@
     "editTitle": "Edit user",
     "newTitle": "New user",
     "displayName": "Display name",
+    "username": "Username (for sign-in)",
+    "usernameHelp": "Leave empty if this user does not need to sign in.",
     "email": "Email (optional)",
     "roles": "Roles",
     "noRolesYet": "No roles defined yet — create one on the Roles tab.",
     "enabled": "Enabled"
+  },
+  "passwordDialog": {
+    "action": "Set password",
+    "title": "Password for \"{{name}}\"",
+    "new": "New password",
+    "submit": "Save password",
+    "tooShort": "Password must be at least 8 characters",
+    "error": "Could not set password"
   },
   "roleDialog": {
     "editTitle": "Edit role",
@@ -56,6 +66,10 @@
     "guest": {
       "name": "Guest",
       "description": "Can see devices and their state, but cannot change anything."
+    },
+    "kiosk": {
+      "name": "Kiosk panel",
+      "description": "A wall panel: view and control devices from its dashboard, nothing else."
     }
   },
   "perm": {

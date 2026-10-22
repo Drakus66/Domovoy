@@ -21,5 +21,24 @@
     "enabled": "Включён через {{provider}}.",
     "stub": "Отключён"
   },
-  "noData": "Нет данных от Prometheus"
+  "noData": "Нет данных от Prometheus",
+  "control": {
+    "title": "Управление системой",
+    "dockerOn": "Docker-контроль включён — доступен перезапуск любых контейнеров, включая инфраструктуру.",
+    "dockerOff": "Безопасный self-restart сервисов через шину. Контроль контейнеров (docker.sock) выключен.",
+    "restartAll": "Перезапустить всё",
+    "restart": "Перезапустить",
+    "selfRestart": "self-restart",
+    "dockerOnly": "только docker",
+    "allServices": "все сервисы",
+    "confirmAll": "Перезапустить ВСЕ сервисы? Интерфейс на несколько секунд потеряет связь.",
+    "confirmOne": "Перезапустить «{{name}}»?",
+    "requested": "Запрос на перезапуск «{{name}}» отправлен.",
+    "failed": "Не удалось перезапустить «{{name}}».",
+    "kind": {
+      "gateway": "шлюз",
+      "service": "сервис",
+      "container": "контейнер"
+    }
+  }
 }

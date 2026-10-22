@@ -36,7 +36,26 @@ public sealed class MlTrainerTests
 
         // Backtest scorecard (Epic 2B): a chronological holdout MAE is computed on unseen samples.
         Assert.True(result.HoldoutCount > 0, "should hold out a recent slice for the backtest");
-        Assert.True(result.HoldoutMae >= 0 && !double.IsNaN(result.HoldoutMae), "holdout MAE should be finite and non-negative");
+        Assert.NotNull(result.HoldoutMae);
+        var mae = result.HoldoutMae!.Value;
+        Assert.True(mae >= 0 && !double.IsNaN(mae), "holdout MAE should be finite and non-negative");
+    }
+
+    [Fact]
+    public void Train_ReportsHoldoutAsNotEvaluated_WhenTheWindowIsTooThinToSplit()
+    {
+        // 22 samples with minSamples 20: a 20% holdout (4 rows) leaves 18 to train on — below minSamples, so the
+        // holdout cannot be measured honestly. The model still trains (it's all the house has), but the score
+        // must come back as "not evaluated" rather than 0: a zero MAE reads as a flawless model, wins template
+        // selection against a genuinely measured candidate and clears the zone-promotion margin on pure noise.
+        var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var thin = Enumerable.Range(0, 22).Select(i => (start.AddHours(i), 20.0 + i % 3)).ToList();
+
+        var result = new MlTrainer().Train(thin, minSamples: 20);
+
+        Assert.NotNull(result);
+        Assert.Null(result!.HoldoutMae);
+        Assert.Equal(0, result.HoldoutCount);
     }
 
     [Fact]

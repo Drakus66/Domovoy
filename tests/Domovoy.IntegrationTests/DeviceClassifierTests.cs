@@ -18,6 +18,27 @@ public sealed class DeviceClassifierTests
 {
     private static string Classify(params Capability[] caps) => DeviceClassifier.Classify(caps);
 
+    /// <summary>
+    /// Архетипы 3D назначаются, а не оседают в «motion». Аудит 2026-08-07 предположил обратное — что
+    /// объявленные `person`/`presence` никогда не присваиваются, — но виртуальные устройства присутствия
+    /// приходят с `AdapterSource="System"` и моделью `system/person` / `system/presence`, а эту ветку
+    /// классификатор разбирает раньше эвристик по capability. Тест закрепляет это: не догадка в отчёте,
+    /// а проверяемый факт.
+    /// </summary>
+    [Fact]
+    public void PresenceDevices_KeepTheirOwnArchetypes()
+    {
+        Assert.Equal(
+            DeviceArchetypes.Person,
+            DeviceClassifier.Classify(new[] { WellKnownCapabilities.Presence() }, "System", "system/person"));
+
+        Assert.Equal(
+            DeviceArchetypes.Presence,
+            DeviceClassifier.Classify(
+                new[] { WellKnownCapabilities.AnyoneHome(), WellKnownCapabilities.HomeCount() },
+                "System", "system/presence"));
+    }
+
     [Fact]
     public void Light_From_Brightness() =>
         Assert.Equal(DeviceArchetypes.Light, Classify(WellKnownCapabilities.OnOff(), WellKnownCapabilities.Brightness()));

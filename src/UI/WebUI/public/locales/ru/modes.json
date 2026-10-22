@@ -4,7 +4,6 @@
   "chipLabel": "{{mode}} · {{source}}",
   "recentChanges": "Недавние изменения",
   "noChanges": "Изменений режима пока не записано.",
-  "changedBy": "источник: {{source}}",
   "error": {
     "load": "Не удалось загрузить режим дома. Проверьте соединение с ApiGateway / DbGateway.",
     "switch": "Не удалось переключиться в режим «{{mode}}»."

@@ -27,3 +27,18 @@ export function fmtTime(value: string | number | Date, options?: Intl.DateTimeFo
   const d = value instanceof Date ? value : new Date(value);
   return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleTimeString(i18n.language, options);
 }
+
+/** Compact "time since" for chips/captions ("30 с", "5 мин", "2 ч", "3 д"); localized via common:relative.*. */
+export function fmtRelativeShort(value: string | number | Date): string {
+  const d = value instanceof Date ? value : new Date(value);
+  const ms = d.getTime();
+  if (Number.isNaN(ms)) return String(value);
+  const sec = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (sec < 10) return i18n.t('common:relative.now');
+  if (sec < 60) return i18n.t('common:relative.sec', { n: sec });
+  const min = Math.round(sec / 60);
+  if (min < 60) return i18n.t('common:relative.min', { n: min });
+  const hour = Math.round(min / 60);
+  if (hour < 24) return i18n.t('common:relative.hour', { n: hour });
+  return i18n.t('common:relative.day', { n: Math.round(hour / 24) });
+}

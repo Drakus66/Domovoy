@@ -74,6 +74,64 @@ public static class ActivityEndpoints
 
             return Results.Ok(result.OrderByDescending(e => e.Timestamp).Take(take));
         });
+
+        // GET /api/activity/count?source=&deviceId=&from=&to=
+        //
+        // Сколько строк, а не сами строки. Появилось из-за живого случая: строка-дайджест на главной
+        // тянула 500 записей раз в минуту, чтобы взять у массива .length. Счёт идёт в самой базе
+        // (CountDocuments), поэтому дешёв и по трафику, и по памяти.
+        //
+        // Честная граница: `severity` и `q` здесь не поддерживаются — в основном обработчике это
+        // фильтры в памяти поверх уже выбранной страницы, а не запрос к базе, и считать по ним точно
+        // можно было бы только выгрузив всё, то есть ровно то, ради чего эндпоинт и заведён.
+        group.MapGet("/activity/count", async (
+            string? source, string? deviceId, DateTime? from, DateTime? to, IMongoDatabase db) =>
+        {
+            var hi = to?.ToUniversalTime() ?? DateTime.UtcNow;
+            var lo = from?.ToUniversalTime() ?? hi - DefaultWindow;
+            var want = (string? s) => source is null || string.Equals(source, s, StringComparison.OrdinalIgnoreCase);
+
+            long total = 0;
+            if (want(SourceDevice)) total += await DeviceCount(db, lo, hi, deviceId);
+            if (want(SourceAutomation)) total += await CountIn<AutoHistory>(db, AutomationEndpoints.HistoryCollection, x => x.Timestamp, lo, hi);
+            if (want(SourceBlock) && deviceId is null) total += await CountIn<BlockHistory>(db, BlockHistory.Collection, x => x.Timestamp, lo, hi);
+            if (want(SourceSystem)) total += await SystemCount(db, lo, hi);
+
+            return Results.Ok(new { count = total });
+        });
+    }
+
+    private static Task<long> DeviceCount(IMongoDatabase db, DateTime lo, DateTime hi, string? deviceId)
+    {
+        var b = Builders<DeviceEventLog>.Filter;
+        var filters = new List<FilterDefinition<DeviceEventLog>> { b.Gte(x => x.Timestamp, lo), b.Lte(x => x.Timestamp, hi) };
+        if (!string.IsNullOrEmpty(deviceId)) filters.Add(b.Eq(x => x.Meta.DeviceId, deviceId));
+
+        return db.GetCollection<DeviceEventLog>(TimeSeriesInitializer.DeviceEventsCollection)
+            .CountDocumentsAsync(b.And(filters));
+    }
+
+    private static Task<long> CountIn<T>(
+        IMongoDatabase db, string collection,
+        System.Linq.Expressions.Expression<Func<T, DateTime>> timestamp, DateTime lo, DateTime hi)
+    {
+        var b = Builders<T>.Filter;
+        return db.GetCollection<T>(collection).CountDocumentsAsync(b.And(b.Gte(timestamp, lo), b.Lte(timestamp, hi)));
+    }
+
+    private static async Task<long> SystemCount(IMongoDatabase db, DateTime lo, DateTime hi)
+    {
+        try
+        {
+            var b = Builders<BsonDocument>.Filter;
+            return await db.GetCollection<BsonDocument>(SerilogBootstrap.OpsLogCollection)
+                .CountDocumentsAsync(b.And(b.Gte("Timestamp", lo), b.Lte("Timestamp", hi)));
+        }
+        catch
+        {
+            // ops_logs может ещё не существовать — системный источник опционален, как и в выдаче строк.
+            return 0;
+        }
     }
 
     private static async Task<IEnumerable<ActivityEntry>> DeviceEntries(

@@ -15,7 +15,11 @@ public sealed class MlTrainer
 {
     public const string Algorithm = "Sdca";
 
-    public sealed record Result(byte[] Artifact, double Rmse, int SampleCount, double HoldoutMae, int HoldoutCount);
+    /// <param name="HoldoutMae">
+    /// Honest held-out MAE, or null when the data was too thin to hold out a slice and still train on
+    /// <c>minSamples</c>. Null rather than 0 on purpose: for MAE a zero reads as a flawless model.
+    /// </param>
+    public sealed record Result(byte[] Artifact, double Rmse, int SampleCount, double? HoldoutMae, int HoldoutCount);
 
     /// <summary>
     /// Train the schedule model. The artifact + in-sample RMSE come from fitting on <i>all</i> samples; the
@@ -42,13 +46,13 @@ public sealed class MlTrainer
     }
 
     // Chronological holdout: fit on the older split, measure MAE on the most recent unseen split.
-    private static (double Mae, int Count) Backtest(
+    private static (double? Mae, int Count) Backtest(
         IReadOnlyList<(DateTime Timestamp, double Value)> samples, int minSamples, double holdoutFraction)
     {
         var ordered = samples.OrderBy(s => s.Timestamp).ToList();
         var holdoutCount = (int)Math.Round(ordered.Count * Math.Clamp(holdoutFraction, 0, 0.9));
         var trainCount = ordered.Count - holdoutCount;
-        if (holdoutCount == 0 || trainCount < minSamples) return (0, 0); // too little data to back-test
+        if (holdoutCount == 0 || trainCount < minSamples) return (null, 0); // too little data to back-test
 
         var ml = new MLContext(seed: 0);
         var trainRows = ordered.Take(trainCount).Select(ToRow).ToList();

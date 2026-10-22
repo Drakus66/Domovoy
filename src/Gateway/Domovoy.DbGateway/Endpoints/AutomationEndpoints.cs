@@ -14,9 +14,8 @@ namespace Domovoy.DbGateway.Endpoints;
 /// <summary>
 /// CRUD for user automation rules (roadmap Epic 1A) in the <c>automations</c> collection, plus run
 /// history (<c>auto_history</c>). The AutomationService loads these over HTTP and the WebUI manages
-/// them via the ApiGateway proxy. Safety-floor (protected) rules are NOT stored here — they live in
-/// the AutomationService's local config and cannot be created/edited through this API, so the API
-/// always forces <see cref="AutomationRule.IsProtected"/> to false.
+/// them via the ApiGateway proxy. Every rule the engine runs is one of these — there is no hardcoded
+/// rule floor — so the API always forces the legacy <see cref="AutomationRule.IsProtected"/> flag to false.
 /// </summary>
 public static class AutomationEndpoints
 {
@@ -48,7 +47,7 @@ public static class AutomationEndpoints
 
             NormalizeJsonValues(rule);
             rule.Id = Guid.NewGuid().ToString();
-            rule.IsProtected = false; // safety-floor rules are config-only, never created via API
+            rule.IsProtected = false; // legacy flag: no rule is protected; pin it false regardless of input
             rule.CreatedAt = rule.UpdatedAt = DateTime.UtcNow;
             await Rules(db).InsertOneAsync(rule);
             return Results.Created($"/api/automations/{rule.Id}", rule);
@@ -112,14 +111,30 @@ public static class AutomationEndpoints
     {
         foreach (var t in rule.Triggers) t.Value = ToPlain(t.Value);
         foreach (var c in rule.Conditions) c.Value = ToPlain(c.Value);
-        foreach (var a in rule.Actions)
-        {
-            if (a.Set is null) continue;
-            foreach (var key in a.Set.Keys.ToList()) a.Set[key] = ToPlain(a.Set[key]);
-        }
+        // Required-expression gate (Epic 3E) reuses the RuleCondition shape — same JsonElement risk.
+        if (rule.RequiredExpression is not null)
+            foreach (var c in rule.RequiredExpression.Conditions) c.Value = ToPlain(c.Value);
+        foreach (var a in rule.Actions) NormalizeAction(a);
     }
 
-    private static object? ToPlain(object? value) => value switch
+    // Epic 3E: an action's Set dict and WaitValue both need flattening, and so do the actions nested in its
+    // OnTimeout/OnError branches — a JsonElement inside a branch is exactly as unsafe for Mongo as one at
+    // the top level, so this recurses instead of only walking the flat top-level Actions list.
+    private static void NormalizeAction(RuleAction a)
+    {
+        if (a.Set is not null)
+            foreach (var key in a.Set.Keys.ToList()) a.Set[key] = ToPlain(a.Set[key]);
+        a.WaitValue = ToPlain(a.WaitValue);
+
+        if (a.OnTimeout is not null)
+            foreach (var branch in a.OnTimeout) NormalizeAction(branch);
+        if (a.OnError is not null)
+            foreach (var branch in a.OnError) NormalizeAction(branch);
+    }
+
+    /// <summary>Public so <see cref="VariableEndpoints"/> reuses the identical JsonElement-flattening logic and
+    /// tests can exercise the exact endpoint normalization (same rationale as <see cref="NormalizeJsonValues"/>).</summary>
+    public static object? ToPlain(object? value) => value switch
     {
         JsonElement e => e.ValueKind switch
         {

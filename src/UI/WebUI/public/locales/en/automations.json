@@ -1,20 +1,24 @@
 {
   "title": "Automations",
-  "subtitle": "Deterministic trigger → condition → action rules. Protected safety-floor rules can't be disabled.",
+  "subtitle": "Deterministic trigger → condition → action rules. Start from a safety template or build your own.",
   "actions": {
     "history": "History",
+    "fromTemplate": "From template",
     "newRule": "New rule",
+    "edit": "Edit",
     "simulate": "Dry-run over history",
     "runHistory": "Run history",
     "cancel": "Cancel",
     "create": "Create",
+    "save": "Save",
     "close": "Close"
   },
   "errors": {
     "load": "Failed to load automations. Check ApiGateway / DbGateway connection.",
     "changeStatus": "Failed to change status",
     "delete": "Failed to delete",
-    "create": "Failed to create rule"
+    "create": "Failed to create rule",
+    "update": "Failed to save changes"
   },
   "confirm": {
     "delete": "Delete automation \"{{name}}\"?"
@@ -28,12 +32,7 @@
     "Shadow": "Shadow",
     "Disabled": "Disabled"
   },
-  "chips": {
-    "protected": "Protected",
-    "alwaysOn": "Always on"
-  },
   "tooltips": {
-    "cannotDelete": "Protected rules cannot be deleted",
     "delete": "Delete"
   },
   "rule": {
@@ -54,24 +53,132 @@
   "action": {
     "set": "set {{assignments}}",
     "wait": "wait {{seconds}}s",
-    "notify": "notify \"{{message}}\""
+    "notify": "notify \"{{message}}\"",
+    "scene": "activate scene \"{{name}}\"",
+    "waitForEvent": "wait for {{capability}} {{op}} {{value}}, timeout {{seconds}}s"
   },
   "dialog": {
     "createTitle": "New automation",
+    "editTitle": "Edit automation",
     "name": "Name",
     "status": "Status",
     "shadowHelper": "logs, never acts",
-    "boundedHelper": "acts, but rate-limited",
-    "whenTrigger": "When (trigger)",
-    "device": "Device",
-    "capability": "Capability",
-    "operator": "Operator",
-    "value": "Value",
+    "boundedHelper": "acts, but rate-limited"
+  },
+  "sections": {
+    "when": "When (triggers)",
+    "whenHint": "Any trigger starts the rule (OR).",
+    "if": "If (conditions)",
+    "ifHint": "All conditions must hold (AND). No conditions = always.",
+    "then": "Then (actions)",
+    "thenHint": "Actions run in order.",
+    "addTrigger": "Add trigger",
+    "addCondition": "Add condition",
+    "addAction": "Add action",
+    "noConditions": "No conditions — the rule fires whenever a trigger matches.",
+    "or": "or",
+    "and": "and",
+    "andThen": "then"
+  },
+  "editor": {
     "valueHelper": "true / false / number / text",
-    "onlyDark": "Only when dark (after sunset)",
-    "thenAction": "Then (action)",
-    "autoOff": "Auto-off after (s)",
-    "autoOffHelper": "0 = stay on"
+    "trigger": {
+      "type": "Trigger type",
+      "types": { "DeviceState": "Device state", "Time": "Schedule", "Sun": "Sun" },
+      "device": "Device",
+      "capability": "Capability",
+      "op": "Operator",
+      "value": "Value",
+      "cron": "Cron (m h dom mon dow)",
+      "event": "Event",
+      "offsetMin": "Offset min"
+    },
+    "sun": { "Sunrise": "Sunrise", "Sunset": "Sunset" },
+    "condition": {
+      "type": "Condition type",
+      "types": { "DeviceState": "Device state", "TimeOfDay": "Time of day", "Sun": "Daylight", "Mode": "Home mode" },
+      "device": "Device",
+      "capability": "Capability",
+      "op": "Operator",
+      "value": "Value",
+      "fromTime": "From (HH:mm)",
+      "toTime": "To (HH:mm)",
+      "daylight": "Daylight",
+      "whileDark": "while dark",
+      "whileLight": "while light",
+      "mode": "Mode",
+      "modes": { "Home": "Home", "Away": "Away", "Night": "Night", "Vacation": "Vacation" }
+    },
+    "action": {
+      "type": "Action type",
+      "types": { "Command": "Command a device", "Delay": "Delay", "Notify": "Notification", "Scene": "Activate a scene", "WaitForEvent": "Wait for event" },
+      "device": "Device",
+      "capability": "Capability",
+      "value": "Value",
+      "seconds": "Seconds",
+      "message": "Message",
+      "messageHelper": "Shown in Activity and sent to enabled channels",
+      "scene": "Scene",
+      "sceneHelper": "The scene to activate when this rule runs",
+      "noScenes": "No scenes yet — create one on the Scenes page first",
+      "waitDevice": "Device",
+      "waitCapability": "Capability",
+      "waitOp": "Operator",
+      "waitValue": "Value",
+      "timeoutSeconds": "Timeout, seconds (default 300)",
+      "onTimeout": {
+        "title": "On timeout",
+        "hint": "Runs only if the wait timed out instead of matching. Ends the action sequence — it does not resume after this branch."
+      },
+      "onError": {
+        "title": "On error",
+        "hint": "Runs if this action fails at runtime, instead of aborting the whole rule run. Use {error} in a message to include the error text. Ends the action sequence."
+      },
+      "addBranchAction": "Add action"
+    }
+  },
+  "templates": {
+    "galleryTitle": "Safety templates",
+    "gallerySubtitle": "Configurable protective rules. Pick one, bind it to your own sensor and save — nothing runs until you do.",
+    "recommended": "Recommended",
+    "use": "Use",
+    "items": {
+      "antiFreezeHeat": {
+        "title": "Anti-freeze — turn on heating",
+        "desc": "When an indoor temperature drops below 5 °C, switch on a heater."
+      },
+      "antiFreezeAlert": {
+        "title": "Anti-freeze — alert",
+        "desc": "When an indoor temperature drops below 5 °C, send a warning.",
+        "message": "Freeze risk: a temperature sensor dropped below 5 °C"
+      },
+      "overheatAlert": {
+        "title": "Overheating — alert",
+        "desc": "When a temperature rises above 30 °C, send a warning.",
+        "message": "Overheating: a temperature sensor rose above 30 °C"
+      },
+      "co2Ventilation": {
+        "title": "High CO₂ — ventilate",
+        "desc": "When CO₂ exceeds 1000 ppm, switch on ventilation."
+      },
+      "co2Alert": {
+        "title": "High CO₂ — alert",
+        "desc": "When CO₂ exceeds 1400 ppm, send a warning.",
+        "message": "Air quality: CO₂ rose above 1400 ppm — ventilate"
+      },
+      "humidityVentilation": {
+        "title": "High humidity — ventilate",
+        "desc": "When humidity exceeds 70%, switch on ventilation."
+      },
+      "smokeUnlock": {
+        "title": "Smoke — unlock doors",
+        "desc": "When smoke is detected, unlock doors for escape."
+      },
+      "leakShutoff": {
+        "title": "Water leak — shut off",
+        "desc": "When a leak is detected, close the water valve."
+      }
+    }
   },
   "simulate": {
     "title": "Simulate · {{name}}",
@@ -90,5 +197,44 @@
     "ran": "ran ({{count}})",
     "failed": "failed",
     "skipped": "skipped"
+  },
+  "requiredExpression": {
+    "add": "Add required expression",
+    "title": "Required expression (advanced)",
+    "hint": "Combine the guards below by index — C0, C1, … — with && (and), || (or), ! (not) and parentheses. Leave blank to require all of them (AND).",
+    "expression": "Expression",
+    "remove": "Remove required expression",
+    "gated": "Gated"
+  },
+  "target": {
+    "modeDevice": "Device",
+    "modeZone": "Zone",
+    "zone": "Zone",
+    "inZone": "Zone: {{zone}}",
+    "unassignedZone": "No zone",
+    "unknownZone": "Unknown zone",
+    "pickDevice": "device",
+    "deviceCount_one": "{{count}} device",
+    "deviceCount_other": "{{count}} devices",
+    "coverage_one": "Affects {{count}} device in the zone",
+    "coverage_other": "Affects {{count}} devices in the zone",
+    "coverageNone": "No device in this zone exposes this capability"
+  },
+  "readable": {
+    "on": "on",
+    "off": "off",
+    "op": {
+      "eq": "is",
+      "ne": "is not",
+      "gt": "above",
+      "lt": "below",
+      "gte": "at least",
+      "lte": "at most",
+      "changed": "changed"
+    },
+    "device": "{{capability}} on \"{{device}}\" {{op}} {{value}}",
+    "deviceChanged": "{{capability}} on \"{{device}}\" changed",
+    "zone": "in \"{{zone}}\" {{capability}} {{op}} {{value}}",
+    "zoneChanged": "in \"{{zone}}\" {{capability}} changed"
   }
 }

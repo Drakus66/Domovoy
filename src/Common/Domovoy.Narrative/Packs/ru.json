@@ -1,6 +1,6 @@
 {
   "locale": "ru",
-  "packVersion": 1,
+  "packVersion": 2,
 
   "personas": {
     "Spirit": {
@@ -30,9 +30,27 @@
     "light.on_off.On": {
       "m_sg": "зажёг", "f_sg": "зажгла", "pl": "зажгли", "object": "device", "place": "zone",
       "synonyms": [
-        { "m_sg": "засветил", "f_sg": "засветила", "pl": "засветили" },
-        { "m_sg": "включил",  "f_sg": "включила",  "pl": "включили"  }
+        { "m_sg": "включил", "f_sg": "включила", "pl": "включили" }
       ]
+    },
+    "light.brightness.Increase": {
+      "m_sg": "прибавил яркости", "f_sg": "прибавила яркости", "pl": "прибавили яркости", "object": "none", "place": "zone"
+    },
+    "light.brightness.Decrease": {
+      "m_sg": "приглушил свет", "f_sg": "приглушила свет", "pl": "приглушили свет", "object": "none", "place": "zone",
+      "synonyms": [ { "m_sg": "притушил свет", "f_sg": "притушила свет", "pl": "притушили свет" } ]
+    },
+    "light.brightness.Set": {
+      "m_sg": "подстроил свет", "f_sg": "подстроила свет", "pl": "подстроили свет", "object": "none", "place": "zone"
+    },
+    "light.color.Set": {
+      "m_sg": "сменил оттенок подсветки", "f_sg": "сменила оттенок подсветки", "pl": "сменили оттенок подсветки", "object": "none", "place": "zone"
+    },
+    "light.color_temp.Increase": {
+      "m_sg": "сделал свет холоднее", "f_sg": "сделала свет холоднее", "pl": "сделали свет холоднее", "object": "none", "place": "zone"
+    },
+    "light.color_temp.Decrease": {
+      "m_sg": "сделал свет теплее", "f_sg": "сделала свет теплее", "pl": "сделали свет теплее", "object": "none", "place": "zone"
     },
     "light.on_off.Off": {
       "m_sg": "погасил", "f_sg": "погасила", "pl": "погасили", "object": "device", "place": "zone",
@@ -51,11 +69,14 @@
     "thermostat.on_off.Off": {
       "m_sg": "притушил", "f_sg": "притушила", "pl": "притушили", "object": "device", "place": "none"
     },
-    "thermostat.temperature.Increase": {
+    "thermostat.temperature_setpoint.Increase": {
       "m_sg": "прибавил тепла", "f_sg": "прибавила тепла", "pl": "прибавили тепла", "object": "none", "place": "device"
     },
-    "thermostat.temperature.Decrease": {
+    "thermostat.temperature_setpoint.Decrease": {
       "m_sg": "убавил тепла", "f_sg": "убавила тепла", "pl": "убавили тепла", "object": "none", "place": "device"
+    },
+    "thermostat.temperature_setpoint.Set": {
+      "m_sg": "выставил новую температуру", "f_sg": "выставила новую температуру", "pl": "выставили новую температуру", "object": "none", "place": "device"
     },
     "valve.on_off.On": {
       "m_sg": "пустил воду", "f_sg": "пустила воду", "pl": "пустили воду", "object": "none", "place": "zone",
@@ -136,7 +157,8 @@
       "climate_sensor": { "text": "датчик",         "gender": "m" },
       "sensor":         { "text": "датчик",         "gender": "m" },
       "motion":         { "text": "датчик движения","gender": "m" },
-      "energy_meter":   { "text": "счётчик",        "gender": "m" }
+      "energy_meter":   { "text": "счётчик",        "gender": "m" },
+      "unknown":        { "text": "устройство",     "gender": "n" }
     },
     "byDeviceId": {}
   },
@@ -145,14 +167,28 @@
     "sun.is_dark.On":  [ "стало темнеть", "начали сгущаться сумерки" ],
     "sun.is_dark.Off": [ "рассвело", "забрезжил рассвет" ],
     "sun.is_day.On":   [ "рассвело", "настал день" ],
-    "climate.temperature.Decrease": [ "похолодало", "потянуло холодом" ],
-    "climate.temperature.Increase": [ "потеплело", "стало теплее" ]
+    "climate_sensor.temperature.Decrease": [ "похолодало", "потянуло холодом" ],
+    "climate_sensor.temperature.Increase": [ "потеплело", "стало теплее" ]
+  },
+
+  "timesOfDay": {
+    "morning": [ "утром", "поутру" ],
+    "day":     [ "днём" ],
+    "evening": [ "вечером", "под вечер" ],
+    "night":   [ "ночью", "среди ночи" ]
+  },
+
+  "repeatCounts": {
+    "2": "дважды",
+    "3": "трижды",
+    "many": "несколько раз"
   },
 
   "templates": {
     "actorAction":  "{Actor} {Verb} {Object}{Place}",
     "causalEffect": "{Cause} — и {Actor} {Verb} {Object}{Place}",
-    "causalComma":  "{Cause}, и {Actor} {Verb} {Object}{Place}"
+    "causalComma":  "{Cause}, и {Actor} {Verb} {Object}{Place}",
+    "repeatSuffix": " — и так {Count} за день"
   },
 
   "anaphora": {

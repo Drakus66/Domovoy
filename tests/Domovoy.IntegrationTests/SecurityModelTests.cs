@@ -17,14 +17,26 @@ namespace Domovoy.IntegrationTests;
 public sealed class SecurityModelTests
 {
     [Fact]
-    public void BuiltInRoles_AreThreeAndAllMarkedBuiltIn()
+    public void BuiltInRoles_AreSeededAndAllMarkedBuiltIn()
     {
         var roles = SecuritySeeder.BuiltInRoles;
 
-        Assert.Equal(3, roles.Count);
+        // admin / resident / guest + the kiosk panel role (Epic 2O.2).
+        Assert.Equal(4, roles.Count);
         Assert.All(roles, r => Assert.True(r.IsBuiltIn));
         Assert.All(roles, r => Assert.False(string.IsNullOrWhiteSpace(r.Id)));
-        Assert.Equal(new[] { "admin", "resident", "guest" }, roles.Select(r => r.Id));
+        Assert.Equal(new[] { "admin", "resident", "guest", "kiosk" }, roles.Select(r => r.Id));
+    }
+
+    [Fact]
+    public void KioskRole_CanViewAndControlDevices_ButManagesNothing()
+    {
+        var kiosk = SecuritySeeder.BuiltInRoles.Single(r => r.Id == "kiosk");
+
+        Assert.Contains(WellKnownPermissions.DevicesView, kiosk.Permissions);
+        Assert.Contains(WellKnownPermissions.DevicesControl, kiosk.Permissions);
+        Assert.DoesNotContain(WellKnownPermissions.SystemAdmin, kiosk.Permissions);
+        Assert.DoesNotContain(WellKnownPermissions.UsersManage, kiosk.Permissions);
     }
 
     [Fact]

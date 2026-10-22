@@ -4,7 +4,6 @@
   "chipLabel": "{{mode}} · by {{source}}",
   "recentChanges": "Recent changes",
   "noChanges": "No mode changes recorded yet.",
-  "changedBy": "by {{source}}",
   "error": {
     "load": "Failed to load home mode. Check ApiGateway / DbGateway connection.",
     "switch": "Failed to switch to {{mode}}."

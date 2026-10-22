@@ -1,0 +1,57 @@
+{
+  "title": "Presence",
+  "subtitle": "Track who is home and drive the home mode, rules and scenes by occupancy.",
+  "residents": "Residents",
+  "newResident": "Add resident",
+  "empty": "No residents yet. Add a household member and bind a geofencing source to track them.",
+  "linkedUser": "Linked user",
+  "sourceBound": "Source: {{id}}",
+  "noSource": "No geofencing source bound yet.",
+  "deleteConfirm": "Delete resident \"{{name}}\"?",
+  "aggregate": {
+    "someone": "Someone is home ({{count}})",
+    "nobody": "Nobody is home",
+    "hint": "Bind the Occupancy device's \"Anyone home\" to a presence_mode block to switch the home mode by occupancy."
+  },
+  "state": {
+    "home": "Home",
+    "away": "Away",
+    "untracked": "Not tracked"
+  },
+  "dialog": {
+    "newTitle": "Add resident",
+    "editTitle": "Edit resident",
+    "displayName": "Display name",
+    "user": "Linked user",
+    "userHelp": "Optionally link this resident to a local user (Users page).",
+    "noUser": "— none —",
+    "ownTracksId": "OwnTracks id",
+    "ownTracksIdHelp": "The tracker id / username the OwnTracks app reports under (matched case-insensitively).",
+    "owntracksHint": "Point the OwnTracks app (HTTP mode) at this URL:",
+    "trackingEnabled": "Track this resident (count toward the occupancy aggregate)"
+  },
+  "settings": {
+    "title": "Geofence",
+    "hint": "Home/away is decided server-side: a reported position within the radius of the site location is home. Arrival is immediate; departure waits out the grace to absorb GPS jitter.",
+    "radius": "Home radius",
+    "radiusHelp": "Distance from the site location counted as home.",
+    "meters": "m",
+    "grace": "Away grace",
+    "graceHelp": "How long a resident must stay outside before flipping to away.",
+    "seconds": "s",
+    "token": "Ingest token",
+    "tokenHelp": "Optional shared secret the OwnTracks endpoint requires (?key= or X-Presence-Token). Set one when the endpoint is reachable off-LAN."
+  },
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "copy": "Copy"
+  },
+  "errors": {
+    "load": "Could not load presence data.",
+    "save": "Could not save.",
+    "delete": "Could not delete."
+  }
+}

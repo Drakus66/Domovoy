@@ -52,7 +52,6 @@
 docker-compose logs -f
 
 # Конкретный сервис
-docker-compose logs -f unified-device-service
 
 # Последние 100 строк
 docker-compose logs --tail=100 api-gateway
@@ -62,7 +61,6 @@ docker-compose logs --tail=100 api-gateway
 
 В будущих версиях WebUI можно добавить endpoint для отображения логов:
 ```
-GET /api/system/logs?service=unified-device-service&lines=100
 ```
 
 ---
@@ -82,7 +80,6 @@ scrape_interval: 30s                 # Было 15s - меньше нагруз�
 Prometheus собирает метрики с:
 - api-gateway:8080
 - db-gateway:8080
-- unified-device-service:8080
 - connectivity-service:8080
 - rabbitmq:15692
 - mongodb-exporter:9216

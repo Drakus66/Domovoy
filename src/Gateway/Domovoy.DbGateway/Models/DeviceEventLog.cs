@@ -39,7 +39,7 @@ public class DeviceEventLog
     /// <summary>New value the capability changed to (or the commanded value).</summary>
     public object? NewValue { get; set; }
 
-    /// <summary>What caused the change: <c>user</c> | <c>rule</c> | <c>device</c> | <c>ml</c> | <c>block</c> | <c>presence</c>.</summary>
+    /// <summary>What caused the change: <c>user</c> | <c>rule</c> | <c>device</c> | <c>ml</c> | <c>block</c> | <c>presence</c> | <c>scene</c>.</summary>
     public string TriggerSource { get; set; } = TriggerSources.Device;
 
     /// <summary>
@@ -87,6 +87,10 @@ public static class TriggerSources
     public const string Block = "block";
     /// <summary>Presence auto-switch (Epic 1G) — a mode change driven by presence sensors, not a command.</summary>
     public const string Presence = "presence";
+    /// <summary>A scene activation (Epic 3B) — a person pressed a scene tile / rule action; <see cref="DeviceEventLog.TriggerId"/>
+    /// carries the scene id. Distinct from a raw <see cref="User"/> per-device change so scene-schedule discovery
+    /// (Epic 2F) can key off "which scene was activated when".</summary>
+    public const string Scene = "scene";
 }
 
 /// <summary>Well-known event-log kinds.</summary>

@@ -79,4 +79,71 @@ public sealed class SetpointPreferenceMinerTests
         var prefs = SetpointPreferenceMiner.Mine(NightlySetpoint(days: 3, value: 19.0), Options); // < min support 4
         Assert.Empty(prefs);
     }
+
+    // ----- Type-B ML form: MineModelCandidates (learn a structured, non-schedulable setpoint) -----
+
+    // A setpoint the user varies by time of day: `morning` in bucket 1 (06–12h) and `evening` in bucket 3
+    // (18–24h), each with a real within-bucket jitter (so no single value fits a bucket → not schedulable).
+    private static List<DbGatewayClient.EventLogEntry> TimeVaryingSetpoint(
+        int days, double morning, double evening, double jitter, string source = "user")
+    {
+        var events = new List<DbGatewayClient.EventLogEntry>();
+        var day0 = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc);
+        for (var d = 0; d < days; d++)
+        {
+            var sign = d % 2 == 0 ? 1 : -1;
+            events.Add(Set(day0.AddDays(d).AddHours(8), "thermo", morning + sign * jitter, source));  // bucket 1
+            events.Add(Set(day0.AddDays(d).AddHours(20), "thermo", evening + sign * jitter, source)); // bucket 3
+        }
+        return events;
+    }
+
+    [Fact]
+    public void Model_ProposesLearning_WhenSetpointTracksTimeButIsntSchedulable()
+    {
+        // Morning≈20, evening≈24, ±1.4 within each — too scattered for a fixed schedule, but time explains most.
+        var events = TimeVaryingSetpoint(days: 12, morning: 20, evening: 24, jitter: 1.4);
+
+        var c = Assert.Single(SetpointPreferenceMiner.MineModelCandidates(events, Options));
+        Assert.Equal("temperature_setpoint", c.CapabilityId);
+        Assert.Equal(24, c.Samples);
+        Assert.True(c.OverallStdDev > Options.SetpointMaxStdDev, $"overall spread should exceed the schedulable bound, was {c.OverallStdDev}");
+        Assert.True(c.ExplainedByTime >= 0.5, $"time should explain most of the variance, was {c.ExplainedByTime}");
+
+        // The same series is NOT a fixed schedule (each bucket is too scattered) — the two forms don't overlap here.
+        Assert.Empty(SetpointPreferenceMiner.Mine(events, Options));
+    }
+
+    [Fact]
+    public void Model_IgnoresPureNoise_NoTemporalStructure()
+    {
+        // Wildly varying but all in one time bucket → time explains nothing (η²≈0) → not learnable, no proposal.
+        var events = new List<DbGatewayClient.EventLogEntry>();
+        var start = new DateTime(2026, 7, 1, 22, 0, 0, DateTimeKind.Utc); // all bucket 3
+        double[] wild = { 16, 24, 18, 26, 20, 15, 17, 25, 19, 23, 16, 26 };
+        for (var i = 0; i < wild.Length; i++) events.Add(Set(start.AddDays(i), "thermo", wild[i]));
+
+        Assert.Empty(SetpointPreferenceMiner.MineModelCandidates(events, Options));
+    }
+
+    [Fact]
+    public void Model_IgnoresStableSetpoint_HandledByTheScheduledForm()
+    {
+        // A steady ~19° needs no model — the scheduled preference covers it; overall spread is below the bound.
+        Assert.Empty(SetpointPreferenceMiner.MineModelCandidates(NightlySetpoint(days: 14, value: 19.0), Options));
+    }
+
+    [Fact]
+    public void Model_RequiresMoreHistoryThanASchedule()
+    {
+        var events = TimeVaryingSetpoint(days: 5, morning: 20, evening: 24, jitter: 1.4); // 10 < SetpointModelMinSupport 12
+        Assert.Empty(SetpointPreferenceMiner.MineModelCandidates(events, Options));
+    }
+
+    [Fact]
+    public void Model_IgnoresLoopWrites_OnlyUserCounts()
+    {
+        var events = TimeVaryingSetpoint(days: 12, morning: 20, evening: 24, jitter: 1.4, source: "block:loop");
+        Assert.Empty(SetpointPreferenceMiner.MineModelCandidates(events, Options));
+    }
 }

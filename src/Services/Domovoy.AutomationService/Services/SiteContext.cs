@@ -2,6 +2,8 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using Domovoy.Contracts.Home;
+
 namespace Domovoy.AutomationService.Services;
 
 /// <summary>
@@ -28,17 +30,5 @@ public sealed class SiteContext
         return true;
     }
 
-    private static TimeZoneInfo Resolve(string? ianaId)
-    {
-        if (string.IsNullOrWhiteSpace(ianaId)) return TimeZoneInfo.Utc;
-        try
-        {
-            // .NET resolves IANA ids on all platforms (ICU); tolerate a Windows-id fallback too.
-            return TimeZoneInfo.FindSystemTimeZoneById(ianaId);
-        }
-        catch
-        {
-            return TimeZoneInfo.Utc;
-        }
-    }
+    private static TimeZoneInfo Resolve(string? ianaId) => SiteTimeZone.Resolve(ianaId);
 }

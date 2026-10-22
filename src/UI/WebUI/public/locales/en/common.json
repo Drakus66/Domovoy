@@ -1,5 +1,7 @@
 {
-  "brand": "Domovoy",
+  "confirm": {
+    "title": "Confirm action"
+  },
   "language": {
     "label": "Language"
   },
@@ -25,17 +27,20 @@
     "toDark": "Switch to dark",
     "ariaLabel": "toggle color mode"
   },
+  "flip": {
+    "details": "Details",
+    "back": "Back"
+  },
   "actions": {
     "refresh": "Refresh",
     "save": "Save",
     "cancel": "Cancel",
+    "confirm": "Confirm",
     "create": "Create",
     "delete": "Delete",
     "close": "Close",
     "add": "Add",
-    "search": "Search",
     "back": "Back",
-    "retry": "Retry",
     "openMenu": "open drawer"
   },
   "status": {
@@ -56,7 +61,10 @@
     "ariaLabel": "system health",
     "lit": "The hearth is lit — all {{count}} services up",
     "smoldering": "The hearth smolders — {{up}} of {{total}} services up",
-    "cold": "The hearth is cold — no metrics"
+    "cold": "The hearth is cold — no metrics",
+    "attention": "The spirit awaits your decision — {{count}} proposals pending",
+    "active": "The spirit is busy — automations just acted",
+    "sleeping": "The house sleeps — night mode"
   },
   "digest": {
     "greeting": {
@@ -83,6 +91,13 @@
     "unknownName": "Name unknown",
     "presenceHint": "The sensor that last saw presence before the mode switch"
   },
+  "relative": {
+    "now": "just now",
+    "sec": "{{n}}s",
+    "min": "{{n}}m",
+    "hour": "{{n}}h",
+    "day": "{{n}}d"
+  },
   "newResident": "A new resident has moved in: {{name}}",
   "error": {
     "title": "Something went wrong",
@@ -96,5 +111,11 @@
     "title": "I haven't been in this room yet",
     "body": "There is nothing at {{path}}.",
     "back": "Back to the dashboard"
+  },
+  "profile": {
+    "menu": "Profile & settings",
+    "local": "Local access",
+    "localHint": "No sign-in required",
+    "settings": "Settings"
   }
 }

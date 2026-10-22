@@ -3,6 +3,9 @@
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
 using Domovoy.Contracts.Home;
+using Domovoy.Contracts.Ml;
+using Domovoy.Contracts.Notifications;
+using Domovoy.DbGateway.Models;
 using Domovoy.DbGateway.Services;
 
 using GeoTimeZone;
@@ -11,10 +14,12 @@ using MongoDB.Driver;
 namespace Domovoy.DbGateway.Endpoints;
 
 /// <summary>
-/// Installation settings (roadmap Epic 2K). Today this owns the single site-location document
-/// (<c>site_location</c>): the coordinates the AutomationService reads for sunrise/sunset geometry, plus a
-/// display label and an IANA timezone. The location is edited from the WebUI Settings page and made
-/// runtime-mutable so changing it needs no redeploy (it used to live only in appsettings).
+/// Installation settings — the runtime-mutable documents behind the WebUI Settings page, so changing any of
+/// them needs no redeploy (they used to live in appsettings). Seven domains have accumulated here:
+/// <b>location</b> (Epic 2K, <c>site_location</c> — the coordinates the AutomationService reads for
+/// sunrise/sunset geometry, plus a display label and an IANA timezone), <b>calendar</b> (2L),
+/// <b>tariff</b> (3C), <b>load-management</b> (3C-LM), <b>ml</b> (3I), <b>presence</b> (3D) and
+/// <b>notifications</b> (3F).
 ///
 /// Offline-first: the timezone is derived from the coordinates locally (GeoTimeZone), so it is correct with
 /// no network. The geocode endpoint is the only networked part and is optional — it turns
@@ -24,9 +29,22 @@ public static class SettingsEndpoints
 {
     public const string Collection = "site_location";
     public const string CalendarCollection = "calendar_settings";
+    public const string TariffCollection = "tariff_settings";
+    public const string LoadManagementCollection = "load_management_settings";
+    public const string MlCollection = "ml_settings";
+    public const string PresenceCollection = "presence_settings";
+    public const string NotificationCollection = "notification_settings";
 
     public record LocationUpdate(double Latitude, double Longitude, string? Label, string? TimeZoneId, bool TimeZoneAuto);
     public record CalendarUpdate(List<int>? WeekendDays, List<string>? Holidays);
+    public record TariffUpdate(string? Currency, double? DefaultPrice, List<TariffZone>? Zones);
+    public record LoadManagementUpdate(
+        bool Enabled, List<PowerBudget>? Budgets, double? RestoreMarginWatts, int? MinDwellSeconds,
+        List<PhaseLimit>? PhaseLimits = null, List<CircuitLimit>? CircuitLimits = null);
+    public record MlSettingsUpdate(bool Enabled, bool ProposalsEnabled, int? MinHistoryDays);
+    public record PresenceSettingsUpdate(double? HomeRadiusMeters, int? AwayGraceSeconds, string? OwnTracksToken);
+    public record NotificationSettingsUpdate(
+        Dictionary<string, List<string>>? MutedChannels, Dictionary<string, int>? MinIntervalSeconds, bool SafetyFloorEnabled);
 
     public static void MapSettingsEndpoints(this IEndpointRouteBuilder app)
     {
@@ -112,6 +130,143 @@ public static class SettingsEndpoints
                 x => x.Id == CalendarSettings.SingletonId, settings, new ReplaceOptions { IsUpsert = true });
             return Results.Ok(new { imported = imported.Count, settings });
         });
+
+        // --- Tariff settings (roadmap Epic 3C) ---
+
+        // Current electricity tariff (defaults to a flat 0-price tariff until the user sets one).
+        group.MapGet("/tariff", async (IMongoDatabase db) => Results.Ok(await GetTariffOrDefault(db)));
+
+        group.MapPut("/tariff", async (TariffUpdate body, IMongoDatabase db) =>
+        {
+            var settings = new TariffSettings
+            {
+                Currency = string.IsNullOrWhiteSpace(body.Currency) ? "₽" : body.Currency.Trim(),
+                DefaultPrice = body.DefaultPrice ?? 0,
+                Zones = (body.Zones ?? new List<TariffZone>()).Select(z => new TariffZone
+                {
+                    Name = z.Name?.Trim() ?? string.Empty,
+                    PricePerKwh = z.PricePerKwh,
+                    Intervals = (z.Intervals ?? new List<TariffInterval>()).Select(i => new TariffInterval
+                    {
+                        StartMinute = Math.Clamp(i.StartMinute, 0, 1440),
+                        EndMinute = Math.Clamp(i.EndMinute, 0, 1440),
+                    }).ToList(),
+                }).ToList(),
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await Tariffs(db).ReplaceOneAsync(
+                x => x.Id == TariffSettings.SingletonId, settings, new ReplaceOptions { IsUpsert = true });
+            return Results.Ok(settings);
+        });
+
+        // --- Load-management settings (roadmap Epic 3C-LM) ---
+
+        // Current load-shedding config (defaults to disabled/no budgets until the user opts in).
+        group.MapGet("/load-management", async (IMongoDatabase db) => Results.Ok(await GetLoadManagementOrDefault(db)));
+
+        group.MapPut("/load-management", async (LoadManagementUpdate body, IMongoDatabase db) =>
+        {
+            var budgets = (body.Budgets ?? new List<PowerBudget>())
+                .Where(b => !string.IsNullOrWhiteSpace(b.PowerSource))
+                .GroupBy(b => b.PowerSource.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(g => new PowerBudget { PowerSource = g.Key, LimitWatts = Math.Max(0, g.Last().LimitWatts) })
+                .ToList();
+
+            // Per-phase / per-circuit limits (Epic 3C-D) — deduped like the budgets, keyed by phase / circuit.
+            var phaseLimits = (body.PhaseLimits ?? new List<PhaseLimit>())
+                .Where(p => PowerPhases.Single.Contains(p.Phase?.Trim().ToLowerInvariant()))
+                .GroupBy(p => p.Phase.Trim().ToLowerInvariant(), StringComparer.Ordinal)
+                .Select(g => new PhaseLimit { Phase = g.Key, LimitWatts = Math.Max(0, g.Last().LimitWatts) })
+                .ToList();
+
+            var circuitLimits = (body.CircuitLimits ?? new List<CircuitLimit>())
+                .Where(c => !string.IsNullOrWhiteSpace(c.CircuitId))
+                .GroupBy(c => c.CircuitId.Trim(), StringComparer.Ordinal)
+                .Select(g => new CircuitLimit { CircuitId = g.Key, LimitWatts = Math.Max(0, g.Last().LimitWatts) })
+                .ToList();
+
+            var settings = new LoadManagementSettings
+            {
+                Enabled = body.Enabled,
+                Budgets = budgets,
+                PhaseLimits = phaseLimits,
+                CircuitLimits = circuitLimits,
+                RestoreMarginWatts = Math.Max(0, body.RestoreMarginWatts ?? 100),
+                MinDwellSeconds = Math.Max(0, body.MinDwellSeconds ?? 120),
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await LoadManagements(db).ReplaceOneAsync(
+                x => x.Id == LoadManagementSettings.SingletonId, settings, new ReplaceOptions { IsUpsert = true });
+            return Results.Ok(settings);
+        });
+
+        // --- Intelligence-layer switches (roadmap Epic 3I) ---
+
+        // Current ML-layer settings (defaults to fully enabled until the user changes them — the layer is opt-out).
+        group.MapGet("/ml", async (IMongoDatabase db) => Results.Ok(await GetMlOrDefault(db)));
+
+        group.MapPut("/ml", async (MlSettingsUpdate body, IMongoDatabase db) =>
+        {
+            var settings = new MlSettings
+            {
+                Enabled = body.Enabled,
+                ProposalsEnabled = body.ProposalsEnabled,
+                MinHistoryDays = Math.Clamp(body.MinHistoryDays ?? 7, 0, 365),
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await MlSettingsColl(db).ReplaceOneAsync(
+                x => x.Id == MlSettings.SingletonId, settings, new ReplaceOptions { IsUpsert = true });
+            return Results.Ok(settings);
+        });
+
+        // --- Presence-layer settings (roadmap Epic 3D) ---
+
+        // Current presence config (defaults: 150 m geofence, 180 s away-grace, no ingest token). The token is
+        // returned to the authenticated admin UI on purpose — the owner copies it into the OwnTracks app.
+        group.MapGet("/presence", async (IMongoDatabase db) => Results.Ok(await GetPresenceOrDefault(db)));
+
+        group.MapPut("/presence", async (PresenceSettingsUpdate body, IMongoDatabase db) =>
+        {
+            var settings = new PresenceSettings
+            {
+                HomeRadiusMeters = Math.Clamp(body.HomeRadiusMeters ?? 150, 10, 50_000),
+                AwayGraceSeconds = Math.Clamp(body.AwayGraceSeconds ?? 180, 0, 86_400),
+                OwnTracksToken = string.IsNullOrWhiteSpace(body.OwnTracksToken) ? null : body.OwnTracksToken.Trim(),
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await Presences(db).ReplaceOneAsync(
+                x => x.Id == PresenceSettings.SingletonId, settings, new ReplaceOptions { IsUpsert = true });
+            return Results.Ok(settings);
+        });
+
+        // --- Notification-discipline settings (roadmap Epic 3F) ---
+
+        // Current notification settings (defaults: nothing muted, safety floor on — the discipline is opt-out).
+        group.MapGet("/notifications", async (IMongoDatabase db) => Results.Ok(await GetNotificationOrDefault(db)));
+
+        group.MapPut("/notifications", async (NotificationSettingsUpdate body, IMongoDatabase db) =>
+        {
+            // Keep only known categories; drop blank channel names; clamp intervals to a sane [0, 24h].
+            var muted = (body.MutedChannels ?? new())
+                .Where(kv => NotificationCategories.IsKnown(kv.Key))
+                .ToDictionary(
+                    kv => kv.Key,
+                    kv => kv.Value.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).Distinct().ToList());
+            var intervals = (body.MinIntervalSeconds ?? new())
+                .Where(kv => NotificationCategories.IsKnown(kv.Key))
+                .ToDictionary(kv => kv.Key, kv => Math.Clamp(kv.Value, 0, 86_400));
+
+            var settings = new NotificationSettings
+            {
+                MutedChannels = muted,
+                MinIntervalSeconds = intervals,
+                SafetyFloorEnabled = body.SafetyFloorEnabled,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            await Notifications(db).ReplaceOneAsync(
+                x => x.Id == NotificationSettings.SingletonId, settings, new ReplaceOptions { IsUpsert = true });
+            return Results.Ok(settings);
+        });
     }
 
     /// <summary>Derive the IANA timezone id for a coordinate, fully offline (GeoTimeZone's embedded shapes).</summary>
@@ -130,6 +285,36 @@ public static class SettingsEndpoints
         return settings ?? new CalendarSettings();
     }
 
+    private static async Task<TariffSettings> GetTariffOrDefault(IMongoDatabase db)
+    {
+        var settings = await Tariffs(db).Find(x => x.Id == TariffSettings.SingletonId).FirstOrDefaultAsync();
+        return settings ?? new TariffSettings();
+    }
+
+    private static async Task<LoadManagementSettings> GetLoadManagementOrDefault(IMongoDatabase db)
+    {
+        var settings = await LoadManagements(db).Find(x => x.Id == LoadManagementSettings.SingletonId).FirstOrDefaultAsync();
+        return settings ?? new LoadManagementSettings();
+    }
+
+    private static async Task<MlSettings> GetMlOrDefault(IMongoDatabase db)
+    {
+        var settings = await MlSettingsColl(db).Find(x => x.Id == MlSettings.SingletonId).FirstOrDefaultAsync();
+        return settings ?? new MlSettings();
+    }
+
+    private static async Task<PresenceSettings> GetPresenceOrDefault(IMongoDatabase db)
+    {
+        var settings = await Presences(db).Find(x => x.Id == PresenceSettings.SingletonId).FirstOrDefaultAsync();
+        return settings ?? new PresenceSettings();
+    }
+
+    private static async Task<NotificationSettings> GetNotificationOrDefault(IMongoDatabase db)
+    {
+        var settings = await Notifications(db).Find(x => x.Id == NotificationSettings.SingletonId).FirstOrDefaultAsync();
+        return settings ?? new NotificationSettings();
+    }
+
     /// <summary>Strict <c>yyyy-MM-dd</c> check so a bad string can never poison the holiday list.</summary>
     private static bool IsIsoDate(string? s) =>
         DateOnly.TryParseExact(s, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
@@ -140,4 +325,19 @@ public static class SettingsEndpoints
 
     private static IMongoCollection<CalendarSettings> Calendars(IMongoDatabase db) =>
         db.GetCollection<CalendarSettings>(CalendarCollection);
+
+    private static IMongoCollection<TariffSettings> Tariffs(IMongoDatabase db) =>
+        db.GetCollection<TariffSettings>(TariffCollection);
+
+    private static IMongoCollection<LoadManagementSettings> LoadManagements(IMongoDatabase db) =>
+        db.GetCollection<LoadManagementSettings>(LoadManagementCollection);
+
+    private static IMongoCollection<MlSettings> MlSettingsColl(IMongoDatabase db) =>
+        db.GetCollection<MlSettings>(MlCollection);
+
+    private static IMongoCollection<PresenceSettings> Presences(IMongoDatabase db) =>
+        db.GetCollection<PresenceSettings>(PresenceCollection);
+
+    private static IMongoCollection<NotificationSettings> Notifications(IMongoDatabase db) =>
+        db.GetCollection<NotificationSettings>(NotificationCollection);
 }

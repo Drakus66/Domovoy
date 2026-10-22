@@ -213,11 +213,13 @@ export default function ZigbeeDevices() {
       setPermitJoinActive(b.permitJoin);
       setPermitJoinRemaining(b.permitJoinTimeout);
     } catch {
-      setError(t('loadError'));
+      // i18n.t, а не хук t: от fetchData зависит эффект SignalR, и зависимость от t рвала и
+      // переустанавливала хаб при каждой смене языка.
+      setError(i18n.t('zigbee:loadError'));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -243,10 +245,10 @@ export default function ZigbeeDevices() {
 
     conn.on('ZigbeeNetworkEvent', (eventType: string, friendlyName: string) => {
       if (eventType === 'device_joined') {
-        setNotification({ type: 'success', text: t('events.joined', { name: friendlyName }) });
+        setNotification({ type: 'success', text: i18n.t('zigbee:events.joined', { name: friendlyName }) });
         fetchData();
       } else if (eventType === 'device_leave') {
-        setNotification({ type: 'info', text: t('events.left', { name: friendlyName }) });
+        setNotification({ type: 'info', text: i18n.t('zigbee:events.left', { name: friendlyName }) });
         fetchData();
       }
     });
@@ -257,7 +259,7 @@ export default function ZigbeeDevices() {
     startDeviceHub(conn, () => cancelled);
     hubRef.current = conn;
     return () => { cancelled = true; conn.stop(); };
-  }, [fetchData, t]);
+  }, [fetchData]);
 
   const handlePermitJoin = async (duration: number) => {
     setActionLoading(true);

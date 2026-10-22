@@ -5,6 +5,7 @@
 namespace Domovoy.Contracts.Messaging;
 
 using Domovoy.Contracts.Devices;
+using Domovoy.Contracts.Notifications;
 
 /// <summary>
 /// Payloads carried inside <see cref="Envelope{T}.Data"/>. These are the wire contracts that the
@@ -40,6 +41,17 @@ public sealed record DeviceOnlineChangedV1(
     bool IsOnline);
 
 /// <summary>
+/// An operator request to restart a service (or all of them) from the UI. Each .NET service listens; when the
+/// target matches its own name (or <c>"all"</c>) it stops gracefully, and the container restart policy
+/// (<c>restart: unless-stopped</c>) brings it back — no privileged Docker access needed. Container-level control
+/// of arbitrary/infra containers is a separate, opt-in path (Docker socket).
+/// </summary>
+/// <remarks>Envelope type: <see cref="MessageTypes.SystemControl"/>.</remarks>
+public sealed record SystemControlV1(
+    string Target,   // a service name (matches the container/compose name) or "all"
+    string Action);  // "restart" (the only action a service can perform on itself)
+
+/// <summary>
 /// An automation rule fired (roadmap Epic 1A). Emitted by the AutomationService after evaluating a
 /// rule so the DbGateway can persist run history (AutoHistory) and the UI can show "why" (Epic 1F).
 /// </summary>
@@ -72,6 +84,64 @@ public sealed record BlockTriggeredV1(
     bool Ok,
     string Summary,
     string? Detail = null);
+
+/// <summary>
+/// A user-facing notification was raised (2M.2 LAN channel + off-LAN push, Epic 2O.4). Published by the
+/// AutomationService's SignalR notification channel; the ApiGateway relays it to connected clients over the
+/// DeviceHub (the in-app banner while the client is in LAN / open), and the ntfy channel forwards it to a
+/// self-hosted push server for delivery when the phone is asleep / off-LAN. <see cref="Severity"/> is
+/// info/warning/critical (drives banner colour + push priority); <see cref="Category"/> is the optional
+/// reactive/proactive/optimization taxonomy that Epic 3F (notification discipline) will route per-type.
+/// </summary>
+/// <remarks>Envelope type: <see cref="MessageTypes.NotificationRaised"/>.</remarks>
+public sealed record NotificationRaisedV1(
+    string Title,
+    string Body,
+    string Severity,
+    DateTimeOffset RaisedAt,
+    string? Category = null,
+    IReadOnlyList<NotificationAction>? Actions = null);
+
+/// <summary>
+/// A service outside the AutomationService asks for a notification to be delivered (Epic 3F discipline,
+/// first consumer Epic 3K's delivery service). The notification discipline — per-category routing, mute,
+/// rate-limit/dedup and the safety floor — lives in the AutomationService's dispatcher, which is in-process;
+/// a separate process therefore publishes this <b>request</b> and the AutomationService runs it through the
+/// same policy every in-process source goes through. Publishing <see cref="NotificationRaisedV1"/> directly
+/// is <i>not</i> the way in: that is the dispatcher's output and skips the whole policy (it can only ever
+/// reach the in-app banner).
+///
+/// <para><see cref="DedupKey"/> gives a recurring announcement a stable identity for the policy's dedup
+/// window; without it the key is category + title + body.</para>
+/// </summary>
+/// <remarks>Envelope type: <see cref="MessageTypes.NotificationRequested"/>.</remarks>
+public sealed record NotificationRequestV1(
+    string Title,
+    string Body,
+    string Severity,
+    DateTimeOffset RequestedAt,
+    string? Category = null,
+    IReadOnlyList<NotificationAction>? Actions = null,
+    string? DedupKey = null);
+
+/// <summary>
+/// A presence/location report from a geofencing source (roadmap Epic 3D) — chiefly the OwnTracks-compatible
+/// ingest in the ApiGateway, which normalizes OwnTracks <c>location</c>/<c>transition</c> payloads onto this.
+/// The AutomationService's presence layer resolves the resident from <see cref="ResidentKeys"/> (matched
+/// against each resident's <c>OwnTracksId</c>), applies the server-side geofence (distance from the site
+/// location vs the configured radius) or the <see cref="ExplicitPresent"/> transition, and republishes the
+/// resident's virtual person device + the occupancy aggregate. Kept source-agnostic: a room-level or mmWave
+/// source (later layers) can publish the same contract with <see cref="ExplicitPresent"/> set and no coords.
+/// </summary>
+/// <remarks>Envelope type: <see cref="MessageTypes.PresenceReported"/>.</remarks>
+public sealed record PresenceReportedV1(
+    IReadOnlyList<string> ResidentKeys,
+    double? Latitude,
+    double? Longitude,
+    double? AccuracyMeters,
+    int? BatteryPercent,
+    bool? ExplicitPresent,
+    DateTimeOffset ReportedAt);
 
 /// <summary>
 /// The home mode changed (roadmap Epic 1G). Published by the DbGateway (the persistence authority for

@@ -122,6 +122,7 @@ public static class BlockDsl
         var nodes = new List<CompositeNode>();
         var nodeTypes = new Dictionary<string, IBlockType>(StringComparer.OrdinalIgnoreCase);
         var outputStmts = new List<(string OutId, string Label, string Cap)>();
+        var paramStmts = new List<(string Name, string Node, string Param, double? Default)>();
 
         foreach (var stmt in statements)
         {
@@ -141,6 +142,33 @@ public static class BlockDsl
                 var dot = srcRef.IndexOf('.');
                 if (dot < 0 || outId.Length == 0) throw new FormatException($"output must be 'out <id> = <node>.<capability>' in '{stmt}'");
                 outputStmts.Add((outId, srcRef[..dot].Trim(), srcRef[(dot + 1)..].Trim()));
+            }
+            else if (stmt.StartsWith("param ", StringComparison.OrdinalIgnoreCase))
+            {
+                // param <name> = <node>.<param> [default <value>] — expose an internal node param on the
+                // composite instance (Epic 2Q passthrough). The default is optional; it falls back to the
+                // node's authored value when omitted (resolved after all nodes are parsed).
+                var body = stmt[6..].Trim();
+                var eq = body.IndexOf('=');
+                if (eq < 0) throw new FormatException($"'param' needs '= <node>.<param>' in '{stmt}'");
+                var name = body[..eq].Trim();
+                var rhs = body[(eq + 1)..].Trim();
+
+                double? explicitDefault = null;
+                var defIdx = rhs.IndexOf(" default ", StringComparison.OrdinalIgnoreCase);
+                if (defIdx >= 0)
+                {
+                    var defText = rhs[(defIdx + 9)..].Trim();
+                    if (!double.TryParse(defText, NumberStyles.Any, CultureInfo.InvariantCulture, out var dv))
+                        throw new FormatException($"'param' default must be a number in '{stmt}'");
+                    explicitDefault = dv;
+                    rhs = rhs[..defIdx].Trim();
+                }
+
+                var pdot = rhs.IndexOf('.');
+                if (name.Length == 0 || pdot < 0)
+                    throw new FormatException($"param must be 'param <name> = <node>.<param> [default <value>]' in '{stmt}'");
+                paramStmts.Add((name, rhs[..pdot].Trim(), rhs[(pdot + 1)..].Trim(), explicitDefault));
             }
             else
             {
@@ -199,7 +227,19 @@ public static class BlockDsl
             outputs.Add(new CompositeOutput(outCap, $"{label}#{cap}"));
         }
 
-        return new CompositeDefinition(typeId, title, description, inputs2, outputs, nodes);
+        // Exposed params (Epic 2Q passthrough) — validate each targets a real node, default to the node's
+        // authored value when the DSL didn't override it so out-of-the-box behaviour is unchanged.
+        var compositeParams = new List<CompositeParam>();
+        foreach (var (name, targetNode, targetParam, explicitDefault) in paramStmts)
+        {
+            var node = nodes.FirstOrDefault(n => string.Equals(n.Id, targetNode, StringComparison.OrdinalIgnoreCase))
+                ?? throw new FormatException($"param '{name}' targets unknown node '{targetNode}'");
+            var def = explicitDefault
+                ?? (node.Params.TryGetValue(targetParam, out var authored) ? authored : 0d);
+            compositeParams.Add(new CompositeParam(name, def, $"{targetParam} of {node.Id} ({node.TypeId})", node.Id, targetParam));
+        }
+
+        return new CompositeDefinition(typeId, title, description, inputs2, outputs, nodes, compositeParams);
     }
 
     // A DSL source token → wiring form: "<label>.<cap>" → "<label>#<cap>"; a bare name → "$name" (a composite input).
@@ -251,6 +291,9 @@ public static class BlockDsl
         }
         foreach (var o in def.Outputs)
             sb.Append("out ").Append(o.Capability.Id).Append(" = ").Append(FromWiredSource(o.Source)).Append('\n');
+        foreach (var p in def.Params ?? Array.Empty<CompositeParam>())
+            sb.Append("param ").Append(p.Name).Append(" = ").Append(p.TargetNode).Append('.').Append(p.TargetParam)
+              .Append(" default ").Append(p.Default.ToString(CultureInfo.InvariantCulture)).Append('\n');
         return sb.ToString().TrimEnd('\n');
     }
 

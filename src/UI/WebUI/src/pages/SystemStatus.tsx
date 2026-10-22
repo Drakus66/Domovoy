@@ -32,13 +32,13 @@ import SpeedIcon from '@mui/icons-material/Speed';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import { metricsApi, ServiceStatus, SystemSummary } from '../api/metrics';
 import { assistantApi, AssistantStatus } from '../api/assistant';
+import SystemControlCard from '../components/system/SystemControlCard';
 
 const REFRESH_INTERVAL_MS = 30_000;
 
 const SERVICE_LABELS: Record<string, { label: string; icon: JSX.Element }> = {
   'api-gateway':            { label: 'API Gateway',             icon: <RouterIcon fontSize="small" /> },
   'db-gateway':             { label: 'DB Gateway',              icon: <StorageIcon fontSize="small" /> },
-  'unified-device-service': { label: 'Device Service',          icon: <WifiIcon fontSize="small" /> },
   'connectivity-service':   { label: 'Connectivity Service',    icon: <WifiIcon fontSize="small" /> },
   'rabbitmq':               { label: 'RabbitMQ',                icon: <RouterIcon fontSize="small" /> },
   'mongodb-exporter':       { label: 'MongoDB',                 icon: <StorageIcon fontSize="small" /> },
@@ -261,6 +261,9 @@ function SystemStatus() {
             </CardContent>
           </Card>
         )}
+
+        {/* System control (restart services / containers) */}
+        <SystemControlCard />
 
         {/* Services list */}
         <Card variant="outlined">

@@ -16,6 +16,7 @@ using Domovoy.MessageBus;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Domovoy.Contracts.Home;
 
 namespace Domovoy.CommutePlugin.Services;
 
@@ -49,7 +50,13 @@ public sealed class CommutePlanner : BackgroundService
     private volatile string _destinationText = "";
     private volatile string _deadlineText = "";    // empty = depart now
 
-    private volatile CancellationTokenSource _wake = new();
+    // Спящий цикл будят обработчик шины и обработчик настроек — из других потоков, чем сам цикл.
+    // Раньше поле было volatile и продолжало указывать на CTS, уже утилизированный в finally: Cancel()
+    // на нём бросал ObjectDisposedException, и команда устройства уезжала в DLQ вместо пересчёта.
+    // Замок делает это невозможным: цикл обнуляет поле до Dispose, а будильник читает его под тем же
+    // замком — увидеть утилизированный экземпляр больше неоткуда.
+    private readonly object _wakeGate = new();
+    private CancellationTokenSource? _wake;
     private SettingsClient.SiteLocationDto? _home;
     private DateTimeOffset _homeFetchedAt = DateTimeOffset.MinValue;
 
@@ -81,7 +88,7 @@ public sealed class CommutePlanner : BackgroundService
         {
             _traffic = BuildTrafficProvider();
             _logger.LogInformation("Settings applied; traffic provider is now {Provider}", _traffic.Name);
-            _wake.Cancel();
+            Wake();
         };
         await _pluginSettings.StartAsync(stoppingToken);
 
@@ -256,15 +263,7 @@ public sealed class CommutePlanner : BackgroundService
         return p.Label is { Length: > 0 } label ? $"{coords}|{label}" : coords;
     }
 
-    private static TimeZoneInfo ResolveTimeZone(string? ianaId)
-    {
-        if (!string.IsNullOrWhiteSpace(ianaId))
-        {
-            try { return TimeZoneInfo.FindSystemTimeZoneById(ianaId); }
-            catch (Exception) { /* fall through to UTC */ }
-        }
-        return TimeZoneInfo.Utc;
-    }
+    private static TimeZoneInfo ResolveTimeZone(string? ianaId) => SiteTimeZone.Resolve(ianaId);
 
     // --- Bus I/O ---
 
@@ -361,7 +360,7 @@ public sealed class CommutePlanner : BackgroundService
         {
             _logger.LogInformation("Commute goal updated: origin='{Origin}' dest='{Dest}' deadline='{Deadline}'",
                 _originText, _destinationText, _deadlineText);
-            _wake.Cancel(); // recompute now instead of waiting out the current interval
+            Wake(); // recompute now instead of waiting out the current interval
         }
 
         return Task.CompletedTask;
@@ -378,11 +377,18 @@ public sealed class CommutePlanner : BackgroundService
         _ => value.ToString(),
     };
 
+    /// <summary>Cut the current sleep short. Safe from any thread, and a no-op when the loop is awake.</summary>
+    private void Wake()
+    {
+        lock (_wakeGate) _wake?.Cancel();
+    }
+
     /// <summary>Sleep for <paramref name="seconds"/> but wake early when a command arrives.</summary>
     private async Task SleepInterruptiblyAsync(int seconds, CancellationToken stoppingToken)
     {
         var wake = new CancellationTokenSource();
-        _wake = wake;
+        lock (_wakeGate) _wake = wake;
+
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, wake.Token);
         try
         {
@@ -398,6 +404,12 @@ public sealed class CommutePlanner : BackgroundService
         }
         finally
         {
+            // Порядок обязателен: сначала снять поле под замком, потом утилизировать. Иначе будильник
+            // из другого потока успел бы взять ссылку на уже утилизированный источник.
+            lock (_wakeGate)
+            {
+                if (ReferenceEquals(_wake, wake)) _wake = null;
+            }
             wake.Dispose();
         }
     }

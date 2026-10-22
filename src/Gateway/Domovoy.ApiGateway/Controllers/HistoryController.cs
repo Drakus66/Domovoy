@@ -2,6 +2,8 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using System.Text;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace Domovoy.ApiGateway.Controllers;
@@ -12,12 +14,9 @@ namespace Domovoy.ApiGateway.Controllers;
 /// Mirrors <see cref="CapabilityDevicesController"/>; the full query string is forwarded as-is.
 /// </summary>
 [ApiController]
-public class HistoryController : ControllerBase
+public class HistoryController : ProxyController
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-
-    public HistoryController(IHttpClientFactory httpClientFactory)
-        => _httpClientFactory = httpClientFactory;
+    public HistoryController(IHttpClientFactory httpClientFactory) : base(httpClientFactory) { }
 
     /// <summary>Device event-log history (state deltas + commands) with trigger attribution.</summary>
     [HttpGet("api/events")]
@@ -27,6 +26,10 @@ public class HistoryController : ControllerBase
     [HttpGet("api/activity")]
     public Task<IActionResult> Activity(CancellationToken ct) => Forward("api/activity", ct);
 
+    /// <summary>How many activity rows match, without shipping them — for headline counters.</summary>
+    [HttpGet("api/activity/count")]
+    public Task<IActionResult> ActivityCount(CancellationToken ct) => Forward("api/activity/count", ct);
+
     /// <summary>Numeric telemetry samples over a period (supports <c>?format=csv</c> export).</summary>
     [HttpGet("api/telemetry")]
     public Task<IActionResult> Telemetry(CancellationToken ct) => Forward("api/telemetry", ct);
@@ -35,18 +38,11 @@ public class HistoryController : ControllerBase
     [HttpGet("api/telemetry/aggregate")]
     public Task<IActionResult> TelemetryAggregate(CancellationToken ct) => Forward("api/telemetry/aggregate", ct);
 
-    private async Task<IActionResult> Forward(string path, CancellationToken ct)
-    {
-        var relativePath = Request.QueryString.HasValue ? $"{path}{Request.QueryString.Value}" : path;
-        var client = _httpClientFactory.CreateClient("db-gateway");
-        using var upstream = await client.GetAsync(relativePath, HttpCompletionOption.ResponseHeadersRead, ct);
-        var body = await upstream.Content.ReadAsStringAsync(ct);
+    /// <summary>Many (device, capability) telemetry series in one round-trip (dashboard sparklines / composed charts).</summary>
+    [HttpPost("api/telemetry/aggregate/batch")]
+    public Task<IActionResult> TelemetryAggregateBatch(CancellationToken ct) => Forward("api/telemetry/aggregate/batch", ct);
 
-        return new ContentResult
-        {
-            StatusCode = (int)upstream.StatusCode,
-            Content = body,
-            ContentType = upstream.Content.Headers.ContentType?.ToString() ?? "application/json",
-        };
-    }
+    /// <summary>Latest event-log row per device in one round-trip (per-tile "last changed by …" provenance).</summary>
+    [HttpPost("api/events/latest-by-device")]
+    public Task<IActionResult> EventsLatestByDevice(CancellationToken ct) => Forward("api/events/latest-by-device", ct);
 }

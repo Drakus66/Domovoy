@@ -185,7 +185,7 @@ export default function Logs() {
             <Typography color="text.secondary">{t('empty')}</Typography>
           </Box>
         ) : (
-          <Card variant="outlined">
+          <Card variant="outlined" sx={{ maxHeight: '65vh', overflowY: 'auto' }}>
             <Stack divider={<Divider />}>
               {entries.map((e, i) => {
                 // With a structured initiator the clickable chip replaces the textual "by …" detail;

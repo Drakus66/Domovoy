@@ -18,6 +18,7 @@ import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import { pluginsApi, Plugin, PluginStatus, HostResources } from '../api/plugins';
 import PluginSettingsDialog from '../components/plugins/PluginSettingsDialog';
+import { confirmAction } from '../store/confirmStore';
 
 const STATUS_COLOR: Record<PluginStatus, 'success' | 'warning' | 'error' | 'info' | 'default'> = {
   Running: 'success', Starting: 'info', Blocked: 'warning', Failed: 'error',
@@ -101,7 +102,7 @@ export default function Plugins() {
   };
 
   const uninstall = async (p: Plugin) => {
-    if (!window.confirm(t('uninstall.confirm', { name: p.name }))) return;
+    if (!await confirmAction({ message: t('uninstall.confirm', { name: p.name }) })) return;
     setBusy(p.id);
     setError(null);
     try {

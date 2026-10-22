@@ -129,6 +129,29 @@ export interface ArchetypeClassifyResult {
   note: string;
 }
 
+/** One entry in the ML-activity journal (Epic 3I) — the proactive layer's visible pulse on the ML page. */
+export interface MlActivityEntry {
+  id: string;
+  timestamp: string;
+  /** Which contour produced it: trainer | discovery | rule_suggester | ml_task_suggester. */
+  source: string;
+  /** Colour bucket: ok | idle | skipped | error. */
+  outcome: string;
+  /** Machine-readable reason slug the UI localizes (trained/created/no_patterns/history_immature/…). */
+  reason: string;
+  note?: string | null;
+  /** Structured counters (candidates, created, hypotheses, historyDays, requiredDays, …). */
+  metrics?: Record<string, number> | null;
+}
+
+/** Runtime switches for the intelligence (ML) layer (Epic 3I). */
+export interface MlSettings {
+  enabled: boolean;
+  proposalsEnabled: boolean;
+  minHistoryDays: number;
+  updatedAt?: string;
+}
+
 export const mlApi = {
   /** List registered models, newest first. */
   getModels: (): Promise<MlModel[]> =>
@@ -183,4 +206,18 @@ export const mlApi = {
   /** Run the ML.NET archetype classifier over the device population; returns disagreements (Epic 2D). */
   classifyArchetypes: (): Promise<ArchetypeClassifyResult> =>
     apiClient.post<ArchetypeClassifyResult>('/api/ml/classify-archetypes').then((r) => r.data),
+
+  // ===== Intelligence layer: journal + switches (Epic 3I) =====
+
+  /** The ML-activity journal, newest first; optionally filtered by source. */
+  getActivity: (limit = 100, source?: string): Promise<MlActivityEntry[]> =>
+    apiClient.get<MlActivityEntry[]>('/api/ml/activity', { params: { limit, source } }).then((r) => r.data),
+
+  /** Current ML-layer switches (defaults to fully enabled until changed). */
+  getSettings: (): Promise<MlSettings> =>
+    apiClient.get<MlSettings>('/api/settings/ml').then((r) => r.data),
+
+  /** Update the ML-layer switches (takes effect within one AutomationService refresh — no restart). */
+  saveSettings: (body: { enabled: boolean; proposalsEnabled: boolean; minHistoryDays: number }): Promise<MlSettings> =>
+    apiClient.put<MlSettings>('/api/settings/ml', body).then((r) => r.data),
 };

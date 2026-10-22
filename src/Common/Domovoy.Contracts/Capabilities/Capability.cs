@@ -51,12 +51,20 @@ public static class CapabilityIds
     public const string Valve = "valve";                           // number, 0..100 (%) — irrigation/heating
     public const string Power = "power";                           // number, W
     public const string Energy = "energy";                         // number, kWh
+    public const string Price = "price";                           // number, currency/kWh — current tariff price (Epic 3C); may be negative (plunge)
+    public const string TariffZone = "tariff_zone";                // enum — current tariff zone (peak/day/night…) (Epic 3C)
+    public const string PowerSource = "power_source";               // enum (writable) — grid/grid_peak/battery/solar/off (Epic 3C-LM)
     public const string Battery = "battery";                       // number, %
     public const string Illuminance = "illuminance";               // number, lux
     public const string LinkQuality = "link_quality";              // number, 0..255
     public const string Position = "position";                     // number, 0..100 (%) — cover/blind position
     public const string HvacMode = "hvac_mode";                    // enum — off/heat/cool/auto (climate)
     public const string FanSpeed = "fan_speed";                    // number, 0..100 (%) — fan speed
+
+    // --- Presence (roadmap Epic 3D) — per-person + aggregated occupancy signals ---
+    public const string Presence = "presence";                     // bool — a resident is home (per-person virtual device)
+    public const string AnyoneHome = "anyone_home";                // bool — at least one tracked resident is home (aggregate)
+    public const string HomeCount = "home_count";                  // number — how many tracked residents are home (aggregate)
 
     // --- System virtual sensors (roadmap Epic 2L) — reported by the platform, no physical device ---
     public const string SunElevation = "sun_elevation";            // number, ° above horizon (negative = below)
@@ -72,6 +80,9 @@ public static class CapabilityIds
     public const string IsHoliday = "is_holiday";                  // bool — today is a configured holiday
     public const string CalendarDate = "date";                     // text, local yyyy-MM-dd
     public const string HomeMode = "home_mode";                    // enum (writable) — Home/Away/Night/Vacation (open set, Epic 1G)
+
+    // --- Global variables (roadmap Epic 3E) ---
+    public const string VariableValue = "value";                   // writable — kind depends on GlobalVariable.Type (number/bool/text)
 }
 
 /// <summary>
@@ -85,7 +96,6 @@ public static class CapabilityAttributeKeys
     public const string Max = "max";
     public const string Step = "step";
     public const string Writable = "writable"; // bool — can be commanded
-    public const string Readable = "readable"; // bool — reports state
     public const string Values = "values";     // string[] — allowed values for Enum kind
     public const string Editor = "editor";     // string — UI editor hint for a writable value (see CapabilityEditors)
 }
@@ -119,8 +129,4 @@ public sealed record Capability(
     /// <summary>True when the capability can be written via a command.</summary>
     public bool IsWritable =>
         Attributes.TryGetValue(CapabilityAttributeKeys.Writable, out var w) && w is true;
-
-    /// <summary>True when the capability reports readable state.</summary>
-    public bool IsReadable =>
-        !Attributes.TryGetValue(CapabilityAttributeKeys.Readable, out var r) || r is true;
 }

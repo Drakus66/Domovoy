@@ -5,17 +5,18 @@
 namespace Domovoy.Common.Configuration;
 
 /// <summary>
-/// Bus topology constants used by the SignalR relay path and by Zigbee-bridge management.
-/// All capability-contract publishes (DeviceDiscoveredV1 / DeviceStateReportV1 / DeviceCommandV1)
-/// use <c>Domovoy.Contracts.Messaging.BusTopology</c> instead of constants here.
+/// Bus topology constants for Zigbee-bridge management — the one domain that predates
+/// <c>Domovoy.Contracts.Messaging.BusTopology</c> and still has its own exchange.
+/// <para>
+/// Всё остальное ходит по capability-контракту (DeviceDiscoveredV1 / DeviceStateReportV1 /
+/// DeviceCommandV1) через <c>BusTopology</c>. Пара <c>device.events</c> / <c>device.state.updated</c>
+/// жила здесь ради legacy-события <c>DeviceStateUpdatedEvent</c>, которое переизлучал
+/// UnifiedDeviceService; сервис снят, релей SignalR читает контракт напрямую — константы ушли вместе
+/// с ним.
+/// </para>
 /// </summary>
 public class MessageBusConfiguration
 {
-    // CapabilityDeviceManager re-emits normalized state as DeviceStateUpdatedEvent on this exchange;
-    // ApiGateway.EventRelayService and DbGateway.EventInterceptor subscribe to it.
-    public const string DeviceEventsExchange = "device.events";
-    public const string DeviceStateUpdatedRoutingKey = "device.state.updated";
-
     // Zigbee bridge management (permit-join, rename, remove, bridge state/info/network events).
     public const string ZigbeeBridgeExchange = "zigbee.bridge";
     public const string ZigbeeBridgeStateRoutingKey = "zigbee.bridge.state";

@@ -1,0 +1,1290 @@
+# Публичная поверхность Domovoy.Contracts. Снимок, а не документация.
+# Меняется только вместе с объявлением совместимости в build/components.json.
+
+Domovoy.Contracts.Automations.ActionType
+  const Domovoy.Contracts.Automations.ActionType Command = 0
+  const Domovoy.Contracts.Automations.ActionType Delay = 1
+  const Domovoy.Contracts.Automations.ActionType Notify = 2
+  const Domovoy.Contracts.Automations.ActionType Scene = 3
+  const Domovoy.Contracts.Automations.ActionType WaitForEvent = 4
+  method System.Boolean Equals(System.Object obj)
+  method System.Boolean HasFlag(System.Enum flag)
+  method System.Int32 CompareTo(System.Object target)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.String ToString(System.IFormatProvider provider)
+  method System.String ToString(System.String format)
+  method System.String ToString(System.String format, System.IFormatProvider provider)
+  method System.TypeCode GetTypeCode()
+
+Domovoy.Contracts.Automations.AutomationRule
+  ctor ()
+  prop Domovoy.Contracts.Automations.RequiredExpression RequiredExpression { get set }
+  prop Domovoy.Contracts.Automations.RuleStatus Status { get set }
+  prop System.Boolean IsProtected { get set }
+  prop System.Collections.Generic.List<Domovoy.Contracts.Automations.RuleAction> Actions { get set }
+  prop System.Collections.Generic.List<Domovoy.Contracts.Automations.RuleCondition> Conditions { get set }
+  prop System.Collections.Generic.List<Domovoy.Contracts.Automations.RuleTrigger> Triggers { get set }
+  prop System.DateTime CreatedAt { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.String Description { get set }
+  prop System.String Id { get set }
+  prop System.String Name { get set }
+
+Domovoy.Contracts.Automations.ConditionType
+  const Domovoy.Contracts.Automations.ConditionType DeviceState = 0
+  const Domovoy.Contracts.Automations.ConditionType Mode = 3
+  const Domovoy.Contracts.Automations.ConditionType Sun = 2
+  const Domovoy.Contracts.Automations.ConditionType TimeOfDay = 1
+  method System.Boolean Equals(System.Object obj)
+  method System.Boolean HasFlag(System.Enum flag)
+  method System.Int32 CompareTo(System.Object target)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.String ToString(System.IFormatProvider provider)
+  method System.String ToString(System.String format)
+  method System.String ToString(System.String format, System.IFormatProvider provider)
+  method System.TypeCode GetTypeCode()
+
+Domovoy.Contracts.Automations.GlobalVariable
+  ctor ()
+  prop Domovoy.Contracts.Automations.VariableType Type { get set }
+  prop System.DateTime CreatedAt { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.Object Value { get set }
+  prop System.String Description { get set }
+  prop System.String Id { get set }
+  prop System.String Name { get set }
+
+Domovoy.Contracts.Automations.RequiredExpression
+  ctor ()
+  prop System.Collections.Generic.List<Domovoy.Contracts.Automations.RuleCondition> Conditions { get set }
+  prop System.String Expression { get set }
+
+Domovoy.Contracts.Automations.RuleAction
+  ctor ()
+  prop Domovoy.Contracts.Automations.ActionType Type { get set }
+  prop System.Collections.Generic.Dictionary<System.String, System.Object> Set { get set }
+  prop System.Collections.Generic.List<Domovoy.Contracts.Automations.RuleAction> OnError { get set }
+  prop System.Collections.Generic.List<Domovoy.Contracts.Automations.RuleAction> OnTimeout { get set }
+  prop System.Int32 DelaySeconds { get set }
+  prop System.Int32 TimeoutSeconds { get set }
+  prop System.Object WaitValue { get set }
+  prop System.String DeviceId { get set }
+  prop System.String Message { get set }
+  prop System.String SceneId { get set }
+  prop System.String WaitCapabilityId { get set }
+  prop System.String WaitDeviceId { get set }
+  prop System.String WaitOperator { get set }
+  prop System.String WaitZoneId { get set }
+
+Domovoy.Contracts.Automations.RuleCondition
+  ctor ()
+  prop Domovoy.Contracts.Automations.ConditionType Type { get set }
+  prop System.Nullable<System.Boolean> Dark { get set }
+  prop System.Object Value { get set }
+  prop System.String CapabilityId { get set }
+  prop System.String DeviceId { get set }
+  prop System.String FromTime { get set }
+  prop System.String Mode { get set }
+  prop System.String Operator { get set }
+  prop System.String ToTime { get set }
+  prop System.String ZoneId { get set }
+
+Domovoy.Contracts.Automations.RuleStatus
+  const Domovoy.Contracts.Automations.RuleStatus Active = 2
+  const Domovoy.Contracts.Automations.RuleStatus Approved = 1
+  const Domovoy.Contracts.Automations.RuleStatus BoundedActive = 5
+  const Domovoy.Contracts.Automations.RuleStatus Disabled = 3
+  const Domovoy.Contracts.Automations.RuleStatus Proposed = 0
+  const Domovoy.Contracts.Automations.RuleStatus Shadow = 4
+  method System.Boolean Equals(System.Object obj)
+  method System.Boolean HasFlag(System.Enum flag)
+  method System.Int32 CompareTo(System.Object target)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.String ToString(System.IFormatProvider provider)
+  method System.String ToString(System.String format)
+  method System.String ToString(System.String format, System.IFormatProvider provider)
+  method System.TypeCode GetTypeCode()
+
+Domovoy.Contracts.Automations.RuleTrigger
+  ctor ()
+  prop Domovoy.Contracts.Automations.TriggerType Type { get set }
+  prop System.Int32 OffsetMinutes { get set }
+  prop System.Nullable<Domovoy.Contracts.Automations.SunEvent> Sun { get set }
+  prop System.Object Value { get set }
+  prop System.String CapabilityId { get set }
+  prop System.String Cron { get set }
+  prop System.String DeviceId { get set }
+  prop System.String Operator { get set }
+  prop System.String ZoneId { get set }
+
+Domovoy.Contracts.Automations.SunEvent
+  const Domovoy.Contracts.Automations.SunEvent Sunrise = 0
+  const Domovoy.Contracts.Automations.SunEvent Sunset = 1
+  method System.Boolean Equals(System.Object obj)
+  method System.Boolean HasFlag(System.Enum flag)
+  method System.Int32 CompareTo(System.Object target)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.String ToString(System.IFormatProvider provider)
+  method System.String ToString(System.String format)
+  method System.String ToString(System.String format, System.IFormatProvider provider)
+  method System.TypeCode GetTypeCode()
+
+Domovoy.Contracts.Automations.TriggerType
+  const Domovoy.Contracts.Automations.TriggerType DeviceState = 0
+  const Domovoy.Contracts.Automations.TriggerType Sun = 2
+  const Domovoy.Contracts.Automations.TriggerType Time = 1
+  method System.Boolean Equals(System.Object obj)
+  method System.Boolean HasFlag(System.Enum flag)
+  method System.Int32 CompareTo(System.Object target)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.String ToString(System.IFormatProvider provider)
+  method System.String ToString(System.String format)
+  method System.String ToString(System.String format, System.IFormatProvider provider)
+  method System.TypeCode GetTypeCode()
+
+Domovoy.Contracts.Automations.VariableType
+  const Domovoy.Contracts.Automations.VariableType Boolean = 1
+  const Domovoy.Contracts.Automations.VariableType DateTime = 3
+  const Domovoy.Contracts.Automations.VariableType List = 4
+  const Domovoy.Contracts.Automations.VariableType Number = 0
+  const Domovoy.Contracts.Automations.VariableType String = 2
+  method System.Boolean Equals(System.Object obj)
+  method System.Boolean HasFlag(System.Enum flag)
+  method System.Int32 CompareTo(System.Object target)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.String ToString(System.IFormatProvider provider)
+  method System.String ToString(System.String format)
+  method System.String ToString(System.String format, System.IFormatProvider provider)
+  method System.TypeCode GetTypeCode()
+
+Domovoy.Contracts.Blocks.BlockLayout
+  ctor ()
+  prop System.Double X { get set }
+  prop System.Double Y { get set }
+
+Domovoy.Contracts.Blocks.BlockStateRecord
+  ctor ()
+  prop System.DateTime UpdatedAt { get set }
+  prop System.String Id { get set }
+  prop System.String StateJson { get set }
+
+Domovoy.Contracts.Blocks.ControlBlock
+  ctor ()
+  prop Domovoy.Contracts.Blocks.BlockLayout Layout { get set }
+  prop System.Boolean Enabled { get set }
+  prop System.Collections.Generic.Dictionary<System.String, Domovoy.Contracts.Blocks.PortBinding> Inputs { get set }
+  prop System.Collections.Generic.Dictionary<System.String, Domovoy.Contracts.Blocks.PortBinding> Outputs { get set }
+  prop System.Collections.Generic.Dictionary<System.String, System.Double> Params { get set }
+  prop System.Collections.Generic.Dictionary<System.String, System.String> Options { get set }
+  prop System.DateTime CreatedAt { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.String DeviceId { get set }
+  prop System.String Id { get set }
+  prop System.String Name { get set }
+  prop System.String TypeId { get set }
+  prop System.String ZoneId { get set }
+
+Domovoy.Contracts.Blocks.PortBinding
+  ctor ()
+  prop System.String CapabilityId { get set }
+  prop System.String DeviceId { get set }
+
+Domovoy.Contracts.Capabilities.Capability
+  ctor (System.String Id, Domovoy.Contracts.Capabilities.CapabilityKind Kind, System.Collections.Generic.IReadOnlyDictionary<System.String, System.Object> Attributes)
+  method Domovoy.Contracts.Capabilities.Capability <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Capabilities.Capability other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& Id, Domovoy.Contracts.Capabilities.CapabilityKind& Kind, System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Object, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& Attributes)
+  prop Domovoy.Contracts.Capabilities.CapabilityKind Kind { get set }
+  prop System.Boolean IsWritable { get }
+  prop System.Collections.Generic.IReadOnlyDictionary<System.String, System.Object> Attributes { get set }
+  prop System.String Id { get set }
+
+Domovoy.Contracts.Capabilities.CapabilityAttributeKeys
+  const System.String Editor = "editor"
+  const System.String Max = "max"
+  const System.String Min = "min"
+  const System.String Step = "step"
+  const System.String Unit = "unit"
+  const System.String Values = "values"
+  const System.String Writable = "writable"
+
+Domovoy.Contracts.Capabilities.CapabilityEditors
+  const System.String Geo = "geo"
+  const System.String Time = "time"
+
+Domovoy.Contracts.Capabilities.CapabilityIds
+  const System.String AnyoneHome = "anyone_home"
+  const System.String Battery = "battery"
+  const System.String Brightness = "brightness"
+  const System.String CalendarDate = "date"
+  const System.String Clock = "clock"
+  const System.String Co2 = "co2"
+  const System.String Color = "color"
+  const System.String ColorTemp = "color_temp"
+  const System.String Contact = "contact"
+  const System.String CoolDemand = "cool_demand"
+  const System.String DayOfWeek = "day_of_week"
+  const System.String Energy = "energy"
+  const System.String FanSpeed = "fan_speed"
+  const System.String HomeCount = "home_count"
+  const System.String HomeMode = "home_mode"
+  const System.String Humidity = "humidity"
+  const System.String HvacMode = "hvac_mode"
+  const System.String Illuminance = "illuminance"
+  const System.String IsDark = "is_dark"
+  const System.String IsDay = "is_day"
+  const System.String IsHoliday = "is_holiday"
+  const System.String IsWeekend = "is_weekend"
+  const System.String LinkQuality = "link_quality"
+  const System.String Lock = "lock"
+  const System.String Occupancy = "occupancy"
+  const System.String OnOff = "on_off"
+  const System.String Position = "position"
+  const System.String Power = "power"
+  const System.String PowerSource = "power_source"
+  const System.String Presence = "presence"
+  const System.String Price = "price"
+  const System.String SunAzimuth = "sun_azimuth"
+  const System.String SunElevation = "sun_elevation"
+  const System.String Sunrise = "sunrise"
+  const System.String Sunset = "sunset"
+  const System.String TariffZone = "tariff_zone"
+  const System.String Temperature = "temperature"
+  const System.String TemperatureSetpoint = "temperature_setpoint"
+  const System.String TimeOfDay = "time_of_day"
+  const System.String Valve = "valve"
+  const System.String VariableValue = "value"
+
+Domovoy.Contracts.Capabilities.CapabilityKind
+  const Domovoy.Contracts.Capabilities.CapabilityKind Action = 5
+  const Domovoy.Contracts.Capabilities.CapabilityKind Boolean = 0
+  const Domovoy.Contracts.Capabilities.CapabilityKind Color = 3
+  const Domovoy.Contracts.Capabilities.CapabilityKind Enum = 2
+  const Domovoy.Contracts.Capabilities.CapabilityKind Number = 1
+  const Domovoy.Contracts.Capabilities.CapabilityKind Text = 4
+  method System.Boolean Equals(System.Object obj)
+  method System.Boolean HasFlag(System.Enum flag)
+  method System.Int32 CompareTo(System.Object target)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.String ToString(System.IFormatProvider provider)
+  method System.String ToString(System.String format)
+  method System.String ToString(System.String format, System.IFormatProvider provider)
+  method System.TypeCode GetTypeCode()
+
+Domovoy.Contracts.Capabilities.WellKnownCapabilities
+  method Domovoy.Contracts.Capabilities.Capability AnyoneHome()
+  method Domovoy.Contracts.Capabilities.Capability Battery()
+  method Domovoy.Contracts.Capabilities.Capability Boolean(System.String id, System.Boolean writable)
+  method Domovoy.Contracts.Capabilities.Capability Brightness(System.Boolean writable)
+  method Domovoy.Contracts.Capabilities.Capability CalendarDate()
+  method Domovoy.Contracts.Capabilities.Capability Clock()
+  method Domovoy.Contracts.Capabilities.Capability ColorTemp(System.Int32 minK, System.Int32 maxK, System.Boolean writable)
+  method Domovoy.Contracts.Capabilities.Capability Contact()
+  method Domovoy.Contracts.Capabilities.Capability DayOfWeek()
+  method Domovoy.Contracts.Capabilities.Capability Enum(System.String id, System.Collections.Generic.IReadOnlyList<System.String> values, System.Boolean writable)
+  method Domovoy.Contracts.Capabilities.Capability HomeCount()
+  method Domovoy.Contracts.Capabilities.Capability HomeMode()
+  method Domovoy.Contracts.Capabilities.Capability Humidity()
+  method Domovoy.Contracts.Capabilities.Capability IsDark()
+  method Domovoy.Contracts.Capabilities.Capability IsDay()
+  method Domovoy.Contracts.Capabilities.Capability IsHoliday()
+  method Domovoy.Contracts.Capabilities.Capability IsWeekend()
+  method Domovoy.Contracts.Capabilities.Capability Location(System.String id, System.Boolean writable)
+  method Domovoy.Contracts.Capabilities.Capability Lock(System.Boolean writable)
+  method Domovoy.Contracts.Capabilities.Capability Number(System.String id, System.String unit, System.Nullable<System.Double> min, System.Nullable<System.Double> max, System.Nullable<System.Double> step, System.Boolean writable)
+  method Domovoy.Contracts.Capabilities.Capability Occupancy()
+  method Domovoy.Contracts.Capabilities.Capability OnOff(System.Boolean writable)
+  method Domovoy.Contracts.Capabilities.Capability Power()
+  method Domovoy.Contracts.Capabilities.Capability PowerSourceCap()
+  method Domovoy.Contracts.Capabilities.Capability Presence()
+  method Domovoy.Contracts.Capabilities.Capability Price(System.String unit)
+  method Domovoy.Contracts.Capabilities.Capability SunAzimuth()
+  method Domovoy.Contracts.Capabilities.Capability SunElevation()
+  method Domovoy.Contracts.Capabilities.Capability Sunrise()
+  method Domovoy.Contracts.Capabilities.Capability Sunset()
+  method Domovoy.Contracts.Capabilities.Capability TariffZone(System.Collections.Generic.IReadOnlyList<System.String> zones)
+  method Domovoy.Contracts.Capabilities.Capability Temperature()
+  method Domovoy.Contracts.Capabilities.Capability TemperatureSetpoint(System.Double min, System.Double max, System.Double step)
+  method Domovoy.Contracts.Capabilities.Capability Text(System.String id, System.Boolean writable)
+  method Domovoy.Contracts.Capabilities.Capability TimeInput(System.String id, System.Boolean writable)
+  method Domovoy.Contracts.Capabilities.Capability TimeOfDay()
+
+Domovoy.Contracts.Devices.CapabilityState
+  ctor ()
+  method Domovoy.Contracts.Devices.CapabilityState Set(System.String capabilityId, System.Object value)
+  prop System.Collections.Generic.IReadOnlyDictionary<System.String, System.Object> Values { get }
+
+Domovoy.Contracts.Devices.DeviceArchetypes
+  const System.String Calendar = "calendar"
+  const System.String ClimateSensor = "climate_sensor"
+  const System.String Clock = "clock"
+  const System.String Contact = "contact"
+  const System.String ControlBlock = "control_block"
+  const System.String EnergyMeter = "energy_meter"
+  const System.String Light = "light"
+  const System.String Lock = "lock"
+  const System.String Motion = "motion"
+  const System.String Person = "person"
+  const System.String Presence = "presence"
+  const System.String Sensor = "sensor"
+  const System.String Sun = "sun"
+  const System.String Switch = "switch"
+  const System.String Tariff = "tariff"
+  const System.String Thermostat = "thermostat"
+  const System.String Unknown = "unknown"
+  const System.String Valve = "valve"
+  field System.Collections.Generic.IReadOnlyList<System.String> All
+  method System.Boolean IsKnown(System.String archetype)
+
+Domovoy.Contracts.Devices.DeviceDescriptor
+  ctor (System.Guid Id, System.String Name, System.Guid ZoneId, Domovoy.Contracts.Devices.DeviceIdentity Identity, System.Collections.Generic.IReadOnlyList<Domovoy.Contracts.Capabilities.Capability> Capabilities, System.String Manufacturer, System.String Model)
+  method Domovoy.Contracts.Devices.DeviceDescriptor <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Devices.DeviceDescriptor other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Boolean HasCapability(System.String capabilityId)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.Guid& Id, System.String& Name, System.Guid& ZoneId, Domovoy.Contracts.Devices.DeviceIdentity& Identity, System.Collections.Generic.IReadOnlyList`1[[Domovoy.Contracts.Capabilities.Capability, Domovoy.Contracts, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]]& Capabilities, System.String& Manufacturer, System.String& Model)
+  prop Domovoy.Contracts.Devices.DeviceIdentity Identity { get set }
+  prop System.Collections.Generic.IReadOnlyList<Domovoy.Contracts.Capabilities.Capability> Capabilities { get set }
+  prop System.Guid Id { get set }
+  prop System.Guid ZoneId { get set }
+  prop System.String Manufacturer { get set }
+  prop System.String Model { get set }
+  prop System.String Name { get set }
+
+Domovoy.Contracts.Devices.DeviceIdFactory
+  method System.Guid Derive(System.String adapterSource, System.String hardwareId)
+
+Domovoy.Contracts.Devices.DeviceIdentity
+  ctor (System.String AdapterSource, System.String HardwareId, System.String StateTopic, System.String CommandTopic, System.Collections.Generic.IReadOnlyDictionary<System.String, System.String> AdditionalTopics)
+  method Domovoy.Contracts.Devices.DeviceIdentity <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Devices.DeviceIdentity other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& AdapterSource, System.String& HardwareId, System.String& StateTopic, System.String& CommandTopic, System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& AdditionalTopics)
+  prop System.Collections.Generic.IReadOnlyDictionary<System.String, System.String> AdditionalTopics { get set }
+  prop System.String AdapterSource { get set }
+  prop System.String CommandTopic { get set }
+  prop System.String HardwareId { get set }
+  prop System.String StateTopic { get set }
+
+Domovoy.Contracts.Home.CalendarSettings
+  const System.String SingletonId = "current"
+  ctor ()
+  prop System.Collections.Generic.List<System.Int32> WeekendDays { get set }
+  prop System.Collections.Generic.List<System.String> Holidays { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.String Id { get set }
+
+Domovoy.Contracts.Home.CircuitLimit
+  ctor ()
+  prop System.Double LimitWatts { get set }
+  prop System.String CircuitId { get set }
+
+Domovoy.Contracts.Home.EnergyModel
+  const System.Double MaxGapHours = 1
+  method System.Double Accumulate(System.Double kwh, System.Double powerW, System.TimeSpan elapsed)
+  method System.Double EstimatePowerW(System.Double maxPowerW, System.Double minPowerW, System.Double standbyPowerW, System.Boolean isOn, System.Nullable<System.Double> scalePercent)
+  method System.Nullable<System.Double> DefaultPowerW(System.String archetype)
+
+Domovoy.Contracts.Home.LoadManagementSettings
+  const System.String SingletonId = "current"
+  ctor ()
+  prop System.Boolean Enabled { get set }
+  prop System.Collections.Generic.List<Domovoy.Contracts.Home.CircuitLimit> CircuitLimits { get set }
+  prop System.Collections.Generic.List<Domovoy.Contracts.Home.PhaseLimit> PhaseLimits { get set }
+  prop System.Collections.Generic.List<Domovoy.Contracts.Home.PowerBudget> Budgets { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.Double RestoreMarginWatts { get set }
+  prop System.Int32 MinDwellSeconds { get set }
+  prop System.String Id { get set }
+
+Domovoy.Contracts.Home.ModeChangeSources
+  const System.String Ml = "ml"
+  const System.String Presence = "presence"
+  const System.String Rule = "rule"
+  const System.String User = "user"
+
+Domovoy.Contracts.Home.PhaseLimit
+  ctor ()
+  prop System.Double LimitWatts { get set }
+  prop System.String Phase { get set }
+
+Domovoy.Contracts.Home.PowerBudget
+  ctor ()
+  prop System.Double LimitWatts { get set }
+  prop System.String PowerSource { get set }
+
+Domovoy.Contracts.Home.PresenceSettings
+  const System.String SingletonId = "current"
+  ctor ()
+  prop System.DateTime UpdatedAt { get set }
+  prop System.Double HomeRadiusMeters { get set }
+  prop System.Int32 AwayGraceSeconds { get set }
+  prop System.String Id { get set }
+  prop System.String OwnTracksToken { get set }
+
+Domovoy.Contracts.Home.Resident
+  ctor ()
+  prop System.Boolean TrackingEnabled { get set }
+  prop System.DateTime CreatedAt { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.String DisplayName { get set }
+  prop System.String Id { get set }
+  prop System.String OwnTracksId { get set }
+  prop System.String UserId { get set }
+
+Domovoy.Contracts.Home.SiteLocation
+  const System.String SingletonId = "current"
+  ctor ()
+  prop System.Boolean TimeZoneAuto { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.Double Latitude { get set }
+  prop System.Double Longitude { get set }
+  prop System.String Id { get set }
+  prop System.String Label { get set }
+  prop System.String TimeZoneId { get set }
+
+Domovoy.Contracts.Home.SiteTimeZone
+  method System.TimeZoneInfo Resolve(System.String ianaId)
+
+Domovoy.Contracts.Home.TariffCalculator
+  const System.String DefaultZoneName = "default"
+  method System.Collections.Generic.IReadOnlyList<Domovoy.Contracts.Home.TariffPoint> Forward(Domovoy.Contracts.Home.TariffSettings settings, System.DateTimeOffset fromLocal, System.Int32 hours)
+  method System.Collections.Generic.IReadOnlyList<System.String> ZoneNames(Domovoy.Contracts.Home.TariffSettings settings)
+  method System.ValueTuple<System.String, System.Double> At(Domovoy.Contracts.Home.TariffSettings settings, System.DateTimeOffset local)
+  method System.ValueTuple<System.String, System.Double> At(Domovoy.Contracts.Home.TariffSettings settings, System.Int32 minuteOfDay)
+
+Domovoy.Contracts.Home.TariffInterval
+  ctor ()
+  prop System.Int32 EndMinute { get set }
+  prop System.Int32 StartMinute { get set }
+
+Domovoy.Contracts.Home.TariffPoint
+  ctor (System.DateTimeOffset At, System.String Zone, System.Double Price)
+  method System.Boolean Equals(Domovoy.Contracts.Home.TariffPoint other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.DateTimeOffset& At, System.String& Zone, System.Double& Price)
+  prop System.DateTimeOffset At { get set }
+  prop System.Double Price { get set }
+  prop System.String Zone { get set }
+
+Domovoy.Contracts.Home.TariffSettings
+  const System.String SingletonId = "current"
+  ctor ()
+  prop System.Collections.Generic.List<Domovoy.Contracts.Home.TariffZone> Zones { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.Double DefaultPrice { get set }
+  prop System.String Currency { get set }
+  prop System.String Id { get set }
+
+Domovoy.Contracts.Home.TariffZone
+  ctor ()
+  prop System.Collections.Generic.List<Domovoy.Contracts.Home.TariffInterval> Intervals { get set }
+  prop System.Double PricePerKwh { get set }
+  prop System.String Name { get set }
+
+Domovoy.Contracts.Home.WellKnownModes
+  const System.String Away = "Away"
+  const System.String Default = "Home"
+  const System.String Home = "Home"
+  const System.String Night = "Night"
+  const System.String Vacation = "Vacation"
+  field System.Collections.Generic.IReadOnlyList<System.String> All
+  method System.Boolean IsPresenceManaged(System.String mode)
+
+Domovoy.Contracts.Home.WellKnownPowerSources
+  const System.String Battery = "battery"
+  const System.String Default = "grid"
+  const System.String Grid = "grid"
+  const System.String GridPeak = "grid_peak"
+  const System.String Off = "off"
+  const System.String Solar = "solar"
+  field System.Collections.Generic.IReadOnlyList<System.String> All
+
+Domovoy.Contracts.Messaging.AutomationTriggeredV1
+  ctor (System.String RuleId, System.String RuleName, System.DateTimeOffset FiredAt, System.Boolean ConditionsMet, System.Boolean Success, System.String TriggerSummary, System.Int32 ActionsExecuted, System.String Detail)
+  method Domovoy.Contracts.Messaging.AutomationTriggeredV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Messaging.AutomationTriggeredV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& RuleId, System.String& RuleName, System.DateTimeOffset& FiredAt, System.Boolean& ConditionsMet, System.Boolean& Success, System.String& TriggerSummary, System.Int32& ActionsExecuted, System.String& Detail)
+  prop System.Boolean ConditionsMet { get set }
+  prop System.Boolean Success { get set }
+  prop System.DateTimeOffset FiredAt { get set }
+  prop System.Int32 ActionsExecuted { get set }
+  prop System.String Detail { get set }
+  prop System.String RuleId { get set }
+  prop System.String RuleName { get set }
+  prop System.String TriggerSummary { get set }
+
+Domovoy.Contracts.Messaging.BlockTriggeredV1
+  ctor (System.String BlockId, System.String BlockName, System.String TypeId, System.DateTimeOffset TickedAt, System.Boolean Ok, System.String Summary, System.String Detail)
+  method Domovoy.Contracts.Messaging.BlockTriggeredV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Messaging.BlockTriggeredV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& BlockId, System.String& BlockName, System.String& TypeId, System.DateTimeOffset& TickedAt, System.Boolean& Ok, System.String& Summary, System.String& Detail)
+  prop System.Boolean Ok { get set }
+  prop System.DateTimeOffset TickedAt { get set }
+  prop System.String BlockId { get set }
+  prop System.String BlockName { get set }
+  prop System.String Detail { get set }
+  prop System.String Summary { get set }
+  prop System.String TypeId { get set }
+
+Domovoy.Contracts.Messaging.BusTopology
+  const System.String AutomationTriggeredKey = "automation.triggered"
+  const System.String BlockTriggeredKey = "block.triggered"
+  const System.String CommandsExchange = "domovoy.commands"
+  const System.String DeviceCommandKey = "device.command"
+  const System.String DeviceDiscoveredKey = "device.discovered"
+  const System.String DeviceOnlineChangedKey = "device.online.changed"
+  const System.String DeviceStateUpdatedKey = "device.state.updated"
+  const System.String DiscoveryExchange = "domovoy.discovery"
+  const System.String EventsExchange = "domovoy.events"
+  const System.String HomeModeChangedKey = "home.mode.changed"
+  const System.String NotificationRaisedKey = "notification.raised"
+  const System.String NotificationRequestedKey = "notification.requested"
+  const System.String PluginSettingsAppliedKeyPrefix = "plugin.settings.applied"
+  const System.String PluginSettingsSchemaKey = "plugin.settings.schema"
+  const System.String PresenceReportedKey = "presence.reported"
+  const System.String StateExchange = "domovoy.state"
+  const System.String SystemControlKey = "system.control"
+  method System.String PluginSettingsAppliedKey(System.String pluginId)
+
+Domovoy.Contracts.Messaging.DeviceCommandV1
+  ctor (System.Guid DeviceId, System.Collections.Generic.IReadOnlyDictionary<System.String, System.Object> Set)
+  method Domovoy.Contracts.Messaging.DeviceCommandV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Messaging.DeviceCommandV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.Guid& DeviceId, System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Object, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& Set)
+  prop System.Collections.Generic.IReadOnlyDictionary<System.String, System.Object> Set { get set }
+  prop System.Guid DeviceId { get set }
+
+Domovoy.Contracts.Messaging.DeviceDiscoveredV1
+  ctor (Domovoy.Contracts.Devices.DeviceDescriptor Device)
+  method Domovoy.Contracts.Messaging.DeviceDiscoveredV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Messaging.DeviceDiscoveredV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(Domovoy.Contracts.Devices.DeviceDescriptor& Device)
+  prop Domovoy.Contracts.Devices.DeviceDescriptor Device { get set }
+
+Domovoy.Contracts.Messaging.DeviceOnlineChangedV1
+  ctor (System.Guid DeviceId, System.Boolean IsOnline)
+  method Domovoy.Contracts.Messaging.DeviceOnlineChangedV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Messaging.DeviceOnlineChangedV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.Guid& DeviceId, System.Boolean& IsOnline)
+  prop System.Boolean IsOnline { get set }
+  prop System.Guid DeviceId { get set }
+
+Domovoy.Contracts.Messaging.DeviceStateReportV1
+  ctor (System.Guid DeviceId, System.Collections.Generic.IReadOnlyDictionary<System.String, System.Object> State)
+  method Domovoy.Contracts.Messaging.DeviceStateReportV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Messaging.DeviceStateReportV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.Guid& DeviceId, System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Object, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& State)
+  prop System.Collections.Generic.IReadOnlyDictionary<System.String, System.Object> State { get set }
+  prop System.Guid DeviceId { get set }
+
+Domovoy.Contracts.Messaging.DomovoyJson
+  field System.Text.Json.JsonSerializerOptions Bus
+
+Domovoy.Contracts.Messaging.Envelope
+  prop System.DateTimeOffset Time { get set }
+  prop System.String CorrelationId { get set }
+  prop System.String Id { get set }
+  prop System.String Source { get set }
+  prop System.String SpecVersion { get set }
+  prop System.String Subject { get set }
+  prop System.String Type { get set }
+
+Domovoy.Contracts.Messaging.Envelope`1
+  ctor ()
+  method Domovoy.Contracts.Messaging.Envelope<T> Create(System.String type, System.String source, T data, System.String subject, System.String correlationId)
+  prop System.DateTimeOffset Time { get set }
+  prop System.String CorrelationId { get set }
+  prop System.String Id { get set }
+  prop System.String Source { get set }
+  prop System.String SpecVersion { get set }
+  prop System.String Subject { get set }
+  prop System.String Type { get set }
+  prop T Data { get set }
+
+Domovoy.Contracts.Messaging.HomeModeChangedV1
+  ctor (System.String Mode, System.String PreviousMode, System.String Source, System.DateTimeOffset ChangedAt)
+  method Domovoy.Contracts.Messaging.HomeModeChangedV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Messaging.HomeModeChangedV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& Mode, System.String& PreviousMode, System.String& Source, System.DateTimeOffset& ChangedAt)
+  prop System.DateTimeOffset ChangedAt { get set }
+  prop System.String Mode { get set }
+  prop System.String PreviousMode { get set }
+  prop System.String Source { get set }
+
+Domovoy.Contracts.Messaging.MessageTypes
+  const System.String AutomationTriggered = "domovoy.automation.triggered.v1"
+  const System.String BlockTriggered = "domovoy.block.triggered.v1"
+  const System.String DeviceCommand = "domovoy.device.command.v1"
+  const System.String DeviceDiscovered = "domovoy.device.discovered.v1"
+  const System.String DeviceOnlineChanged = "domovoy.device.online.v1"
+  const System.String DeviceState = "domovoy.device.state.v1"
+  const System.String HomeModeChanged = "domovoy.home.mode.v1"
+  const System.String NotificationRaised = "domovoy.notification.raised.v1"
+  const System.String NotificationRequested = "domovoy.notification.requested.v1"
+  const System.String PluginSettingsApplied = "domovoy.plugin.settings.applied.v1"
+  const System.String PluginSettingsSchema = "domovoy.plugin.settings.schema.v1"
+  const System.String PresenceReported = "domovoy.presence.reported.v1"
+  const System.String SystemControl = "domovoy.system.control.v1"
+
+Domovoy.Contracts.Messaging.NotificationRaisedV1
+  ctor (System.String Title, System.String Body, System.String Severity, System.DateTimeOffset RaisedAt, System.String Category, System.Collections.Generic.IReadOnlyList<Domovoy.Contracts.Notifications.NotificationAction> Actions)
+  method Domovoy.Contracts.Messaging.NotificationRaisedV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Messaging.NotificationRaisedV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& Title, System.String& Body, System.String& Severity, System.DateTimeOffset& RaisedAt, System.String& Category, System.Collections.Generic.IReadOnlyList`1[[Domovoy.Contracts.Notifications.NotificationAction, Domovoy.Contracts, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]]& Actions)
+  prop System.Collections.Generic.IReadOnlyList<Domovoy.Contracts.Notifications.NotificationAction> Actions { get set }
+  prop System.DateTimeOffset RaisedAt { get set }
+  prop System.String Body { get set }
+  prop System.String Category { get set }
+  prop System.String Severity { get set }
+  prop System.String Title { get set }
+
+Domovoy.Contracts.Messaging.NotificationRequestV1
+  ctor (System.String Title, System.String Body, System.String Severity, System.DateTimeOffset RequestedAt, System.String Category, System.Collections.Generic.IReadOnlyList<Domovoy.Contracts.Notifications.NotificationAction> Actions, System.String DedupKey)
+  method Domovoy.Contracts.Messaging.NotificationRequestV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Messaging.NotificationRequestV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& Title, System.String& Body, System.String& Severity, System.DateTimeOffset& RequestedAt, System.String& Category, System.Collections.Generic.IReadOnlyList`1[[Domovoy.Contracts.Notifications.NotificationAction, Domovoy.Contracts, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]]& Actions, System.String& DedupKey)
+  prop System.Collections.Generic.IReadOnlyList<Domovoy.Contracts.Notifications.NotificationAction> Actions { get set }
+  prop System.DateTimeOffset RequestedAt { get set }
+  prop System.String Body { get set }
+  prop System.String Category { get set }
+  prop System.String DedupKey { get set }
+  prop System.String Severity { get set }
+  prop System.String Title { get set }
+
+Domovoy.Contracts.Messaging.PresenceReportedV1
+  ctor (System.Collections.Generic.IReadOnlyList<System.String> ResidentKeys, System.Nullable<System.Double> Latitude, System.Nullable<System.Double> Longitude, System.Nullable<System.Double> AccuracyMeters, System.Nullable<System.Int32> BatteryPercent, System.Nullable<System.Boolean> ExplicitPresent, System.DateTimeOffset ReportedAt)
+  method Domovoy.Contracts.Messaging.PresenceReportedV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Messaging.PresenceReportedV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.Collections.Generic.IReadOnlyList`1[[System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& ResidentKeys, System.Nullable`1[[System.Double, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& Latitude, System.Nullable`1[[System.Double, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& Longitude, System.Nullable`1[[System.Double, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& AccuracyMeters, System.Nullable`1[[System.Int32, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& BatteryPercent, System.Nullable`1[[System.Boolean, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& ExplicitPresent, System.DateTimeOffset& ReportedAt)
+  prop System.Collections.Generic.IReadOnlyList<System.String> ResidentKeys { get set }
+  prop System.DateTimeOffset ReportedAt { get set }
+  prop System.Nullable<System.Boolean> ExplicitPresent { get set }
+  prop System.Nullable<System.Double> AccuracyMeters { get set }
+  prop System.Nullable<System.Double> Latitude { get set }
+  prop System.Nullable<System.Double> Longitude { get set }
+  prop System.Nullable<System.Int32> BatteryPercent { get set }
+
+Domovoy.Contracts.Messaging.SystemControlV1
+  ctor (System.String Target, System.String Action)
+  method Domovoy.Contracts.Messaging.SystemControlV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Messaging.SystemControlV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& Target, System.String& Action)
+  prop System.String Action { get set }
+  prop System.String Target { get set }
+
+Domovoy.Contracts.Ml.MlActivityEntry
+  ctor ()
+  prop System.Collections.Generic.Dictionary<System.String, System.Double> Metrics { get set }
+  prop System.DateTime Timestamp { get set }
+  prop System.String Id { get set }
+  prop System.String Note { get set }
+  prop System.String Outcome { get set }
+  prop System.String Reason { get set }
+  prop System.String Source { get set }
+
+Domovoy.Contracts.Ml.MlActivityOutcomes
+  const System.String Error = "error"
+  const System.String Idle = "idle"
+  const System.String Ok = "ok"
+  const System.String Skipped = "skipped"
+
+Domovoy.Contracts.Ml.MlActivitySources
+  const System.String Discovery = "discovery"
+  const System.String MlTaskSuggester = "ml_task_suggester"
+  const System.String RuleSuggester = "rule_suggester"
+  const System.String Trainer = "trainer"
+
+Domovoy.Contracts.Ml.MlModel
+  ctor ()
+  prop Domovoy.Contracts.Ml.ModelScope Scope { get set }
+  prop System.DateTime TrainedAt { get set }
+  prop System.Double HoldoutMae { get set }
+  prop System.Double HoldoutScore { get set }
+  prop System.Double Rmse { get set }
+  prop System.Int32 HoldoutSampleCount { get set }
+  prop System.Int32 SampleCount { get set }
+  prop System.Int32 Version { get set }
+  prop System.String Algorithm { get set }
+  prop System.String Features { get set }
+  prop System.String Id { get set }
+  prop System.String Kind { get set }
+  prop System.String Metric { get set }
+  prop System.String Name { get set }
+  prop System.String TargetCapability { get set }
+
+Domovoy.Contracts.Ml.MlModelKinds
+  const System.String ScheduleBinary = "schedule_binary"
+  const System.String ScheduleMulticlass = "schedule_multiclass"
+  const System.String ScheduleRegression = "schedule_regression"
+  const System.String ScheduleRegressionContext = "schedule_regression_ctx"
+
+Domovoy.Contracts.Ml.MlSettings
+  const System.String SingletonId = "current"
+  ctor ()
+  prop System.Boolean Enabled { get set }
+  prop System.Boolean ProposalsEnabled { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.Int32 MinHistoryDays { get set }
+  prop System.String Id { get set }
+
+Domovoy.Contracts.Ml.MlTask
+  ctor ()
+  prop Domovoy.Contracts.Ml.MlTaskStatus Status { get set }
+  prop System.Boolean Enabled { get set }
+  prop System.Boolean TrainZoneModels { get set }
+  prop System.DateTime CreatedAt { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.Double ZonePromotionMargin { get set }
+  prop System.Int32 KeepLastVersions { get set }
+  prop System.Int32 MinSamples { get set }
+  prop System.Int32 TrainIntervalHours { get set }
+  prop System.Int32 WindowDays { get set }
+  prop System.Nullable<System.Double> ClampMax { get set }
+  prop System.Nullable<System.Double> ClampMin { get set }
+  prop System.String Id { get set }
+  prop System.String Name { get set }
+  prop System.String TargetCapability { get set }
+
+Domovoy.Contracts.Ml.MlTaskStatus
+  ctor ()
+  prop System.Boolean LastTrainOk { get set }
+  prop System.Int32 LastRegisteredScopes { get set }
+  prop System.Int32 LastSampleCount { get set }
+  prop System.Nullable<System.DateTime> LastTrainAt { get set }
+  prop System.String LastMessage { get set }
+
+Domovoy.Contracts.Ml.ModelScope
+  ctor ()
+  ctor (System.String level, System.String key)
+  field Domovoy.Contracts.Ml.ModelScope Global
+  method Domovoy.Contracts.Ml.ModelScope Zone(System.String zoneId)
+  method Domovoy.Contracts.Ml.ModelScope ZoneKind(System.String kind)
+  method System.String AsKey()
+  method System.String ToString()
+  prop System.String Key { get set }
+  prop System.String Level { get set }
+
+Domovoy.Contracts.Ml.ModelScopeLevels
+  const System.String Global = "global"
+  const System.String Zone = "zone"
+  const System.String ZoneKind = "zone_kind"
+
+Domovoy.Contracts.Narrative.Beat
+  ctor ()
+  prop Domovoy.Contracts.Narrative.PersonaRole Actor { get set }
+  prop Domovoy.Contracts.Narrative.Transition Transition { get set }
+  prop System.Boolean CauseCandidate { get set }
+  prop System.DateTime Timestamp { get set }
+  prop System.Object NewValue { get set }
+  prop System.Object OldValue { get set }
+  prop System.String ArchetypeKey { get set }
+  prop System.String CapabilityId { get set }
+  prop System.String CauseSummary { get set }
+  prop System.String DeviceId { get set }
+  prop System.String DeviceRef { get set }
+  prop System.String Mode { get set }
+  prop System.String RuleId { get set }
+  prop System.String ZoneId { get set }
+  prop System.String ZoneKind { get set }
+  prop System.String ZoneName { get set }
+
+Domovoy.Contracts.Narrative.DayStory
+  ctor ()
+  prop System.Collections.Generic.List<Domovoy.Contracts.Narrative.Scene> Scenes { get set }
+  prop System.DateOnly Date { get set }
+  prop System.Double DayScore { get set }
+  prop System.String TimeZoneId { get set }
+
+Domovoy.Contracts.Narrative.HomeStoryEntry
+  ctor ()
+  prop System.Collections.Generic.List<Domovoy.Contracts.Narrative.Scene> Scenes { get set }
+  prop System.DateTime BuiltAt { get set }
+  prop System.DateTime Date { get set }
+  prop System.DateTime Timestamp { get set }
+  prop System.Double DayScore { get set }
+  prop System.Int32 PackVersion { get set }
+  prop System.Int32 Tier { get set }
+  prop System.String Id { get set }
+  prop System.String Locale { get set }
+  prop System.String Paragraph { get set }
+  prop System.String RendererTier { get set }
+
+Domovoy.Contracts.Narrative.NarrativeEntity
+  ctor ()
+  prop System.Collections.Generic.List<Domovoy.Contracts.Narrative.SynonymForm> Synonyms { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.String Id { get set }
+  prop System.String Key { get set }
+  prop System.String Kind { get set }
+  prop System.String Locale { get set }
+
+Domovoy.Contracts.Narrative.NarrativeEntityKinds
+  const System.String Device = "device"
+  const System.String Persona = "persona"
+  const System.String Place = "place"
+  field System.Collections.Generic.IReadOnlyList<System.String> All
+
+Domovoy.Contracts.Narrative.NarrativeState
+  ctor ()
+  prop System.Collections.Generic.Dictionary<System.String, System.Int32> LastUsedEntryNo { get set }
+  prop System.Collections.Generic.Dictionary<System.String, System.Int32> LastUsedIndex { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.Int32 EntryCounter { get set }
+  prop System.String Id { get set }
+
+Domovoy.Contracts.Narrative.PersonaRole
+  const Domovoy.Contracts.Narrative.PersonaRole Impersonal = 3
+  const Domovoy.Contracts.Narrative.PersonaRole Residents = 0
+  const Domovoy.Contracts.Narrative.PersonaRole Spirit = 1
+  const Domovoy.Contracts.Narrative.PersonaRole SpiritJudging = 2
+  method System.Boolean Equals(System.Object obj)
+  method System.Boolean HasFlag(System.Enum flag)
+  method System.Int32 CompareTo(System.Object target)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.String ToString(System.IFormatProvider provider)
+  method System.String ToString(System.String format)
+  method System.String ToString(System.String format, System.IFormatProvider provider)
+  method System.TypeCode GetTypeCode()
+
+Domovoy.Contracts.Narrative.Scene
+  ctor ()
+  prop Domovoy.Contracts.Narrative.Beat CauseBeat { get set }
+  prop Domovoy.Contracts.Narrative.PersonaRole Actor { get set }
+  prop System.Collections.Generic.List<Domovoy.Contracts.Narrative.Beat> Beats { get set }
+  prop System.Collections.Generic.List<System.String> SignificanceReasons { get set }
+  prop System.DateTime EndedAt { get set }
+  prop System.DateTime StartedAt { get set }
+  prop System.Double Significance { get set }
+  prop System.Int32 RepeatCount { get set }
+  prop System.String CausalRootKey { get set }
+  prop System.String Cause { get set }
+  prop System.String Id { get set }
+  prop System.String Mode { get set }
+
+Domovoy.Contracts.Narrative.SynonymForm
+  ctor ()
+  prop System.String AccForm { get set }
+  prop System.String Animacy { get set }
+  prop System.String Gender { get set }
+  prop System.String LocForm { get set }
+  prop System.String Number { get set }
+  prop System.String Prep { get set }
+  prop System.String Pronoun { get set }
+  prop System.String SubjectCase { get set }
+  prop System.String Text { get set }
+
+Domovoy.Contracts.Narrative.Transition
+  const Domovoy.Contracts.Narrative.Transition Close = 5
+  const Domovoy.Contracts.Narrative.Transition Decrease = 3
+  const Domovoy.Contracts.Narrative.Transition Enter = 8
+  const Domovoy.Contracts.Narrative.Transition Increase = 2
+  const Domovoy.Contracts.Narrative.Transition Lock = 6
+  const Domovoy.Contracts.Narrative.Transition Off = 1
+  const Domovoy.Contracts.Narrative.Transition On = 0
+  const Domovoy.Contracts.Narrative.Transition Open = 4
+  const Domovoy.Contracts.Narrative.Transition Set = 9
+  const Domovoy.Contracts.Narrative.Transition Unlock = 7
+  method System.Boolean Equals(System.Object obj)
+  method System.Boolean HasFlag(System.Enum flag)
+  method System.Int32 CompareTo(System.Object target)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.String ToString(System.IFormatProvider provider)
+  method System.String ToString(System.String format)
+  method System.String ToString(System.String format, System.IFormatProvider provider)
+  method System.TypeCode GetTypeCode()
+
+Domovoy.Contracts.Native.NativeAnnounceV1
+  ctor ()
+  method Domovoy.Contracts.Native.NativeAnnounceV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Native.NativeAnnounceV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  prop System.Collections.Generic.IReadOnlyList<Domovoy.Contracts.Capabilities.Capability> Capabilities { get set }
+  prop System.String DeviceId { get set }
+  prop System.String Firmware { get set }
+  prop System.String Hub { get set }
+  prop System.String Model { get set }
+  prop System.String Name { get set }
+
+Domovoy.Contracts.Native.NativeProtocol
+  const System.String AdapterSource = "DomovoyNative"
+  const System.String AnnounceFilter = "domovoy/native/+/announce"
+  const System.String AvailabilityFilter = "domovoy/native/+/availability"
+  const System.String DiscoverTopic = "domovoy/native/discover"
+  const System.String HubRoot = "domovoy/hub"
+  const System.String HubStatusFilter = "domovoy/hub/+/status"
+  const System.String Offline = "offline"
+  const System.String Online = "online"
+  const System.String Root = "domovoy/native"
+  const System.String StateFilter = "domovoy/native/+/state"
+  method System.String AnnounceTopic(System.String deviceId)
+  method System.String AvailabilityTopic(System.String deviceId)
+  method System.String DeviceIdFromTopic(System.String topic)
+  method System.String HubIdFromStatusTopic(System.String topic)
+  method System.String HubStatusTopic(System.String hubId)
+  method System.String SetTopic(System.String deviceId)
+  method System.String StateTopic(System.String deviceId)
+
+Domovoy.Contracts.Notifications.NotificationAction
+  ctor (System.String Id, System.String Label, System.String Kind, System.Collections.Generic.IReadOnlyDictionary<System.String, System.String> Params)
+  method Domovoy.Contracts.Notifications.NotificationAction <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Notifications.NotificationAction other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& Id, System.String& Label, System.String& Kind, System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& Params)
+  prop System.Collections.Generic.IReadOnlyDictionary<System.String, System.String> Params { get set }
+  prop System.String Id { get set }
+  prop System.String Kind { get set }
+  prop System.String Label { get set }
+
+Domovoy.Contracts.Notifications.NotificationActionKinds
+  const System.String ApproveProposal = "approve_proposal"
+  const System.String DeviceCommand = "device_command"
+  const System.String Open = "open"
+  const System.String RejectProposal = "reject_proposal"
+  const System.String SetMode = "set_mode"
+  field System.Collections.Generic.IReadOnlyList<System.String> ServerSide
+  method System.Boolean IsServerSide(System.String kind)
+
+Domovoy.Contracts.Notifications.NotificationCategories
+  const System.String Optimization = "optimization"
+  const System.String Proactive = "proactive"
+  const System.String Reactive = "reactive"
+  field System.Collections.Generic.IReadOnlyList<System.String> All
+  method System.Boolean IsKnown(System.String category)
+  method System.String Normalize(System.String category)
+
+Domovoy.Contracts.Notifications.NotificationSettings
+  const System.String SingletonId = "current"
+  ctor ()
+  prop System.Boolean SafetyFloorEnabled { get set }
+  prop System.Collections.Generic.Dictionary<System.String, System.Collections.Generic.List<System.String>> MutedChannels { get set }
+  prop System.Collections.Generic.Dictionary<System.String, System.Int32> MinIntervalSeconds { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.String Id { get set }
+
+Domovoy.Contracts.Notifications.NotificationSeverities
+  const System.String Critical = "critical"
+  const System.String Info = "info"
+  const System.String Warning = "warning"
+  method System.Boolean IsSafety(System.String severity)
+
+Domovoy.Contracts.Plugins.PluginManifest
+  ctor ()
+  prop Domovoy.Contracts.Plugins.ResourceRequirements Resources { get set }
+  prop System.Boolean AutoStart { get set }
+  prop System.Boolean Enabled { get set }
+  prop System.Collections.Generic.List<System.String> Args { get set }
+  prop System.Collections.Generic.List<System.String> Commands { get set }
+  prop System.Collections.Generic.List<System.String> Permissions { get set }
+  prop System.Collections.Generic.List<System.String> ProvidedCapabilities { get set }
+  prop System.Collections.Generic.List<System.String> Subscriptions { get set }
+  prop System.String Command { get set }
+  prop System.String Description { get set }
+  prop System.String Id { get set }
+  prop System.String Kind { get set }
+  prop System.String Name { get set }
+  prop System.String Version { get set }
+
+Domovoy.Contracts.Plugins.PluginSettingDescriptor
+  ctor ()
+  prop System.Boolean Secret { get set }
+  prop System.Collections.Generic.List<System.String> Values { get set }
+  prop System.Nullable<System.Double> Max { get set }
+  prop System.Nullable<System.Double> Min { get set }
+  prop System.Nullable<System.Double> Step { get set }
+  prop System.Object Default { get set }
+  prop System.String Description { get set }
+  prop System.String Editor { get set }
+  prop System.String Key { get set }
+  prop System.String Kind { get set }
+  prop System.String Label { get set }
+  prop System.String Unit { get set }
+
+Domovoy.Contracts.Plugins.PluginSettingKinds
+  const System.String Boolean = "boolean"
+  const System.String Enum = "enum"
+  const System.String Number = "number"
+  const System.String Secret = "secret"
+  const System.String Text = "text"
+
+Domovoy.Contracts.Plugins.PluginSettingsAppliedV1
+  ctor (System.String PluginId, System.Collections.Generic.IReadOnlyDictionary<System.String, System.Object> Values)
+  method Domovoy.Contracts.Plugins.PluginSettingsAppliedV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Plugins.PluginSettingsAppliedV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& PluginId, System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Object, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& Values)
+  prop System.Collections.Generic.IReadOnlyDictionary<System.String, System.Object> Values { get set }
+  prop System.String PluginId { get set }
+
+Domovoy.Contracts.Plugins.PluginSettingsSchemaV1
+  ctor (System.String PluginId, System.Collections.Generic.IReadOnlyList<Domovoy.Contracts.Plugins.PluginSettingDescriptor> Settings)
+  method Domovoy.Contracts.Plugins.PluginSettingsSchemaV1 <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Plugins.PluginSettingsSchemaV1 other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& PluginId, System.Collections.Generic.IReadOnlyList`1[[Domovoy.Contracts.Plugins.PluginSettingDescriptor, Domovoy.Contracts, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]]& Settings)
+  prop System.Collections.Generic.IReadOnlyList<Domovoy.Contracts.Plugins.PluginSettingDescriptor> Settings { get set }
+  prop System.String PluginId { get set }
+
+Domovoy.Contracts.Plugins.ResourceRequirements
+  ctor ()
+  prop System.Boolean Gpu { get set }
+  prop System.Boolean Internet { get set }
+  prop System.Int32 CpuCores { get set }
+  prop System.Int32 MemoryMb { get set }
+
+Domovoy.Contracts.Proposals.Proposal
+  ctor ()
+  prop Domovoy.Contracts.Automations.RuleCondition AmendmentCondition { get set }
+  prop Domovoy.Contracts.Proposals.ProposalKind Kind { get set }
+  prop Domovoy.Contracts.Proposals.ProposalStatus Status { get set }
+  prop Domovoy.Contracts.Scenes.Scene SceneDraft { get set }
+  prop System.Collections.Generic.Dictionary<System.String, System.Double> Evidence { get set }
+  prop System.DateTime CreatedAt { get set }
+  prop System.Nullable<System.DateTime> DecidedAt { get set }
+  prop System.Nullable<System.Double> AmendmentValue { get set }
+  prop System.Nullable<System.Double> Score { get set }
+  prop System.Nullable<System.Int32> FromStage { get set }
+  prop System.Nullable<System.Int32> ModelVersion { get set }
+  prop System.Nullable<System.Int32> ToStage { get set }
+  prop System.String AmendmentAction { get set }
+  prop System.String AmendmentCapabilityId { get set }
+  prop System.String BlockId { get set }
+  prop System.String DecisionId { get set }
+  prop System.String Id { get set }
+  prop System.String Metric { get set }
+  prop System.String MlTaskTarget { get set }
+  prop System.String ModelId { get set }
+  prop System.String Rationale { get set }
+  prop System.String RuleId { get set }
+  prop System.String SceneScheduleCron { get set }
+  prop System.String Source { get set }
+  prop System.String Title { get set }
+
+Domovoy.Contracts.Proposals.ProposalKind
+  const Domovoy.Contracts.Proposals.ProposalKind BlockPromotion = 1
+  const Domovoy.Contracts.Proposals.ProposalKind MlTask = 3
+  const Domovoy.Contracts.Proposals.ProposalKind ModelSelection = 2
+  const Domovoy.Contracts.Proposals.ProposalKind Rule = 0
+  const Domovoy.Contracts.Proposals.ProposalKind RuleAmendment = 5
+  const Domovoy.Contracts.Proposals.ProposalKind Scene = 4
+  method System.Boolean Equals(System.Object obj)
+  method System.Boolean HasFlag(System.Enum flag)
+  method System.Int32 CompareTo(System.Object target)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.String ToString(System.IFormatProvider provider)
+  method System.String ToString(System.String format)
+  method System.String ToString(System.String format, System.IFormatProvider provider)
+  method System.TypeCode GetTypeCode()
+
+Domovoy.Contracts.Proposals.ProposalStatus
+  const Domovoy.Contracts.Proposals.ProposalStatus Approved = 1
+  const Domovoy.Contracts.Proposals.ProposalStatus Proposed = 0
+  const Domovoy.Contracts.Proposals.ProposalStatus Rejected = 2
+  method System.Boolean Equals(System.Object obj)
+  method System.Boolean HasFlag(System.Enum flag)
+  method System.Int32 CompareTo(System.Object target)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.String ToString(System.IFormatProvider provider)
+  method System.String ToString(System.String format)
+  method System.String ToString(System.String format, System.IFormatProvider provider)
+  method System.TypeCode GetTypeCode()
+
+Domovoy.Contracts.Scenes.Scene
+  ctor ()
+  prop System.Collections.Generic.List<Domovoy.Contracts.Scenes.SceneTarget> Targets { get set }
+  prop System.DateTime CreatedAt { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.String Description { get set }
+  prop System.String Icon { get set }
+  prop System.String Id { get set }
+  prop System.String Name { get set }
+
+Domovoy.Contracts.Scenes.SceneTarget
+  ctor ()
+  prop System.Collections.Generic.Dictionary<System.String, System.Object> Set { get set }
+  prop System.String DeviceId { get set }
+
+Domovoy.Contracts.Security.AuthConstants
+  const System.String PermissionClaim = "perm"
+  const System.String RefreshAudience = "domovoy-refresh"
+
+Domovoy.Contracts.Security.AuthUserInfo
+  ctor (System.String Id, System.String Username, System.String DisplayName, System.String Email, System.Collections.Generic.List<System.String> RoleIds, System.Collections.Generic.List<System.String> Permissions)
+  method Domovoy.Contracts.Security.AuthUserInfo <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Security.AuthUserInfo other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& Id, System.String& Username, System.String& DisplayName, System.String& Email, System.Collections.Generic.List`1[[System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& RoleIds, System.Collections.Generic.List`1[[System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]& Permissions)
+  prop System.Collections.Generic.List<System.String> Permissions { get set }
+  prop System.Collections.Generic.List<System.String> RoleIds { get set }
+  prop System.String DisplayName { get set }
+  prop System.String Email { get set }
+  prop System.String Id { get set }
+  prop System.String Username { get set }
+
+Domovoy.Contracts.Security.LoginRequest
+  ctor (System.String Username, System.String Password)
+  method Domovoy.Contracts.Security.LoginRequest <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Security.LoginRequest other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& Username, System.String& Password)
+  prop System.String Password { get set }
+  prop System.String Username { get set }
+
+Domovoy.Contracts.Security.LoginResponse
+  ctor (System.String AccessToken, System.String RefreshToken, System.DateTime ExpiresAt, Domovoy.Contracts.Security.AuthUserInfo User)
+  method Domovoy.Contracts.Security.LoginResponse <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Security.LoginResponse other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& AccessToken, System.String& RefreshToken, System.DateTime& ExpiresAt, Domovoy.Contracts.Security.AuthUserInfo& User)
+  prop Domovoy.Contracts.Security.AuthUserInfo User { get set }
+  prop System.DateTime ExpiresAt { get set }
+  prop System.String AccessToken { get set }
+  prop System.String RefreshToken { get set }
+
+Domovoy.Contracts.Security.RefreshRequest
+  ctor (System.String RefreshToken)
+  method Domovoy.Contracts.Security.RefreshRequest <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Security.RefreshRequest other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& RefreshToken)
+  prop System.String RefreshToken { get set }
+
+Domovoy.Contracts.Security.Role
+  ctor ()
+  prop System.Boolean IsBuiltIn { get set }
+  prop System.Collections.Generic.List<System.String> Permissions { get set }
+  prop System.DateTime CreatedAt { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.String Description { get set }
+  prop System.String Id { get set }
+  prop System.String Name { get set }
+
+Domovoy.Contracts.Security.SetPasswordRequest
+  ctor (System.String NewPassword, System.String CurrentPassword)
+  method Domovoy.Contracts.Security.SetPasswordRequest <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Security.SetPasswordRequest other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& NewPassword, System.String& CurrentPassword)
+  prop System.String CurrentPassword { get set }
+  prop System.String NewPassword { get set }
+
+Domovoy.Contracts.Security.User
+  ctor ()
+  prop System.Boolean Enabled { get set }
+  prop System.Collections.Generic.List<System.String> RoleIds { get set }
+  prop System.DateTime CreatedAt { get set }
+  prop System.DateTime UpdatedAt { get set }
+  prop System.String DisplayName { get set }
+  prop System.String Email { get set }
+  prop System.String Id { get set }
+  prop System.String PasswordHash { get set }
+  prop System.String Username { get set }
+
+Domovoy.Contracts.Security.VerifyCredentialsRequest
+  ctor (System.String Username, System.String Password)
+  method Domovoy.Contracts.Security.VerifyCredentialsRequest <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Security.VerifyCredentialsRequest other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.String& Username, System.String& Password)
+  prop System.String Password { get set }
+  prop System.String Username { get set }
+
+Domovoy.Contracts.Security.VerifyCredentialsResponse
+  ctor (System.Boolean Success, Domovoy.Contracts.Security.AuthUserInfo User)
+  method Domovoy.Contracts.Security.VerifyCredentialsResponse <Clone>$()
+  method System.Boolean Equals(Domovoy.Contracts.Security.VerifyCredentialsResponse other)
+  method System.Boolean Equals(System.Object obj)
+  method System.Int32 GetHashCode()
+  method System.String ToString()
+  method System.Void Deconstruct(System.Boolean& Success, Domovoy.Contracts.Security.AuthUserInfo& User)
+  prop Domovoy.Contracts.Security.AuthUserInfo User { get set }
+  prop System.Boolean Success { get set }
+
+Domovoy.Contracts.Security.WellKnownPermissions
+  const System.String ActivityView = "activity.view"
+  const System.String AutomationsManage = "automations.manage"
+  const System.String BlocksManage = "blocks.manage"
+  const System.String DevicesControl = "devices.control"
+  const System.String DevicesView = "devices.view"
+  const System.String ModelsManage = "models.manage"
+  const System.String ModesManage = "modes.manage"
+  const System.String PluginsManage = "plugins.manage"
+  const System.String ProposalsApprove = "proposals.approve"
+  const System.String SystemAdmin = "system.admin"
+  const System.String UsersManage = "users.manage"
+  const System.String ZonesManage = "zones.manage"
+  field System.Collections.Generic.IReadOnlyList<System.String> All
+

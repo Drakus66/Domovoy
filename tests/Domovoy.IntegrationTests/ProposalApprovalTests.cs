@@ -5,6 +5,7 @@
 using Domovoy.Contracts.Automations;
 using Domovoy.Contracts.Blocks;
 using Domovoy.Contracts.Proposals;
+using Domovoy.Contracts.Scenes;
 using Domovoy.DbGateway.Endpoints;
 
 using MongoDB.Driver;
@@ -27,6 +28,7 @@ public sealed class ProposalApprovalTests
 
     private IMongoCollection<AutomationRule> Rules => _fx.Db.GetCollection<AutomationRule>(AutomationEndpoints.Collection);
     private IMongoCollection<ControlBlock> Blocks => _fx.Db.GetCollection<ControlBlock>(BlockEndpoints.Collection);
+    private IMongoCollection<Scene> ScenesColl => _fx.Db.GetCollection<Scene>(SceneEndpoints.Collection);
 
     [Fact]
     [Trait("Category", "OfflineSmoke")]
@@ -79,6 +81,62 @@ public sealed class ProposalApprovalTests
         Assert.True(ok, error);
         var stored = await Blocks.Find(x => x.Id == block.Id).FirstOrDefaultAsync();
         Assert.Equal(5d, stored.Params["model_version"]);
+    }
+
+    [Fact]
+    [Trait("Category", "OfflineSmoke")]
+    public async Task ApproveScene_CreatesSceneAndBundledScheduleRule()
+    {
+        var sceneName = $"Evening-{Guid.NewGuid():N}";
+        var proposal = new Proposal
+        {
+            Kind = ProposalKind.Scene,
+            Title = "new scene",
+            SceneScheduleCron = "0 20 * * *",
+            SceneDraft = new Scene
+            {
+                Name = sceneName,
+                Targets =
+                {
+                    new SceneTarget { DeviceId = "lampA", Set = new() { ["on_off"] = true, ["brightness"] = 40 } },
+                    new SceneTarget { DeviceId = "lampB", Set = new() { ["on_off"] = true } },
+                },
+            },
+        };
+
+        var (ok, error) = await ProposalApplication.ApplyAsync(_fx.Db, proposal);
+
+        Assert.True(ok, error);
+        var scene = await ScenesColl.Find(x => x.Name == sceneName).FirstOrDefaultAsync();
+        Assert.NotNull(scene);
+        Assert.NotEqual(string.Empty, scene.Id);
+        Assert.Equal(2, scene.Targets.Count);
+
+        // The bundled schedule cron → an Active rule that activates the freshly-created scene daily.
+        var rules = await Rules.Find(FilterDefinition<AutomationRule>.Empty).ToListAsync();
+        var rule = Assert.Single(rules, r => r.Actions.Any(a => a.Type == ActionType.Scene && a.SceneId == scene.Id));
+        Assert.Equal(RuleStatus.Active, rule.Status);
+        Assert.Equal(TriggerType.Time, rule.Triggers[0].Type);
+        Assert.Equal("0 20 * * *", rule.Triggers[0].Cron);
+    }
+
+    [Fact]
+    [Trait("Category", "OfflineSmoke")]
+    public async Task ApproveRuleAmendment_DisablesTheRule()
+    {
+        // Epic 3J "living rules": approving a "retire this rule" amendment disables the (live) rule it targets.
+        var rule = new AutomationRule { Id = Guid.NewGuid().ToString(), Name = "overridden", Status = RuleStatus.Active };
+        await Rules.InsertOneAsync(rule);
+        var proposal = new Proposal
+        {
+            Kind = ProposalKind.RuleAmendment, RuleId = rule.Id, AmendmentAction = "disable", Title = "retire overridden",
+        };
+
+        var (ok, error) = await ProposalApplication.ApplyAsync(_fx.Db, proposal);
+
+        Assert.True(ok, error);
+        var stored = await Rules.Find(x => x.Id == rule.Id).FirstOrDefaultAsync();
+        Assert.Equal(RuleStatus.Disabled, stored.Status);
     }
 
     [Fact]

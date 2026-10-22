@@ -60,12 +60,13 @@ on. A single versioned event/command contract (CloudEvents-style envelopes) sits
 new device kinds, plugins, and ML features extend the system **without recompiling the core**. Zones
 and grounds are first-class, not bolted on.
 
-### 🔌 Failure isolation and an un-disableable safety floor
+### 🔌 Failure isolation and a deterministic safety layer
 An event bus (RabbitMQ) plus **out-of-process plugins** mean a crashing or updating integration can
-never take the core down. On top sits a layer of **deterministic safety rules** — anti-freeze,
-CO₂ → ventilation, smoke → unlock — that keeps working even when the UI, ML, or cloud are
-unavailable, and that cannot be switched off from the UI. Monolithic systems fundamentally can't do
-this.
+never take the core down. Above it runs a layer of **deterministic rules** — anti-freeze,
+CO₂ → ventilation, smoke → unlock and the like — that keep working even when the UI, ML, or cloud are
+unavailable. These aren't wired into the code: they ship as **safety templates** you adopt and bind to
+your own sensors, so the household decides what is watched and what happens. Monolithic systems
+fundamentally can't isolate failures like this.
 
 ### 🧠 Layered, learning automation you can trust
 Control is layered, not flat:

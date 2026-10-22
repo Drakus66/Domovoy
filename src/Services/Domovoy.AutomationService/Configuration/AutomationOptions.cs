@@ -23,9 +23,6 @@ public class AutomationOptions
     /// <summary>How often to reload rules + device read-model from the DbGateway.</summary>
     public int RefreshSeconds { get; set; } = 30;
 
-    /// <summary>Path to the local safety-floor rules file (protected, non-disableable from UI).</summary>
-    public string SafetyRulesPath { get; set; } = "safety-rules.json";
-
     /// <summary>
     /// Minimum seconds between executions of a BoundedActive rule (roadmap Epic 1F staged rollout). A
     /// promoted-but-unproven rule runs, but no more often than this — bounding actuation rate while trust builds.
@@ -150,6 +147,101 @@ public class AutomationOptions
 
     /// <summary>Max standard deviation (in the setpoint's unit) for a bucket's settings to count as a stable preference.</summary>
     public double SetpointMaxStdDev { get; set; } = 1.0;
+
+    /// <summary>
+    /// Minimum user-set samples of a setpoint before the ML form of type B (a "learn this setpoint" proposal,
+    /// not a fixed schedule) is considered — a model needs more history than a single scheduled value.
+    /// </summary>
+    public int SetpointModelMinSupport { get; set; } = 12;
+
+    /// <summary>
+    /// Minimum fraction of a setpoint's variance that time-of-day must explain (η², 0–1) for the ML form to fire:
+    /// the settings vary too much for one scheduled value, yet there is genuine temporal structure worth learning
+    /// (not noise). Below this the spread is treated as noise and no ML task is proposed.
+    /// </summary>
+    public double SetpointModelMinExplained { get; set; } = 0.3;
+
+    // --- Scene-configuration mining (roadmap Epic 2F × 3B — recurring hand-arranged zone states) ---
+
+    /// <summary>
+    /// Writable capabilities that make up a "scene configuration": the state the discovery engine snapshots
+    /// when a person arranges a zone by hand. on_off carries which devices are on; the rest carry how (level,
+    /// warmth, target). Capabilities outside this set are ignored when comparing/creating configurations.
+    /// </summary>
+    public string[] SceneStateCapabilities { get; set; } =
+        { "on_off", "brightness", "color_temp", "color", "level", "position", "temperature_setpoint" };
+
+    /// <summary>Quantization step per numeric scene capability — two arrangements match if their values round to
+    /// the same step. Coarse on purpose (a person dials "about 40%", not exactly 42). Caps not listed use step 1.</summary>
+    public Dictionary<string, double> SceneQuantizeSteps { get; set; } = new()
+    {
+        ["brightness"] = 10,
+        ["level"] = 10,
+        ["position"] = 10,
+        ["color_temp"] = 50,
+    };
+
+    /// <summary>Max seconds between consecutive user touches for them to count as one "arrangement" of a zone
+    /// (the burst after which the zone's state is snapshotted as a configuration instance).</summary>
+    public int SceneCoWindowSeconds { get; set; } = 180;
+
+    /// <summary>Minimum distinct devices a single arrangement must touch to be a scene candidate (below this it is
+    /// a single-device rule's job, not a scene).</summary>
+    public int SceneMinDevices { get; set; } = 2;
+
+    /// <summary>Minimum times a configuration must recur before it is proposed as a scene.</summary>
+    public int SceneMinSupport { get; set; } = 4;
+
+    /// <summary>Minimum activations of a configuration/scene that must cluster around one time of day before a
+    /// daily-schedule rule is proposed alongside it (Epic 2F scene-schedule mining).</summary>
+    public int SceneScheduleMinSupport { get; set; } = 4;
+
+    /// <summary>Max spread (minutes, population std-dev) of activation times for them to count as "the same time of
+    /// day" — above this the timing is too scattered to schedule.</summary>
+    public double SceneScheduleMaxSpreadMinutes { get; set; } = 45;
+
+    // --- Intervention mining / living rules (roadmap Epic 3J) ---
+
+    /// <summary>Max seconds after an automated (rule-driven) action within which a human touch on the same
+    /// device+capability counts as overriding that rule ("you undid what the rule did").</summary>
+    public int InterventionWindowSeconds { get; set; } = 300;
+
+    /// <summary>Minimum times a rule must have fired in the window before its override-rate is judged (a rule
+    /// that ran twice is too little evidence to call it dead).</summary>
+    public int DeadRuleMinFirings { get; set; } = 5;
+
+    /// <summary>Minimum fraction of a rule's firings the user overrode before proposing to retire it. High on
+    /// purpose — retiring a rule is a big suggestion, so only a rule fought most of the time qualifies.</summary>
+    public double DeadRuleMinOverrideRate { get; set; } = 0.6;
+
+    // --- Self-correcting rules (roadmap Epic 3J tail): amend, don't just retire ---
+
+    /// <summary>Minimum firings inside a single time-of-day band before its override-rate can flag that band as
+    /// the context the user keeps fighting (the "refine, don't retire" signal, Epic 3J).</summary>
+    public int RefineMinContextFirings { get; set; } = 4;
+
+    /// <summary>Override-rate inside a time band above which the band is proposed as an exception to add to the
+    /// rule — high enough that the rule is clearly wrong <i>there</i>, while it may be fine elsewhere.</summary>
+    public double RefineMinContextOverrideRate { get; set; } = 0.6;
+
+    /// <summary>Minimum overrides carrying a usable numeric correction value before proposing a threshold/value
+    /// drift amendment (Epic 3J seasonal drift) — too few corrections is noise, not drift.</summary>
+    public int DriftMinOverrides { get; set; } = 4;
+
+    /// <summary>Smallest absolute change between a rule's current numeric value and the household's corrected
+    /// value worth proposing — below this the drift is within noise and not worth a proposal.</summary>
+    public double DriftMinShift { get; set; } = 1.0;
+
+    // --- Weekly digest (roadmap Epic 3J tail 5, extends 2N) ---
+
+    /// <summary>Whether the weekly "living home" digest is composed and sent (tone of the diary). Off ⇒ no digest.</summary>
+    public bool WeeklyDigestEnabled { get; set; } = true;
+
+    /// <summary>Day of week the digest is sent (0=Sunday … 1=Monday). Sent once on this day after the hour below.</summary>
+    public int WeeklyDigestDayOfWeek { get; set; } = 1;
+
+    /// <summary>Local hour (0–23) after which the digest may be sent on its day — a gentle morning nudge, not 3am.</summary>
+    public int WeeklyDigestHour { get; set; } = 9;
 
     // --- Composite control blocks (roadmap Epic 1H E2) ---
 

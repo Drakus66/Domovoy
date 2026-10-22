@@ -22,9 +22,13 @@ export interface RoleInput {
   permissions: string[];
 }
 
-/** A local household member with assigned roles (matches DbGateway User). No login/credentials in Phase 2. */
+/**
+ * A local household member with assigned roles (matches DbGateway User). `username` is the optional login handle
+ * (mobile-app / remote-access track); the password is never returned — it is set through the dedicated endpoint.
+ */
 export interface User {
   id: string;
+  username?: string | null;
   displayName: string;
   email?: string | null;
   roleIds: string[];
@@ -33,10 +37,11 @@ export interface User {
   updatedAt: string;
 }
 
-/** Create/update payload for a user (id is server/route assigned). */
+/** Create/update payload for a user (id is server/route assigned; password set separately). */
 export interface UserInput {
   displayName: string;
   email?: string | null;
+  username?: string | null;
   roleIds: string[];
   enabled: boolean;
 }
@@ -70,4 +75,10 @@ export const securityApi = {
 
   deleteUser: (id: string): Promise<void> =>
     apiClient.delete(`/api/users/${encodeURIComponent(id)}`).then(() => undefined),
+
+  // Admin reset / initial set of another user's password (gated on users.manage). No current password needed.
+  setUserPassword: (id: string, newPassword: string): Promise<void> =>
+    apiClient
+      .put(`/api/users/${encodeURIComponent(id)}/password`, { newPassword })
+      .then(() => undefined),
 };

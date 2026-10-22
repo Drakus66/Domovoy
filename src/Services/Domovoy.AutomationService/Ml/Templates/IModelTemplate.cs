@@ -19,10 +19,18 @@ public readonly record struct LabeledSample(DateTime Timestamp, double Value, st
 /// <param name="Artifact">Serialized ML.NET model bytes.</param>
 /// <param name="InSampleError">Fit error on all samples (provenance; e.g. RMSE for regression).</param>
 /// <param name="SampleCount">Number of training samples.</param>
-/// <param name="HoldoutScore">Score on the most-recent chronological holdout, in this template's <see cref="IModelTemplate.Metric"/>.</param>
-/// <param name="HoldoutCount">Number of held-out samples the score was computed on.</param>
+/// <param name="HoldoutScore">
+/// Score on the most-recent chronological holdout, in this template's <see cref="IModelTemplate.Metric"/>, or
+/// <c>null</c> when the holdout could not be evaluated honestly (too few samples to split, a split without both
+/// classes, …). <b>Null is not zero.</b> For a lower-is-better metric a zero would read as a flawless model and
+/// would win model selection and the zone-promotion gate outright — exactly the model nobody has evidence for.
+/// An unscored candidate therefore loses to any scored one and is never promoted (see
+/// <see cref="ModelTemplateRegistry.IsBetter"/> / <see cref="ModelTemplateRegistry.ShouldPromote"/>); it is still
+/// registered when it's the only thing available, with <see cref="HoldoutCount"/> 0 saying so.
+/// </param>
+/// <param name="HoldoutCount">Number of held-out samples the score was computed on; 0 when unevaluated.</param>
 public sealed record TemplateResult(
-    byte[] Artifact, double InSampleError, int SampleCount, double HoldoutScore, int HoldoutCount);
+    byte[] Artifact, double InSampleError, int SampleCount, double? HoldoutScore, int HoldoutCount);
 
 /// <summary>
 /// A pluggable model template (roadmap Epic 2I) — the unit that turns a labeled time-series into a trained
@@ -40,10 +48,10 @@ public interface IModelTemplate
     /// <summary>Capability value-type this template can model.</summary>
     CapabilityKind Target { get; }
 
-    /// <summary>Holdout metric name (e.g. <c>MAE</c>, <c>AUC</c>, <c>MacroF1</c>) — for the scorecard and selection.</summary>
+    /// <summary>Holdout metric name (e.g. <c>MAE</c>, <c>AUC</c>, <c>MacroAccuracy</c>) — for the scorecard and selection.</summary>
     string Metric { get; }
 
-    /// <summary>True when a lower <see cref="TemplateResult.HoldoutScore"/> is better (e.g. MAE); false for AUC/F1.</summary>
+    /// <summary>True when a lower <see cref="TemplateResult.HoldoutScore"/> is better (e.g. MAE); false for AUC/accuracy.</summary>
     bool LowerIsBetter { get; }
 
     /// <summary>Training algorithm, for provenance (<c>MlModel.Algorithm</c>).</summary>

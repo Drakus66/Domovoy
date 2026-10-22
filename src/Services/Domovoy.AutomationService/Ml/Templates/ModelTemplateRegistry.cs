@@ -26,16 +26,33 @@ public sealed class ModelTemplateRegistry
     public IModelTemplate? ByKind(string kind) =>
         _templates.FirstOrDefault(t => string.Equals(t.Kind, kind, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>Pick the better of two holdout scores under a template's orientation (lower-is-better or not).</summary>
-    public static bool IsBetter(IModelTemplate template, double candidate, double incumbent) =>
-        template.LowerIsBetter ? candidate < incumbent : candidate > incumbent;
+    /// <summary>
+    /// Pick the better of two holdout scores under a template's orientation (lower-is-better or not). A null
+    /// score means "could not be evaluated" (see <see cref="TemplateResult.HoldoutScore"/>) and is treated as
+    /// no evidence, not as a good score: an evaluated candidate always beats an unevaluated incumbent, and an
+    /// unevaluated candidate never displaces anything.
+    /// </summary>
+    public static bool IsBetter(IModelTemplate template, double? candidate, double? incumbent)
+    {
+        if (candidate is null) return false;              // no evidence never wins
+        if (incumbent is null) return true;               // any evidence beats none
+        return template.LowerIsBetter ? candidate < incumbent : candidate > incumbent;
+    }
 
     /// <summary>
     /// Auto-promotion gate (roadmap Epic 2I): does a per-zone <paramref name="candidate"/> beat its
     /// <paramref name="fallback"/> (zone_kind/global) by at least <paramref name="margin"/> in the template's
     /// metric? Until it does, the zone stays on the shared model — a zone splinters into its own model only
     /// when its behaviour genuinely diverges, not on noise.
+    ///
+    /// <para>An unevaluated score on either side (null — see <see cref="TemplateResult.HoldoutScore"/>) means
+    /// the comparison cannot be made, so the zone keeps the shared model. This is the case a zero used to
+    /// mis-handle: a zone with barely enough samples to train but too few to hold out would produce
+    /// <c>MAE = 0</c>, clear the margin against any real fallback and splinter off on pure noise.</para>
     /// </summary>
-    public static bool ShouldPromote(IModelTemplate template, double candidate, double fallback, double margin) =>
-        template.LowerIsBetter ? candidate <= fallback - margin : candidate >= fallback + margin;
+    public static bool ShouldPromote(IModelTemplate template, double? candidate, double? fallback, double margin)
+    {
+        if (candidate is null || fallback is null) return false; // no honest comparison → stay on the shared model
+        return template.LowerIsBetter ? candidate <= fallback - margin : candidate >= fallback + margin;
+    }
 }

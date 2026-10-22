@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using Domovoy.Contracts.Blocks;
 using Domovoy.Contracts.Ml;
 using Domovoy.Contracts.Proposals;
 using Domovoy.DbGateway.Endpoints;
@@ -121,5 +122,49 @@ public sealed class MlTaskLifecycleTests
         var zoneLeft = left.Where(m => m.Scope!.Level == ModelScopeLevels.Zone).Select(m => m.Version).OrderBy(v => v).ToList();
         Assert.Equal(new[] { 3, 4, 5 }, globalLeft);
         Assert.Equal(new[] { 1, 2 }, zoneLeft);
+    }
+
+    [Fact]
+    [Trait("Category", "OfflineSmoke")]
+    public async Task Prune_KeepsAVersionPinnedByAControlBlock()
+    {
+        var target = $"cap_{Guid.NewGuid():N}";
+        MlModelDocument Doc(int version) => new()
+        {
+            Id = Guid.NewGuid().ToString(), Name = $"{target} v{version}", Kind = MlModelKinds.ScheduleRegression,
+            TargetCapability = target, Scope = ModelScope.Global, Version = version, Artifact = new byte[] { 1 },
+        };
+        await Models.InsertManyAsync(Enumerable.Range(1, 5).Select(Doc));
+
+        // A governor block pins v2 (Epic 2C model_selection — a person's decision) and names its ML target
+        // through its measured input. Retention must not delete v2 behind their back, even though keepLast: 3
+        // would otherwise expire it.
+        var blocks = _fx.Db.GetCollection<ControlBlock>(BlockEndpoints.Collection);
+        var block = new ControlBlock
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "pinned governor",
+            TypeId = "ml_thermostat",
+            Params = new Dictionary<string, double> { ["stage"] = 1, [MlEndpoints.ModelVersionParam] = 2 },
+            Inputs = new Dictionary<string, PortBinding>
+            {
+                [target] = new() { DeviceId = Guid.NewGuid().ToString(), CapabilityId = target },
+            },
+        };
+        await blocks.InsertOneAsync(block);
+
+        try
+        {
+            var filter = Builders<MlModelDocument>.Filter.Eq(x => x.TargetCapability, target);
+            var deleted = await MlEndpoints.PruneAsync(_fx.Db, filter, keepLast: 3);
+
+            Assert.Equal(1, deleted); // v1 expired and unpinned; v2 expired but pinned → kept
+            var left = (await Models.Find(filter).ToListAsync()).Select(m => m.Version).OrderBy(v => v).ToList();
+            Assert.Equal(new[] { 2, 3, 4, 5 }, left);
+        }
+        finally
+        {
+            await blocks.DeleteOneAsync(b => b.Id == block.Id);
+        }
     }
 }

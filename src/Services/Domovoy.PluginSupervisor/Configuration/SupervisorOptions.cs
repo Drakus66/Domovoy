@@ -14,6 +14,13 @@ public class SupervisorOptions
     /// <summary>Root folder scanned for plugins; each plugin lives in a subfolder with a <c>plugin.json</c>.</summary>
     public string PluginsRoot { get; set; } = "plugins";
 
+    /// <summary>
+    /// Where the image keeps the first-party plugins it ships (Epic 3K delivery). They are copied into
+    /// <see cref="PluginsRoot"/> on startup — see <c>BuiltInPluginSeeder</c> for the uninstall-respecting
+    /// rules. Absent outside the container, in which case nothing is seeded.
+    /// </summary>
+    public string BuiltInPluginsDirectory { get; set; } = Plugins.BuiltInPluginSeeder.DefaultSourceDirectory;
+
     /// <summary>Whether this host has a usable GPU (resource gating). Declared, not auto-detected.</summary>
     public bool GpuAvailable { get; set; } = false;
 

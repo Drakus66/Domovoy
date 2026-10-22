@@ -7,27 +7,6 @@ networks:
 services:
   # ============ Application Services ============
 
-  # Subscribes to the capability contract on the bus and re-emits normalized state for SignalR/persist.
-  # No HTTP/MQTT — RabbitMQ AMQP only.
-  unified-device-service:
-    container_name: unified-device-service
-    image: ${DOCKER_REGISTRY-}unified-device-service
-    build:
-      context: .
-      dockerfile: src/Services/Domovoy.UnifiedDeviceService/Dockerfile
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - domovoy-network
-    environment:
-      - RABBITMQ__HOSTNAME=rabbitmq
-      - RABBITMQ__PORT=5672
-      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
-      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
-      - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
-    restart: unless-stopped
-
   # Owns the MQTT client; runs Zigbee2MQTT + Domovoy Native adapters and publishes the capability
   # contract. Needs RabbitMQ (AMQP + MQTT broker), nothing else.
   connectivity-service:
@@ -46,8 +25,13 @@ services:
       - RABBITMQ__PORT=5672
       - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      # Device MQTT broker — a separate contour from the bus, with its own settings. Same container
+      # here only because RabbitMQ hosts both; pointing devices at a standalone broker is a change to
+      # these four variables and nothing else.
       - MQTT__BROKER=rabbitmq
       - MQTT__PORT=1883
+      - MQTT__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - MQTT__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
     restart: unless-stopped
 
@@ -62,10 +46,17 @@ services:
         condition: service_healthy
       mongodb:
         condition: service_healthy
+      volume-permissions:
+        condition: service_completed_successfully
     networks:
       - domovoy-network
     ports:
       - "5001:8080"
+    volumes:
+      # Backup bundles (Epic 3A) live on the host so they survive containers and host migration.
+      - ./data/backups:/app/backups
+      # Plugin settings (Epic 1C {plugins-root}/.settings) so bundles include them and restore puts them back.
+      - ./plugins/.settings:/app/plugin-settings
     environment:
       - RABBITMQ__HOSTNAME=rabbitmq
       - RABBITMQ__PORT=5672
@@ -74,8 +65,16 @@ services:
       - MONGODB__CONNECTIONSTRING=mongodb://mongodb:27017
       - MONGODB__DATABASENAME=domovoy
       - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
+      - BACKUP__DIRECTORY=/app/backups
+      - BACKUP__PLUGINSETTINGSDIRECTORY=/app/plugin-settings
+      # Bootstrap password for the initial 'admin' login user, seeded once on an empty users collection
+      # (mobile-app / remote-access track). ⚠️ Set DOMOVOY_ADMIN_PASSWORD in .env; if unset it defaults to
+      # 'admin' and the gateway logs a loud warning to change it before remote exposure.
+      - SECURITY__BOOTSTRAPADMINPASSWORD=${DOMOVOY_ADMIN_PASSWORD:-admin}
+    # Dependency-free liveness: the aspnet runtime image has no `pgrep`/`procps` (the old check failed with
+    # exit 127 → permanently "unhealthy"), but it does have grep. PID 1 is the app, so match its cmdline.
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'dotnet Domovoy.DbGateway.dll' || exit 1"]
+      test: ["CMD-SHELL", "grep -qa Domovoy.DbGateway /proc/1/cmdline || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 3
@@ -104,6 +103,24 @@ services:
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - AUTOMATIONSERVICE__BASEURL=http://automation-service:8080
       - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
+      # Local authentication (mobile-app / remote-access track). ON = the API is gated by login + permissions;
+      # this is the posture required before any external exposure (IPv6-direct / SSH-tunnel).
+      # ⚠️ JWT_SECRET_KEY is REQUIRED in .env — a long random value, e.g. `openssl rand -base64 48`.
+      # There is no default: the gateway refuses to start without it (a secret shipped in the repository
+      # is a secret everyone has, i.e. authentication that only looks enabled). Set
+      # JWTSETTINGS__ENABLED=false to run the stack open on a trusted LAN.
+      - JWTSETTINGS__ENABLED=true
+      - JWTSETTINGS__SECRETKEY=${JWT_SECRET_KEY:-}
+      # Restrict CORS once exposed (array via indexed env, e.g. CORS__ALLOWEDORIGINS__0=https://home.example).
+      # Same-origin (the UI served by nginx) needs no entry; the app / external hostnames do. Empty = dev-open.
+      # - CORS__ALLOWEDORIGINS__0=https://home.example.com
+      # Restart-from-UI: the safe self-restart path (a service stops itself, this policy brings it back) needs
+      # nothing extra. To ALSO restart infra/hung containers from the UI, uncomment the flag + docker.sock mount
+      # below. ⚠️ Mounting docker.sock grants root-equivalent host access to the gateway — enable ONLY on a
+      # trusted host, ideally not internet-exposed.
+      # - SYSTEMCONTROL__DOCKERENABLED=true
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock:ro   # :ro still allows restart/stop/start
     restart: unless-stopped
 
   # Deterministic automation engine (Epic 1A): subscribes to device state, fires trigger→condition→action
@@ -128,6 +145,34 @@ services:
       - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
       - AUTOMATION__DBGATEWAYBASEURL=http://db-gateway:8080
       - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
+      # Notifications. The LAN SignalR banner (2M.2) is ON by default — no env needed. For off-LAN push
+      # (Epic 2O.4) enable ntfy and point it at your self-hosted server (see the 'push' profile below); the
+      # phone's UnifiedPush distributor subscribes to the same TOPIC. Treat TOPIC as a shared secret.
+      # - NOTIFICATIONS__NTFY__ENABLED=true
+      # - NOTIFICATIONS__NTFY__SERVERURL=http://ntfy:80
+      # - NOTIFICATIONS__NTFY__TOPIC=${NTFY_TOPIC:-}
+      # - NOTIFICATIONS__NTFY__TOKEN=${NTFY_TOKEN:-}
+    restart: unless-stopped
+
+  # Self-hosted push server for off-LAN notifications (Epic 2O.4, opt-in profile). Enable with:
+  #   docker compose --profile push up -d ntfy
+  # The AutomationService POSTs to it (ntfy:80) and the phone's UnifiedPush distributor subscribes to the topic.
+  # For delivery outside the LAN it must itself be reachable externally (route it through the Caddy edge or a
+  # subdomain). ntfy runs as its own server; we only make HTTP calls to it. See docs/mobile_app_remote_access_ru.md.
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: ntfy
+    profiles: ["push"]
+    command: serve
+    networks:
+      - domovoy-network
+    ports:
+      - "8090:80"
+    environment:
+      - NTFY_BASE_URL=${NTFY_BASE_URL:-http://localhost:8090}
+      - NTFY_BEHIND_PROXY=true
+    volumes:
+      - ntfy_data:/var/cache/ntfy
     restart: unless-stopped
 
   # Integration SDK supervisor (Epic 1C): discovers plugin manifests under ./plugins, gates each on host
@@ -160,7 +205,28 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      volume-permissions:
+        condition: service_completed_successfully
     restart: unless-stopped
+
+  # One-shot (topology v4): hands the host bind directories to the non-root user of the .NET images
+  # (APP_UID 1654). Docker creates a missing bind source as root, so on a fresh Linux host db-gateway
+  # could not write a single backup and plugin-supervisor could not lay out the first-party plugin —
+  # invisible on Windows, where NTFS bind mounts ignore ownership. Idempotent; reruns on every full `up`.
+  volume-permissions:
+    image: alpine:3.22
+    container_name: volume-permissions
+    user: root
+    volumes:
+      - ./data/backups:/mnt/backups
+      - ./plugins:/mnt/plugins
+    # Non-fatal on purpose: a filesystem that refuses chown (dev bind mounts on Windows) must not keep the
+    # house down — the warning lands in this container's log.
+    command:
+      - sh
+      - -c
+      - 'mkdir -p /mnt/plugins/.settings && chown 1654:1654 /mnt/backups /mnt/plugins /mnt/plugins/.settings || echo "WARNING: chown failed - backups and plugin installs may be denied"'
+    restart: "no"
 
   webui:
     container_name: webui
@@ -175,19 +241,115 @@ services:
       - domovoy-network
     ports:
       - "80:80"
+    # >>> dev-only
     # UI translations are runtime-loaded static JSON (i18next-http-backend). Mounting
     # the source locales over the served folder means editing a language — or, later,
     # dropping a new one — takes effect on refresh with NO image rebuild. Read-only:
     # the container never writes here.
+    # Dev-only: a deployed host has no ./src, and the built image already carries the
+    # locales — the topology generator (Epic 3K) strips this block from the shipped compose.
     volumes:
       - ./src/UI/WebUI/public/locales:/usr/share/nginx/html/locales:ro
+    # <<< dev-only
+    restart: unless-stopped
+
+  # Delivery + self-update (Epic 3K). Watches the image registry for the channel the system is
+  # subscribed to (dev|release), resolves what a requested update pulls in via the declared
+  # interface versions, and applies it: backup → pull by digest → `docker compose up -d` per
+  # dependency group. Owns the installation directory (releases/, state/, .env) and the Docker
+  # socket; publishes no ports — it is reachable only from inside domovoy-network.
+  # ⚠️ docker.sock is root-equivalent host access. It lives HERE rather than on the
+  # internet-facing api-gateway on purpose: the privilege sits in one narrow service.
+  domovoy-updater:
+    container_name: domovoy-updater
+    image: ${DOCKER_REGISTRY-}domovoy-updater
+    build:
+      context: .
+      dockerfile: src/Services/Domovoy.Updater/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - domovoy-network
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # The installation root: releases/, state/, .env, docker-compose.override.yml.
+      # Read-write — applying a release writes a new release directory and flips `current`.
+      - ${DOMOVOY_INSTALL_DIR:-.}:/opt/domovoy
+    environment:
+      - RABBITMQ__HOSTNAME=rabbitmq
+      - RABBITMQ__PORT=5672
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      - SERILOG_MONGO_URI=mongodb://mongodb:27017/domovoy
+      - UPDATES__INSTALLDIRECTORY=/opt/domovoy
+      - UPDATES__DBGATEWAYBASEURL=http://db-gateway:8080
+    restart: unless-stopped
+
+  # ============ Remote access (opt-in profiles) ============
+  # These stay OFF for a plain LAN bring-up. Enable the edge when exposing the home externally:
+  #   docker compose --profile edge up -d                 # Caddy TLS edge (for IPv6-direct)
+  #   docker compose --profile edge --profile tunnel up -d # also the SSH reverse-tunnel fallback to the VPS
+  # See docs/mobile_app_remote_access_ru.md. ⚠️ Only expose with auth ON (JWTSETTINGS__ENABLED=true, above).
+
+  # Public TLS edge (Этап 3a): auto-HTTPS in front of the WebUI, single origin for both remote paths.
+  caddy:
+    image: caddy:2
+    container_name: caddy
+    profiles: ["edge"]
+    depends_on:
+      webui:
+        condition: service_started
+    networks:
+      - domovoy-network
+    ports:
+      - "443:443"
+      - "80:80" # ACME HTTP-01 + HTTP→HTTPS redirect; for DNS-01 you can drop 80 and use a Caddy DNS build.
+    # Required when the 'edge' profile is used; left as empty defaults so a plain (profile-less) `up` still
+    # interpolates. Set them in .env before enabling the edge (Caddy fails fast at runtime without a domain).
+    environment:
+      - DOMOVOY_DOMAIN=${DOMOVOY_DOMAIN:-}
+      - ACME_EMAIL=${ACME_EMAIL:-}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+  # SSH reverse-tunnel to the VPS (Этап 3c): the CGNAT/no-IPv6 fallback. Forwards the Caddy edge to the VPS,
+  # which publishes the public hostname. First run generates a key and prints the restricted authorized_keys
+  # line to install on the VPS (see deploy/vps). Needs the 'edge' profile too (it tunnels Caddy).
+  autossh:
+    build:
+      context: ./deploy/autossh
+    container_name: autossh
+    profiles: ["tunnel"]
+    depends_on:
+      caddy:
+        condition: service_started
+    networks:
+      - domovoy-network
+    # SSH_HOST is required when the 'tunnel' profile is used; empty default keeps a plain `up` interpolating.
+    # The entrypoint fails fast at runtime if it's unset.
+    environment:
+      - SSH_HOST=${TUNNEL_SSH_HOST:-}
+      - SSH_PORT=${TUNNEL_SSH_PORT:-2222}
+      - SSH_USER=${TUNNEL_SSH_USER:-domovoy}
+      - REMOTE_BIND=${TUNNEL_REMOTE_BIND:-127.0.0.1:8443}
+      - LOCAL_TARGET=caddy:443
+    volumes:
+      # Persist the generated key + known_hosts so the tunnel survives restarts without re-keying.
+      - ./data/autossh:/keys
     restart: unless-stopped
 
   # ============ Infrastructure Services ============
 
   mongodb:
     container_name: mongodb
-    image: mongo:latest
+    # Pinned (topology v4): `latest` moved to MongoDB 9.0, a major the driver was never tested against, and
+    # a data directory written by a newer major cannot be opened by an older one — so a floating tag is a
+    # one-way door. Moving the pin is a deliberate topology change.
+    image: mongo:8.0
     networks:
       - domovoy-network
     ports:
@@ -204,9 +366,11 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  # Opt-in with prometheus below: COMPOSE_PROFILES=monitoring in .env (or --profile monitoring).
   mongodb-exporter:
     image: percona/mongodb_exporter:0.40.0
     container_name: mongodb-exporter
+    profiles: ["monitoring"]
     networks:
       - domovoy-network
     ports:
@@ -218,22 +382,30 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Official image (topology v4). bitnami/rabbitmq is no longer pullable since the Bitnami catalogue was
+  # frozen, and its default loopback_users.<user> refused every non-localhost login of the configured user.
   rabbitmq:
-    image: bitnami/rabbitmq:latest
+    image: rabbitmq:4.2-management
     container_name: rabbitmq
+    # The node name (rabbit@<hostname>) names the data directory: a random container hostname would
+    # orphan the broker state on every recreate.
+    hostname: rabbitmq
     networks:
       - domovoy-network
     ports:
       - "1883:1883" # MQTT
       - "5672:5672" # AMQP
       - "15672:15672" # Management UI
-      - "15675:15675" # MQTT over WebSocket
     environment:
-      - RABBITMQ_USERNAME=${RABBITMQ_DEFAULT_USER}
-      - RABBITMQ_PASSWORD=${RABBITMQ_DEFAULT_PASS}
-      - RABBITMQ_PLUGINS=rabbitmq_mqtt,rabbitmq_management,rabbitmq_prometheus
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+    configs:
+      - source: rabbitmq_enabled_plugins
+        target: /etc/rabbitmq/enabled_plugins
     volumes:
-      - rabbitmq_data:/bitnami/rabbitmq/mnesia
+      # New volume, not a rename: the bitnami data layout differs, and the services re-declare their
+      # queues and exchanges on connect.
+      - rabbitmq4_data:/var/lib/rabbitmq
 
     healthcheck:
       test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
@@ -244,10 +416,13 @@ services:
     restart: unless-stopped
 
   # ============ Monitoring (Prometheus-only) ============
+  # Opt-in (topology v4): nothing reads these metrics yet — no Grafana, no alerts — so on a small host they
+  # are pure cost. The /metrics endpoints in the services stay. Enable: COMPOSE_PROFILES=monitoring in .env.
 
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
+    profiles: ["monitoring"]
     networks:
       - domovoy-network
     ports:
@@ -283,7 +458,15 @@ services:
       rabbitmq:
         condition: service_healthy
 
+configs:
+  # Inline, so the topology bundle needs no extra asset on the host.
+  rabbitmq_enabled_plugins:
+    content: "[rabbitmq_management,rabbitmq_mqtt,rabbitmq_prometheus]."
+
 volumes:
   mongodb_data:
-  rabbitmq_data:
+  rabbitmq4_data:
   prometheus_data:
+  caddy_data:
+  caddy_config:
+  ntfy_data:

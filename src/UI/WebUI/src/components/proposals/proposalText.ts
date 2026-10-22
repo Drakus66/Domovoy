@@ -17,7 +17,7 @@ const t = (key: string, options?: Record<string, unknown>) => i18n.t(`proposals:
 /** Resolves a device id to its display name (falls back to the id). */
 export type DeviceNameOf = (deviceId?: string | null) => string;
 
-const KNOWN_SOURCES = ['user', 'ml_proposer', 'discovery', 'ml_task_scanner', 'demo'];
+const KNOWN_SOURCES = ['user', 'ml_proposer', 'discovery', 'ml_task_scanner', 'intervention', 'demo'];
 
 /** Normalized key for the source chip + tooltip ('other' for anything unknown). */
 export const sourceKey = (source: string): string =>
@@ -37,6 +37,12 @@ const cronText = (cron?: string | null): string => {
   const m = /^(\d{1,2}) (\d{1,2}) \* \* \*$/.exec(cron ?? '');
   if (m) return t('rule.daily', { time: `${m[2].padStart(2, '0')}:${m[1].padStart(2, '0')}` });
   return t('rule.cron', { cron: cron ?? '' });
+};
+
+// The daily cron's time of day ("HH:MM"), or null if it isn't a plain daily cron.
+const cronTime = (cron?: string | null): string | null => {
+  const m = /^(\d{1,2}) (\d{1,2}) \* \* \*$/.exec(cron ?? '');
+  return m ? `${m[2].padStart(2, '0')}:${m[1].padStart(2, '0')}` : null;
 };
 
 const triggerText = (tr: RuleTrigger, nameOf: DeviceNameOf): string => {
@@ -93,6 +99,12 @@ export const proposalTitle = (
   if (p.kind === 'Rule' && rule) return describeRule(rule, nameOf);
   if (p.kind === 'MlTask' && p.mlTaskTarget)
     return t('mlTaskTitle', { target: capabilityLabel(p.mlTaskTarget) });
+  if (p.kind === 'Scene' && p.sceneDraft) return t('sceneTitle', { name: p.sceneDraft.name });
+  if (p.kind === 'RuleAmendment' && rule) {
+    if (p.amendmentAction === 'add_condition') return t('amendmentTitleRefine', { name: rule.name });
+    if (p.amendmentAction === 'set_threshold') return t('amendmentTitleThreshold', { name: rule.name });
+    return t('amendmentTitle', { name: rule.name });
+  }
   return p.title;
 };
 
@@ -107,18 +119,78 @@ export const effectText = (p: Proposal): string => {
       return p.modelVersion ? t('effect.pin', { version: p.modelVersion }) : t('effect.unpin');
     case 'MlTask':
       return t('effect.mlTask', { target: capabilityLabel(p.mlTaskTarget ?? '') });
+    case 'Scene': {
+      const count = p.sceneDraft?.targets.length ?? 0;
+      const name = p.sceneDraft?.name ?? '';
+      const time = cronTime(p.sceneScheduleCron);
+      return time
+        ? t('effect.sceneSchedule', { name, count, time })
+        : t('effect.scene', { name, count });
+    }
+    case 'RuleAmendment': {
+      const e = p.evidence;
+      if (p.amendmentAction === 'add_condition')
+        return t('effect.amendmentAddCondition', { from: hourLabel(e?.fromHour), to: hourLabel(e?.toHour) });
+      if (p.amendmentAction === 'set_threshold')
+        return t('effect.amendmentSetThreshold', { value: e?.suggestedThreshold ?? 0 });
+      return t('effect.amendmentDisable');
+    }
     default:
       return '';
   }
 };
+
+/** "H" → "HH:00" for the exception-window effect line. */
+const hourLabel = (h: number | undefined): string => `${String(h ?? 0).padStart(2, '0')}:00`;
 
 /** Localized justification from the structured evidence; falls back to the raw server rationale. */
 export const evidenceText = (p: Proposal): string | null => {
   const e = p.evidence;
   if (!e) return p.rationale ?? null;
 
+  // Type-B ML discovery (Epic 2F): a setpoint the user varies with temporal structure → "learn it".
+  if (p.kind === 'MlTask' && e.explained !== undefined)
+    return t('evidence.mlSetpoint', {
+      samples: e.samples ?? 0,
+      stdDev: e.stdDev ?? 0,
+      explained: Math.round((e.explained ?? 0) * 100),
+    });
+
   if (p.kind === 'MlTask' && e.samples !== undefined)
     return t('evidence.mlTask', { samples: e.samples, required: e.required ?? 0, windowDays: e.windowDays ?? 0 });
+
+  // Scene-configuration discovery (Epic 2F × 3B): how many devices and how often the arrangement recurred.
+  if (p.kind === 'Scene')
+    return t('evidence.scene', {
+      support: e.support ?? 0,
+      devices: e.devices ?? 0,
+      windowDays: e.windowDays ?? 0,
+    });
+
+  // Threshold drift (Epic 3J tail 4): the sensor's lived-in value vs the rule's current trigger threshold.
+  if (p.kind === 'RuleAmendment' && p.amendmentAction === 'set_threshold' && e.suggestedThreshold !== undefined)
+    return t('evidence.thresholdDrift', {
+      current: e.currentThreshold ?? 0,
+      suggested: e.suggestedThreshold,
+      samples: e.samples ?? 0,
+    });
+
+  // Self-correcting / dead-rule detection (Epic 3J): how often the household overrode the rule (in a band, or overall).
+  if (p.kind === 'RuleAmendment' && e.firings !== undefined) {
+    if (p.amendmentAction === 'add_condition')
+      return t('evidence.refine', {
+        overrides: e.overrides ?? 0,
+        firings: e.firings,
+        rate: Math.round((e.overrideRate ?? 0) * 100),
+        from: `${String(e.fromHour ?? 0).padStart(2, '0')}:00`,
+        to: `${String(e.toHour ?? 0).padStart(2, '0')}:00`,
+      });
+    return t('evidence.deadRule', {
+      overrides: e.overrides ?? 0,
+      firings: e.firings,
+      rate: Math.round((e.overrideRate ?? 0) * 100),
+    });
+  }
 
   // Setpoint-preference discovery (Epic 2F type B) carries the learned value + spread.
   if (e.value !== undefined && e.stdDev !== undefined)

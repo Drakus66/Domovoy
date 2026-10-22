@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
+import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
 import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
 import ArrowDownwardRoundedIcon from '@mui/icons-material/ArrowDownwardRounded';
@@ -19,8 +20,9 @@ import { dashboardIcon } from './dashboardIcons';
 import type { Sphere } from './spheres';
 
 /**
- * The main-page tab strip: All · auto-spheres · custom tabs, plus "+" (new tab), an edit
+ * The main-page tab strip: Overview · auto-spheres · custom tabs, plus "+" (new tab), an edit
  * affordance for the active custom tab, and a manage menu (sphere visibility, tab order).
+ * The full device inventory lives on the /devices registry page, not in a tab.
  */
 export default function DashboardTabs({
   spheres, allSpheres, dashboards, hiddenSpheres, activeId,
@@ -43,7 +45,7 @@ export default function DashboardTabs({
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
 
   const knownIds = useMemo(
-    () => new Set(['all', ...spheres.map((s) => s.id), ...dashboards.map((d) => d.id)]),
+    () => new Set(['overview', ...spheres.map((s) => s.id), ...dashboards.map((d) => d.id)]),
     [spheres, dashboards],
   );
   const activeDashboard = dashboards.find((d) => d.id === activeId) ?? null;
@@ -66,7 +68,12 @@ export default function DashboardTabs({
         allowScrollButtonsMobile
         sx={{ flex: 1, minHeight: 44, '& .MuiTab-root': { minHeight: 44 } }}
       >
-        <Tab value="all" label={t('tabs.all')} />
+        <Tab
+          value="overview"
+          icon={<HomeRoundedIcon fontSize="small" />}
+          iconPosition="start"
+          label={t('tabs.overview')}
+        />
         {spheres.map((sphere) => {
           const Icon = capabilityIconForCategory(sphere.category);
           return (

@@ -29,6 +29,19 @@ public readonly record struct FeatureAdmission(bool Admissible, double Weight);
 /// greenhouse and vice versa, even if an in-sample correlation appears. This is the hard wall.</item>
 /// </list>
 /// A global-scoped model uses only ambient features, staying neutral across kinds.
+///
+/// <para><b>Подключено к обучению (2026-08-17).</b> Каждый признак, который получает обучаемая модель,
+/// проходит через эту политику: <see cref="ContextFeatureJoin.WithAdmissibleMode"/> спрашивает
+/// <see cref="Admissible"/> для скоупа обучаемой модели, а тренер вызывает именно его при сборке серии
+/// (<c>MlTrainingService.LoadSeriesAsync</c>). Сегодня набор признаков — время и режим дома, а режим
+/// <b>ambient</b>, поэтому решение всегда «допустим»: наблюдаемое поведение не меняется, но политика стоит
+/// в тракте, а не рядом с ним.</para>
+///
+/// <para><b>Что ещё не задействовано.</b> Зонально-локальных входов у живых шаблонов пока нет (многомерный
+/// пайплайн — Фаза 4 Эпика 2I), поэтому «жёсткая стена» между видами зон и понижающий вес соседней зоны
+/// на реальных данных ещё не срабатывали: их проверяют только <c>FeatureLocalityTests</c>. Когда такие
+/// кандидаты появятся, фильтровать их будет уже существующий вызов — расширение сводится к передаче
+/// кандидатов, а не к встраиванию политики.</para>
 /// </summary>
 public static class FeatureLocality
 {

@@ -1,6 +1,6 @@
 {
   "tabs": {
-    "all": "All"
+    "overview": "Home"
   },
   "spheres": {
     "light": "Light",
@@ -48,16 +48,22 @@
       "device": "Device",
       "capability": "Single value",
       "chart": "Chart",
-      "modes": "Home modes"
+      "modes": "Home modes",
+      "scene": "Scene",
+      "energy": "Energy"
     },
     "typeHints": {
       "device": "A full device tile with its quick control.",
       "capability": "One value of a device — e.g. just the humidity of a multi-sensor.",
       "chart": "A telemetry trend for a numeric value.",
-      "modes": "A switcher for Home / Away / Night / Vacation."
+      "modes": "A switcher for Home / Away / Night / Vacation.",
+      "scene": "A one-tap button that activates a scene.",
+      "energy": "Consumption, top consumers and money by tariff."
     },
     "pickDevices": "Pick devices",
     "pickDevice": "Pick a device",
+    "pickScene": "Pick a scene",
+    "noScenes": "No scenes yet — create one on the Scenes page first.",
     "pickCapability": "Value",
     "searchDevices": "Search…",
     "chartWindow": "Window",
@@ -81,6 +87,96 @@
     "delete": "I couldn't delete that — please try again."
   },
   "widgets": {
-    "modes": "Home mode"
+    "modes": "Home mode",
+    "scene": "Scene"
+  },
+  "band": {
+    "mode": "Mode",
+    "since": "since {{time}}",
+    "climate": "Climate",
+    "humidity": "humidity {{value}}%",
+    "co2": "CO₂ {{value}}",
+    "security": "Security",
+    "secure": "Locked",
+    "open": "{{count}} open",
+    "allSecure": "under guard",
+    "noLocks": "no locks",
+    "energy": "Energy",
+    "watts": "{{value}} W",
+    "kwh": "{{value}} kWh total",
+    "empty": "—",
+    "back": {
+      "source": "Sensor: {{name}}",
+      "range12h": "12 h: {{min}}…{{max}}",
+      "locksTotal": "Locks: {{count}}",
+      "allClosed": "All closed",
+      "open": "Open",
+      "unlocked": "Unlocked",
+      "topConsumers": "Top consumers now",
+      "meterTotal": "Meters: {{value}} kWh"
+    }
+  },
+  "rail": {
+    "today": "Domovoy today",
+    "history": "Full history →",
+    "pending": "Awaiting decision",
+    "approve": "Approve",
+    "defer": "Later",
+    "empty": "Quiet so far — I haven't changed anything today.",
+    "scenes": "Scenes",
+    "moreScenes": "All scenes →",
+    "energyToday": "Energy today",
+    "kwh": "kWh"
+  },
+  "energy": {
+    "title": "Energy",
+    "period": {
+      "24": "24h",
+      "168": "7d",
+      "720": "30d"
+    },
+    "cost": "Cost",
+    "consumption": "Consumption",
+    "view": {
+      "devices": "Devices",
+      "circuits": "Circuits",
+      "phases": "Phases",
+      "scheme": "Scheme"
+    },
+    "rankTitle": {
+      "devices": "Top consumers",
+      "circuits": "Consumption by circuit",
+      "phases": "Consumption by phase"
+    },
+    "unaccounted": "Not attributed to devices: {{value}}",
+    "empty": "No devices with energy metering",
+    "mains": "mains",
+    "kwh": "kWh",
+    "configure": "Configure tariff and device energy profiles",
+    "scheme": {
+      "root": "Home",
+      "title": "Grid scheme",
+      "expand": "Expand scheme",
+      "metricKwh": "kWh",
+      "metricWatts": "W now",
+      "unaccounted": "Unaccounted",
+      "unmapped": "Unassigned",
+      "device": "Device",
+      "limit": "breaker {{value}} W",
+      "meter": "meter: {{value}}",
+      "unaccountedValue": "unaccounted: {{value}}"
+    }
+  },
+  "flip": {
+    "stats": "Stats"
+  },
+  "chartBack": {
+    "min": "Min",
+    "max": "Max",
+    "avg": "Mean",
+    "last": "Last",
+    "period": "{{from}} — {{to}}",
+    "samples_one": "{{count}} sample",
+    "samples_other": "{{count}} samples"
   }
 }

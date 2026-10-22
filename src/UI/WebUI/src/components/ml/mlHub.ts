@@ -16,6 +16,23 @@ import { CapabilityDevice } from '../../api/capabilityDevices';
 const eq = (a?: string | null, b?: string | null): boolean =>
   (a ?? '').toLowerCase() === (b ?? '').toLowerCase();
 
+/** The holdout-score shape of a model, as the registry serves it. */
+type Scored = { holdoutScore: number; holdoutMae: number; holdoutSampleCount: number };
+
+/**
+ * The model's honest holdout score, or `null` when it has none. A model trained on a window too thin to hold
+ * out a slice is registered with `holdoutSampleCount = 0` and a placeholder `0` score — printing that 0 would
+ * read as a flawless MAE, which is the opposite of the truth. Callers render null as "not evaluated".
+ */
+export const holdoutScoreOf = (m: Scored): number | null =>
+  m.holdoutSampleCount > 0 ? (m.holdoutScore || m.holdoutMae) : null;
+
+/** `holdoutScoreOf` formatted, or the caller's localized "not evaluated" wording. */
+export const holdoutText = (m: Scored, digits: number, notEvaluated: string): string => {
+  const score = holdoutScoreOf(m);
+  return score === null ? notEvaluated : score.toFixed(digits);
+};
+
 /** Governor block types consuming models of `target`. */
 export const governorTypesFor = (catalog: BlockCatalogEntry[], target: string): BlockCatalogEntry[] =>
   catalog.filter((c) => eq(c.mlTargetCapability, target));

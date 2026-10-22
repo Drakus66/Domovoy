@@ -6,8 +6,23 @@ import { Box, Toolbar } from '@mui/material';
 import { Outlet } from 'react-router-dom';
 import Navigation from './Navigation';
 import ErrorBoundary from '../common/ErrorBoundary';
+import KioskShell from '../kiosk/KioskShell';
+import { useKioskStore } from '../../store/kioskStore';
 
 function Layout() {
+  const kiosk = useKioskStore((s) => s.enabled);
+
+  // Kiosk mode (Epic 2O.2): no navigation chrome, the shell locks to the pinned dashboard and handles idle.
+  if (kiosk) {
+    return (
+      <KioskShell>
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
+      </KioskShell>
+    );
+  }
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
       <Navigation />

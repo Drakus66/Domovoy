@@ -23,7 +23,10 @@ RUN dotnet build "./Domovoy.DbGateway.csproj" -c $BUILD_CONFIGURATION -o /app/bu
 # Этот этап используется для публикации проекта службы, который будет скопирован на последний этап
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./Domovoy.DbGateway.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+# Версия компонента (Эпик 3K) — см. комментарий в src/Gateway/Domovoy.ApiGateway/Dockerfile.
+ARG VERSION=0.0.0
+ARG INFORMATIONAL_VERSION=0.0.0
+RUN dotnet publish "./Domovoy.DbGateway.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false /p:Version=$VERSION /p:InformationalVersion=$INFORMATIONAL_VERSION
 
 # Этот этап используется в рабочей среде или при запуске из VS в обычном режиме (по умолчанию, когда конфигурация отладки не используется)
 FROM base AS final

@@ -84,4 +84,56 @@ public sealed class PidBlockTests
         new PidBlock().Tick(ctx);
         Assert.Equal(100.0, ctx.GetNumber(Out)); // preset kp (10) × error (20) = 200 → clamped
     }
+
+    [Fact]
+    public void Pid_AutotunePreset_RunsRelayThenTracksWithFoundGains()
+    {
+        // preset=autotune drives a relay against a first-order-lag process; once the experiment converges the
+        // block persists the found gains (durable state) and switches to PID control with them.
+        var block = new PidBlock();
+        var ctx = new FakeBlockCtx
+        {
+            Options = { ["preset"] = "autotune" },
+            Params = { ["setpoint"] = 21, ["outMin"] = 0, ["outMax"] = 100, ["tuneBand"] = 0.5 },
+        };
+        const double k = 0.42, tau = 4, dt = 0.5;
+        var t0 = ctx.Now;
+        var pv = 21.0;
+        var relayOnly = true;
+
+        for (var i = 0; i < 20000; i++)
+        {
+            ctx.Now = t0.AddSeconds(dt * i);
+            ctx.Inputs["pv"] = pv;
+            block.Tick(ctx);
+
+            if (ctx.GetState<bool>("tuned")) break; // experiment finished this tick
+
+            var u = ctx.GetNumber(Out) ?? 0;
+            relayOnly &= u is 0.0 or 100.0;      // while tuning the block commands only the relay levels
+            pv += (dt / tau) * (k * u - pv);
+        }
+
+        Assert.True(ctx.GetState<bool>("tuned"), "autotune preset never completed");
+        Assert.True(relayOnly, "while tuning, the block should command only the relay extremes (0/100)");
+        Assert.True(ctx.GetState<double>("tuned_kp") > 0, "tuned gains should be persisted to durable state");
+        Assert.True(ctx.GetState<double>("tuned_ki") > 0);
+    }
+
+    [Fact]
+    public void Pid_AutotunePreset_UsesStoredGains_WithoutReRunning()
+    {
+        // With gains already tuned, the block must NOT re-run the relay — it runs PID straight away.
+        var block = new PidBlock();
+        var ctx = new FakeBlockCtx
+        {
+            Options = { ["preset"] = "autotune" },
+            Params = { ["setpoint"] = 20, ["outMin"] = 0, ["outMax"] = 100 },
+            Inputs = { ["pv"] = 10.0 },
+            State = { ["tuned"] = true, ["tuned_kp"] = 10.0, ["tuned_ki"] = 0.0, ["tuned_kd"] = 0.0 },
+        };
+        block.Tick(ctx);
+        // kp 10 × error 10 = 100 (clamped) — a pure PID response, not a relay flip.
+        Assert.Equal(100.0, ctx.GetNumber(Out));
+    }
 }

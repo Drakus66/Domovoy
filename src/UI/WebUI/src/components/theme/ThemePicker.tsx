@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import {
-  Box, IconButton, ListItemText, Menu, MenuItem, Tooltip,
+  Box, IconButton, ListItemText, Menu, MenuItem, Tooltip, type MenuProps,
 } from '@mui/material';
 import { useColorScheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
@@ -29,6 +29,64 @@ function Swatch({ preview }: { preview: ThemePreview }) {
   );
 }
 
+interface ThemeMenuProps {
+  anchorEl: HTMLElement | null;
+  open: boolean;
+  onClose: () => void;
+  /** Fired after a theme is picked (dismissing without a pick only fires onClose). */
+  onSelected?: () => void;
+  anchorOrigin?: MenuProps['anchorOrigin'];
+  transformOrigin?: MenuProps['transformOrigin'];
+}
+
+/**
+ * The curated-themes menu as a controlled component, so it can hang off any trigger —
+ * the palette icon below and the profile dropdown's "Theme" row.
+ */
+export function ThemeMenu({
+  anchorEl, open, onClose, onSelected,
+  anchorOrigin = { vertical: 'top', horizontal: 'right' },
+  transformOrigin = { vertical: 'bottom', horizontal: 'right' },
+}: ThemeMenuProps) {
+  const themeId = useThemeStore((s) => s.themeId);
+  const setThemeId = useThemeStore((s) => s.setThemeId);
+  const { mode, systemMode } = useColorScheme();
+  const { t } = useTranslation('common');
+  const resolvedMode = (mode === 'system' ? systemMode : mode) ?? 'dark';
+
+  return (
+    <Menu
+      anchorEl={anchorEl}
+      open={open}
+      onClose={onClose}
+      anchorOrigin={anchorOrigin}
+      transformOrigin={transformOrigin}
+    >
+      {themeOptions.map((option) => (
+        <MenuItem
+          key={option.id}
+          selected={option.id === themeId}
+          onClick={() => {
+            setThemeId(option.id);
+            onClose();
+            onSelected?.();
+          }}
+          sx={{ gap: 1.5, minWidth: 280 }}
+        >
+          <Swatch preview={option.preview[resolvedMode]} />
+          <ListItemText
+            primary={option.label}
+            secondary={t(`themes.${option.id}`, option.description)}
+            primaryTypographyProps={{ fontWeight: 600 }}
+            secondaryTypographyProps={{ variant: 'caption' }}
+          />
+          {option.id === themeId && <CheckRoundedIcon fontSize="small" color="primary" />}
+        </MenuItem>
+      ))}
+    </Menu>
+  );
+}
+
 /**
  * Fixed-theme picker: a palette button opening a menu of the curated themes,
  * each previewed with its background + primary/secondary swatches for the
@@ -36,11 +94,7 @@ function Swatch({ preview }: { preview: ThemePreview }) {
  */
 export default function ThemePicker() {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-  const themeId = useThemeStore((s) => s.themeId);
-  const setThemeId = useThemeStore((s) => s.setThemeId);
-  const { mode, systemMode } = useColorScheme();
   const { t } = useTranslation('common');
-  const resolvedMode = (mode === 'system' ? systemMode : mode) ?? 'dark';
 
   return (
     <>
@@ -49,34 +103,7 @@ export default function ThemePicker() {
           <PaletteRoundedIcon />
         </IconButton>
       </Tooltip>
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={() => setAnchorEl(null)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        {themeOptions.map((option) => (
-          <MenuItem
-            key={option.id}
-            selected={option.id === themeId}
-            onClick={() => {
-              setThemeId(option.id);
-              setAnchorEl(null);
-            }}
-            sx={{ gap: 1.5, minWidth: 280 }}
-          >
-            <Swatch preview={option.preview[resolvedMode]} />
-            <ListItemText
-              primary={option.label}
-              secondary={t(`themes.${option.id}`, option.description)}
-              primaryTypographyProps={{ fontWeight: 600 }}
-              secondaryTypographyProps={{ variant: 'caption' }}
-            />
-            {option.id === themeId && <CheckRoundedIcon fontSize="small" color="primary" />}
-          </MenuItem>
-        ))}
-      </Menu>
+      <ThemeMenu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)} />
     </>
   );
 }

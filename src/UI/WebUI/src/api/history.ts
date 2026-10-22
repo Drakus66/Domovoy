@@ -42,10 +42,14 @@ export interface HistoryQuery {
   limit?: number;
 }
 
+/** Aggregation functions the rollup endpoints accept. avg/min/max = band stats; sum = total of the
+ *  bucket's samples; delta = last−first within the bucket (energy consumption from a counter, Epic 3C). */
+export type AggFn = 'avg' | 'min' | 'max' | 'sum' | 'delta';
+
 /** One aggregated time bucket (matches DbGateway AggregateBucket, Epic 1B). */
 export interface AggregateBucket {
   timestamp: string;
-  value: number; // the requested aggregate (avg | min | max)
+  value: number; // the requested aggregate (see AggFn)
   min: number;
   max: number;
   avg: number;
@@ -59,7 +63,40 @@ export interface AggregateQuery {
   from?: string;
   to?: string;
   bucket?: 'minute' | 'hour' | 'day';
-  agg?: 'avg' | 'min' | 'max';
+  agg?: AggFn;
+}
+
+/** One (device, capability) series requested in a batch aggregation. */
+export interface SeriesSpec {
+  deviceId: string;
+  capabilityId: string;
+}
+
+/** Aggregated buckets for one requested series (matches DbGateway SeriesResult). */
+export interface SeriesResult extends SeriesSpec {
+  buckets: AggregateBucket[];
+}
+
+export interface AggregateBatchQuery {
+  series: SeriesSpec[];
+  from?: string;
+  to?: string;
+  bucket?: 'minute' | 'hour' | 'day';
+  agg?: AggFn;
+  /** Max points kept per series (most-recent); server default is 48. */
+  maxPoints?: number;
+}
+
+/** Latest event-log row for one device (matches DbGateway LatestEventDto) — batch provenance. */
+export interface LatestEvent {
+  deviceId: string;
+  timestamp: string;
+  capabilityId: string;
+  triggerSource: string;
+  triggerId?: string | null;
+  ruleId?: string | null;
+  correlationId?: string | null;
+  newValue?: unknown;
 }
 
 const params = (q: HistoryQuery) =>
@@ -77,6 +114,14 @@ export const historyApi = {
   /** Aggregated telemetry rollups (minute/hour/day) for trend charts (Epic 1B). */
   getAggregate: (q: AggregateQuery = {}): Promise<AggregateBucket[]> =>
     apiClient.get<AggregateBucket[]>('/api/telemetry/aggregate', { params: params(q) }).then((r) => r.data),
+
+  /** Aggregate many (device, capability) series in one round-trip (dashboard sparklines / composed charts). */
+  getAggregateBatch: (q: AggregateBatchQuery): Promise<SeriesResult[]> =>
+    apiClient.post<SeriesResult[]>('/api/telemetry/aggregate/batch', q).then((r) => r.data),
+
+  /** Latest event-log row per device in one round-trip — per-tile "last changed by …" provenance. */
+  getLatestByDevice: (deviceIds: string[], window?: { from?: string; to?: string }): Promise<LatestEvent[]> =>
+    apiClient.post<LatestEvent[]>('/api/events/latest-by-device', { deviceIds, ...window }).then((r) => r.data),
 
   /** URL for the CSV period export (Epic 1B) — open/download directly. */
   csvExportUrl: (q: HistoryQuery = {}): string => {

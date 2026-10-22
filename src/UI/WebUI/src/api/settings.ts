@@ -39,6 +39,28 @@ export interface CalendarSettings {
   updatedAt: string;
 }
 
+/** A local time-of-day window (minutes since midnight; end ≤ start wraps past midnight). Matches DbGateway TariffInterval. */
+export interface TariffInterval {
+  startMinute: number;
+  endMinute: number;
+}
+
+/** One tariff zone: a price and the windows it applies (empty ⇒ always). Matches DbGateway TariffZone. */
+export interface TariffZone {
+  name: string;
+  pricePerKwh: number;
+  intervals: TariffInterval[];
+}
+
+/** Electricity tariff settings (roadmap Epic 3C). Matches DbGateway TariffSettings. */
+export interface TariffSettings {
+  id?: string;
+  currency: string;
+  defaultPrice: number;
+  zones: TariffZone[];
+  updatedAt?: string;
+}
+
 export const settingsApi = {
   getLocation: (): Promise<SiteLocation> =>
     apiClient.get<SiteLocation>('/api/settings/location').then((r) => r.data),
@@ -75,4 +97,11 @@ export const settingsApi = {
         params: { country, year },
       })
       .then((r) => r.data),
+
+  // Electricity tariff (roadmap Epic 3C) — static zones + default price; feeds money + the cheap-hours block.
+  getTariff: (): Promise<TariffSettings> =>
+    apiClient.get<TariffSettings>('/api/settings/tariff').then((r) => r.data),
+
+  saveTariff: (body: { currency: string; defaultPrice: number; zones: TariffZone[] }): Promise<TariffSettings> =>
+    apiClient.put<TariffSettings>('/api/settings/tariff', body).then((r) => r.data),
 };

@@ -29,7 +29,7 @@ const renderTabs = (over: Partial<Parameters<typeof DashboardTabs>[0]> = {}) =>
       allSpheres={spheres}
       dashboards={dashboards}
       hiddenSpheres={[]}
-      activeId="all"
+      activeId="overview"
       onSelect={noop}
       onCreate={noop}
       onEdit={noop}
@@ -40,9 +40,9 @@ const renderTabs = (over: Partial<Parameters<typeof DashboardTabs>[0]> = {}) =>
   );
 
 describe('DashboardTabs', () => {
-  it('renders All, derived spheres with counts, and custom tabs', () => {
+  it('renders Overview, derived spheres with counts, and custom tabs', () => {
     renderTabs();
-    expect(screen.getByRole('tab', { name: 'Все' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Дом' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Свет · 2/ })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Датчики · 5/ })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Гостиная/ })).toBeInTheDocument();

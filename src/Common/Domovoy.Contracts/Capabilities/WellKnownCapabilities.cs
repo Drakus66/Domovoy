@@ -17,6 +17,20 @@ public static class WellKnownCapabilities
     public static Capability Occupancy() =>
         Boolean(CapabilityIds.Occupancy, writable: false);
 
+    // --- Presence (roadmap Epic 3D) — read-only, reported by the presence platform layer ---
+
+    /// <summary>A single resident's home/away signal on their virtual person device (read-only).</summary>
+    public static Capability Presence() =>
+        Boolean(CapabilityIds.Presence, writable: false);
+
+    /// <summary>Aggregate "someone is home" over all tracked residents (read-only), on the Occupancy device.</summary>
+    public static Capability AnyoneHome() =>
+        Boolean(CapabilityIds.AnyoneHome, writable: false);
+
+    /// <summary>Aggregate count of residents currently home (read-only), on the Occupancy device.</summary>
+    public static Capability HomeCount() =>
+        Number(CapabilityIds.HomeCount, null, 0, null, writable: false);
+
     public static Capability Contact() =>
         Boolean(CapabilityIds.Contact, writable: false);
 
@@ -38,20 +52,22 @@ public static class WellKnownCapabilities
     public static Capability Humidity() =>
         Number(CapabilityIds.Humidity, "%", 0, 100, writable: false);
 
-    public static Capability Co2() =>
-        Number(CapabilityIds.Co2, "ppm", 0, null, writable: false);
-
-    public static Capability Valve() =>
-        Number(CapabilityIds.Valve, "%", 0, 100, step: 1, writable: true);
-
     public static Capability Battery() =>
         Number(CapabilityIds.Battery, "%", 0, 100, writable: false);
 
-    public static Capability Illuminance() =>
-        Number(CapabilityIds.Illuminance, "lux", 0, null, writable: false);
-
     public static Capability Power() =>
         Number(CapabilityIds.Power, "W", 0, null, writable: false);
+
+    // --- Energy domain (roadmap Epic 3C) — read-only, platform/tariff-reported ---
+
+    /// <summary>Current price per kWh (read-only). No min — dynamic tariffs allow negative (plunge) prices;
+    /// <paramref name="unit"/> is the deployment's currency-per-kWh label (e.g. "₽/kWh").</summary>
+    public static Capability Price(string? unit = null) =>
+        Number(CapabilityIds.Price, unit, writable: false);
+
+    /// <summary>Current tariff zone as an enum over the configured zone names (peak/day/night…), read-only.</summary>
+    public static Capability TariffZone(IReadOnlyList<string> zones) =>
+        Enum(CapabilityIds.TariffZone, zones, writable: false);
 
     // --- System virtual sensors (roadmap Epic 2L) — all read-only, platform-reported ---
 
@@ -80,7 +96,7 @@ public static class WellKnownCapabilities
         Text(CapabilityIds.Clock, writable: false);
 
     /// <summary>Local day-of-week as an enum over English day names (Monday..Sunday).</summary>
-    public static readonly IReadOnlyList<string> DayNames =
+    private static readonly IReadOnlyList<string> DayNames =
         new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" };
 
     public static Capability DayOfWeek() =>
@@ -100,9 +116,11 @@ public static class WellKnownCapabilities
     public static Capability HomeMode() =>
         Enum(CapabilityIds.HomeMode, Home.WellKnownModes.All, writable: true);
 
-    public static Capability Color(bool writable = true) =>
-        new(CapabilityIds.Color, CapabilityKind.Color,
-            new Dictionary<string, object?> { [CapabilityAttributeKeys.Writable] = writable });
+    /// <summary>Current power-source signal as a writable enum on the Power virtual device (Epic 3C-LM):
+    /// commanding it is how a rule/user tells LoadManager which budget tier applies. Open set — well-known
+    /// values listed (grid/grid_peak/battery/solar/off).</summary>
+    public static Capability PowerSourceCap() =>
+        Enum(CapabilityIds.PowerSource, Home.WellKnownPowerSources.All, writable: true);
 
     /// <summary>Builds a boolean capability.</summary>
     public static Capability Boolean(string id, bool writable) =>

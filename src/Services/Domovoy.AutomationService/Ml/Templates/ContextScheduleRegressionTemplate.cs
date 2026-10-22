@@ -53,12 +53,13 @@ public sealed class ContextScheduleRegressionTemplate : IModelTemplate
         return new TemplateResult(stream.ToArray(), metrics.RootMeanSquaredError, rows.Count, mae, holdoutCount);
     }
 
-    private static (double Mae, int Count) Backtest(IReadOnlyList<ContextSample> rows, int minSamples)
+    // Null score = could not be evaluated (see TemplateResult.HoldoutScore) — never a placeholder number.
+    private static (double? Mae, int Count) Backtest(IReadOnlyList<ContextSample> rows, int minSamples)
     {
         var ordered = rows.OrderBy(r => r.Ticks).ToList();
         var holdoutCount = (int)Math.Round(ordered.Count * 0.2);
         var trainCount = ordered.Count - holdoutCount;
-        if (holdoutCount == 0 || trainCount < minSamples) return (0, 0);
+        if (holdoutCount == 0 || trainCount < minSamples) return (null, 0);
 
         var ml = new MLContext(seed: 0);
         var model = BuildPipeline(ml).Fit(ml.Data.LoadFromEnumerable(ordered.Take(trainCount)));

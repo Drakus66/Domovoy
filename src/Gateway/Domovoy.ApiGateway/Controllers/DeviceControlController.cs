@@ -5,7 +5,9 @@
 using System.Text.Json;
 
 using Domovoy.Contracts.Messaging;
+using Domovoy.Contracts.Security;
 using Domovoy.MessageBus;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Domovoy.ApiGateway.Controllers;
@@ -17,6 +19,7 @@ namespace Domovoy.ApiGateway.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/device-control")]
+[Authorize(Policy = WellKnownPermissions.DevicesControl)]
 public class DeviceControlController : ControllerBase
 {
     private readonly IMessageBus _messageBus;
@@ -54,14 +57,15 @@ public class DeviceControlController : ControllerBase
     }
 
     /// <summary>
-    /// Actor-string for the command's envelope source. Until Phase 3 auth the WebUI may send a
-    /// <b>self-declared</b> local user (Epic 2E model) in the <c>X-Domovoy-User</c> header — "who of the
-    /// household is at this browser", not authentication. With the header: <c>user:{id}</c>, so the
-    /// event-log can attribute the command to that user; without it: the anonymous <c>apigateway</c>.
+    /// Actor-string for the command's envelope source. When authentication is enforced the id comes from the
+    /// verified JWT subject (<c>sub</c>) — real attribution. When auth is off, the WebUI may still send a
+    /// <b>self-declared</b> local user (Epic 2E model) in the <c>X-Domovoy-User</c> header — "who of the household
+    /// is at this browser". Either way it's <c>user:{id}</c>; falling back to the anonymous <c>apigateway</c>.
     /// </summary>
     private string CommandSource()
     {
-        var userId = Request.Headers["X-Domovoy-User"].FirstOrDefault()?.Trim();
+        var userId = User.FindFirst("sub")?.Value
+                     ?? Request.Headers["X-Domovoy-User"].FirstOrDefault()?.Trim();
         if (string.IsNullOrEmpty(userId) || userId.Length > 64 || userId.Contains(':')) return "apigateway";
         return $"user:{userId}";
     }

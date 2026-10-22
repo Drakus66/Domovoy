@@ -1,5 +1,9 @@
 # Logs
-logs
+# Ведущий слэш обязателен: без него `logs` матчит каталог с таким именем на ЛЮБОМ уровне.
+# Именно так из репозитория молча выпал src/components/logs/ с исходниками «Дневника дома» —
+# локально всё собиралось, а CI падал на отсутствующем модуле. То же и для остальных
+# каталогов ниже: все они относятся к корню проекта, а не к произвольному месту в дереве.
+/logs
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -8,8 +12,8 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
-dist-ssr
+/dist
+/dist-ssr
 *.local
 
 # Editor directories and files
@@ -24,4 +28,4 @@ dist-ssr
 *.sw?
 
 # Testing
-coverage
+/coverage

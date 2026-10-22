@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle,
@@ -14,9 +14,13 @@ import DevicesOtherRoundedIcon from '@mui/icons-material/DevicesOtherRounded';
 import SensorsRoundedIcon from '@mui/icons-material/SensorsRounded';
 import ShowChartRoundedIcon from '@mui/icons-material/ShowChartRounded';
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
+import MovieFilterRoundedIcon from '@mui/icons-material/MovieFilterRounded';
+import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import type { CapabilityDevice } from '../../../api/capabilityDevices';
 import type { DashboardItem, DashboardItemType } from '../../../api/dashboards';
+import { scenesApi, type Scene } from '../../../api/scenes';
 import { capabilityLabel, describeDevice } from '../../devices/deviceVisuals';
+import { deviceLabel } from '../../devices/deviceNaming';
 
 /** Chart window presets → aggregation bucket (mirrors the device drawer's trend presets). */
 const CHART_WINDOWS: Record<number, 'minute' | 'hour' | 'day'> = { 6: 'minute', 24: 'hour', 168: 'day' };
@@ -26,6 +30,8 @@ const TYPE_ICONS: Record<DashboardItemType, JSX.Element> = {
   capability: <SensorsRoundedIcon />,
   chart: <ShowChartRoundedIcon />,
   modes: <TuneRoundedIcon />,
+  scene: <MovieFilterRoundedIcon />,
+  energy: <BoltRoundedIcon />,
 };
 
 /**
@@ -48,6 +54,16 @@ export default function AddItemDialog({
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [capabilityId, setCapabilityId] = useState('');
   const [hours, setHours] = useState(24);
+  const [scenes, setScenes] = useState<Scene[]>([]);
+  const [sceneId, setSceneId] = useState('');
+
+  // Scenes (Epic 3B) power the scene tile; load them lazily when the picker opens.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    scenesApi.getScenes().then((s) => { if (!cancelled) setScenes(s); }).catch(() => { /* quiet */ });
+    return () => { cancelled = true; };
+  }, [open]);
 
   const reset = () => {
     setType(null);
@@ -56,14 +72,17 @@ export default function AddItemDialog({
     setDeviceId(null);
     setCapabilityId('');
     setHours(24);
+    setSceneId('');
   };
 
   const close = () => { reset(); onClose(); };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const list = q ? devices.filter((d) => d.name.toLowerCase().includes(q)) : devices;
-    return [...list].sort((a, b) => a.name.localeCompare(b.name));
+    const list = q
+      ? devices.filter((d) => deviceLabel(d).toLowerCase().includes(q) || d.name.toLowerCase().includes(q))
+      : devices;
+    return [...list].sort((a, b) => deviceLabel(a).localeCompare(deviceLabel(b)));
   }, [devices, search]);
 
   const selectedDevice = deviceId ? devices.find((d) => d.id === deviceId) ?? null : null;
@@ -77,6 +96,8 @@ export default function AddItemDialog({
 
   const canAdd =
     type === 'modes' ||
+    type === 'energy' ||
+    (type === 'scene' && sceneId !== '') ||
     (type === 'device' && selectedIds.size > 0) ||
     ((type === 'capability' || type === 'chart') && deviceId !== null && capabilityId !== '');
 
@@ -84,6 +105,10 @@ export default function AddItemDialog({
     if (!type) return;
     if (type === 'modes') {
       onAdd([{ type: 'modes' }]);
+    } else if (type === 'energy') {
+      onAdd([{ type: 'energy' }]);
+    } else if (type === 'scene') {
+      onAdd([{ type: 'scene', params: { sceneId } }]);
     } else if (type === 'device') {
       onAdd(Array.from(selectedIds).map((id) => ({ type: 'device' as const, deviceId: id })));
     } else {
@@ -113,7 +138,7 @@ export default function AddItemDialog({
       <DialogContent dividers sx={{ minHeight: 320 }}>
         {type === null && (
           <List>
-            {(['device', 'capability', 'chart', 'modes'] as DashboardItemType[]).map((option) => (
+            {(['device', 'capability', 'chart', 'modes', 'scene', 'energy'] as DashboardItemType[]).map((option) => (
               <ListItemButton key={option} onClick={() => setType(option)} sx={{ borderRadius: 2 }}>
                 <ListItemIcon>{TYPE_ICONS[option]}</ListItemIcon>
                 <ListItemText
@@ -127,6 +152,30 @@ export default function AddItemDialog({
 
         {type === 'modes' && (
           <Typography variant="body2" color="text.secondary">{t('editor.typeHints.modes')}</Typography>
+        )}
+
+        {type === 'energy' && (
+          <Typography variant="body2" color="text.secondary">{t('editor.typeHints.energy')}</Typography>
+        )}
+
+        {type === 'scene' && (
+          <Stack spacing={1.5}>
+            <Typography variant="body2" color="text.secondary">{t('editor.pickScene')}</Typography>
+            {scenes.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">{t('editor.noScenes')}</Typography>
+            ) : (
+              <List dense sx={{ maxHeight: 260, overflow: 'auto' }}>
+                {scenes.map((s) => (
+                  <ListItemButton key={s.id} onClick={() => setSceneId(s.id)} sx={{ borderRadius: 2 }}>
+                    <ListItemIcon sx={{ minWidth: 34 }}>
+                      <Radio edge="start" size="small" checked={sceneId === s.id} disableRipple tabIndex={-1} />
+                    </ListItemIcon>
+                    <ListItemText primary={s.name} secondary={s.description || undefined} />
+                  </ListItemButton>
+                ))}
+              </List>
+            )}
+          </Stack>
         )}
 
         {(type === 'device' || type === 'capability' || type === 'chart') && (
@@ -157,7 +206,7 @@ export default function AddItemDialog({
                         : <Radio edge="start" size="small" checked={checked} disableRipple tabIndex={-1} />}
                     </ListItemIcon>
                     <ListItemIcon sx={{ minWidth: 34, color: 'text.secondary' }}><Icon fontSize="small" /></ListItemIcon>
-                    <ListItemText primary={device.name} secondary={device.model || device.adapterSource} />
+                    <ListItemText primary={deviceLabel(device)} secondary={device.model || device.adapterSource} />
                   </ListItemButton>
                 );
               })}

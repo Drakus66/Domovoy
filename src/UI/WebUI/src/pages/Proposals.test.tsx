@@ -95,9 +95,28 @@ const mlTaskProposal: Proposal = {
   createdAt: '2026-07-10T12:00:00Z',
 };
 
+const sceneProposal: Proposal = {
+  id: 'p4',
+  kind: 'Scene',
+  status: 'Proposed',
+  title: 'New scene: Лампа прихожей + Люстра at 20:00',
+  source: 'discovery',
+  sceneDraft: {
+    name: 'Лампа прихожей + Люстра',
+    targets: [
+      { deviceId: 'dev-lamp', set: { on_off: true } },
+      { deviceId: 'dev-2', set: { on_off: true } },
+    ],
+  },
+  sceneScheduleCron: '0 20 * * *',
+  evidence: { support: 6, devices: 2, windowDays: 21 },
+  decisionId: '',
+  createdAt: '2026-07-10T12:00:00Z',
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
-  mockedProposals.list.mockResolvedValue([ruleProposal, promotionProposal, mlTaskProposal]);
+  mockedProposals.list.mockResolvedValue([ruleProposal, promotionProposal, mlTaskProposal, sceneProposal]);
   mockedAutomations.getRules.mockResolvedValue([rule]);
   mockedDevices.getDevices.mockResolvedValue([device('dev-motion', 'Датчик прихожей'), device('dev-lamp', 'Лампа прихожей')]);
 });
@@ -123,6 +142,15 @@ describe('Proposals page', () => {
     // MlTask: a training task appears, with the localized title.
     expect(screen.getByText('Начать обучение: Влажность')).toBeInTheDocument();
     expect(screen.getByText(/появится задача обучения/)).toBeInTheDocument();
+  });
+
+  it('renders a scene proposal with its localized title, evidence and scheduled effect', async () => {
+    render(<Proposals />);
+    expect(await screen.findByText('Новая сцена: Лампа прихожей + Люстра')).toBeInTheDocument();
+    expect(screen.getByText(/Вы вручную собирали эту конфигурацию из 2 устройств 6 раз/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/будет создана сцена «Лампа прихожей \+ Люстра» из 2 устройств.*каждый день в 20:00/),
+    ).toBeInTheDocument();
   });
 
   it('shows humanized source chips', async () => {

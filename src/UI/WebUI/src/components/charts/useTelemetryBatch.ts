@@ -1,0 +1,155 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2025-2026 Ilya Dryagin
+// This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
+
+import { useEffect, useState } from 'react';
+import { historyApi, AggregateBucket } from '../../api/history';
+
+/**
+ * Coalescing telemetry loader (roadmap dashboard fill). Many components each ask for one
+ * (device, capability) trend series; instead of an aggregate request per series (an N+1 that hits the
+ * hub's Mongo hard once a device grid renders), this batches every series requested within a short
+ * window into ONE `POST /api/telemetry/aggregate/batch`, caches results per key with a TTL, and
+ * de-duplicates in-flight fetches so the same series is never requested twice concurrently.
+ *
+ * The reusable data primitive the sparklines (Epic C) and composed multi-series charts sit on.
+ */
+
+export interface TelemetryBatchOptions {
+  /** Look-back window in hours (default 24). */
+  hours?: number;
+  bucket?: 'minute' | 'hour' | 'day';
+  agg?: 'avg' | 'min' | 'max';
+  /** Max points kept per series (most-recent). */
+  maxPoints?: number;
+  /** Skip the fetch entirely (e.g. tile not yet in the viewport, or capability is non-numeric). */
+  enabled?: boolean;
+}
+
+type ResolvedOptions = Required<Omit<TelemetryBatchOptions, 'enabled'>>;
+
+const TTL_MS = 60_000;
+const FLUSH_DELAY_MS = 50;
+
+const DEFAULTS: ResolvedOptions = { hours: 24, bucket: 'hour', agg: 'avg', maxPoints: 48 };
+
+// Разделитель ключа — экранированный `\0`, а не литеральный NUL-байт. С литеральным файл
+// определялся как бинарный: он выпадал из grep, из diff в ревью и из подсветки — то есть переставал
+// быть кодом для всех инструментов, кроме компилятора.
+const SEP = '\0';
+
+const keyOf = (deviceId: string, capabilityId: string, o: ResolvedOptions) =>
+  `${deviceId}${SEP}${capabilityId}${SEP}${o.bucket}${SEP}${o.hours}${SEP}${o.agg}${SEP}${o.maxPoints}`;
+
+interface Pending { deviceId: string; capabilityId: string; opts: ResolvedOptions; }
+
+const cache = new Map<string, { buckets: AggregateBucket[]; at: number }>();
+const listeners = new Map<string, Set<(b: AggregateBucket[]) => void>>();
+const pending = new Map<string, Pending>();
+const inFlight = new Set<string>();
+let timer: ReturnType<typeof setTimeout> | null = null;
+
+function notify(key: string, buckets: AggregateBucket[]) {
+  listeners.get(key)?.forEach((fn) => fn(buckets));
+}
+
+function schedule() {
+  if (timer === null) timer = setTimeout(flush, FLUSH_DELAY_MS);
+}
+
+async function flush() {
+  timer = null;
+  if (pending.size === 0) return;
+
+  const batch = [...pending.entries()];
+  pending.clear();
+  batch.forEach(([key]) => inFlight.add(key));
+
+  // One request per distinct (bucket, hours, agg, maxPoints) group — sparklines all share one, so
+  // the common case is a single round-trip regardless of how many tiles are on screen.
+  const groups = new Map<string, [string, Pending][]>();
+  for (const entry of batch) {
+    const o = entry[1].opts;
+    const g = `${o.bucket}${SEP}${o.hours}${SEP}${o.agg}${SEP}${o.maxPoints}`;
+    (groups.get(g) ?? groups.set(g, []).get(g)!).push(entry);
+  }
+
+  await Promise.all([...groups.values()].map(async (entries) => {
+    const { opts } = entries[0][1];
+    const from = new Date(Date.now() - opts.hours * 3600 * 1000).toISOString();
+    const series = entries.map(([, p]) => ({ deviceId: p.deviceId, capabilityId: p.capabilityId }));
+    try {
+      const results = await historyApi.getAggregateBatch({
+        series, from, bucket: opts.bucket, agg: opts.agg, maxPoints: opts.maxPoints,
+      });
+      const byPair = new Map(results.map((r) => [`${r.deviceId}${SEP}${r.capabilityId}`, r.buckets]));
+      for (const [key, p] of entries) {
+        const buckets = byPair.get(`${p.deviceId}${SEP}${p.capabilityId}`) ?? [];
+        cache.set(key, { buckets, at: Date.now() });
+        inFlight.delete(key);
+        notify(key, buckets);
+      }
+    } catch {
+      // A failed batch hides its sparklines (empty series) but is NOT cached, so it can retry later.
+      for (const [key] of entries) {
+        inFlight.delete(key);
+        notify(key, []);
+      }
+    }
+  }));
+}
+
+/** Reset all module-level state — test seam only. */
+export function __resetTelemetryBatch() {
+  cache.clear();
+  listeners.clear();
+  pending.clear();
+  inFlight.clear();
+  if (timer !== null) { clearTimeout(timer); timer = null; }
+}
+
+/**
+ * Subscribe to one (device, capability) trend series. Returns the buckets (null while loading) and a
+ * loading flag. Coalesces with every other series requested in the same tick.
+ */
+export function useTelemetryBatch(
+  deviceId: string | undefined,
+  capabilityId: string | undefined,
+  options: TelemetryBatchOptions = {},
+): { buckets: AggregateBucket[] | null; loading: boolean } {
+  const { enabled = true, ...rest } = options;
+  const opts: ResolvedOptions = { ...DEFAULTS, ...rest };
+  const [buckets, setBuckets] = useState<AggregateBucket[] | null>(null);
+
+  const active = enabled && !!deviceId && !!capabilityId;
+  const key = active ? keyOf(deviceId!, capabilityId!, opts) : '';
+
+  useEffect(() => {
+    if (!active) { setBuckets(null); return; }
+
+    const fresh = cache.get(key);
+    if (fresh && Date.now() - fresh.at < TTL_MS) {
+      setBuckets(fresh.buckets);
+      return;
+    }
+
+    const cb = (b: AggregateBucket[]) => setBuckets(b);
+    (listeners.get(key) ?? listeners.set(key, new Set()).get(key)!).add(cb);
+
+    // Only queue a fetch if this key is neither already pending this flush nor in-flight.
+    if (!pending.has(key) && !inFlight.has(key)) {
+      pending.set(key, { deviceId: deviceId!, capabilityId: capabilityId!, opts });
+      schedule();
+    }
+
+    return () => {
+      const set = listeners.get(key);
+      set?.delete(cb);
+      if (set && set.size === 0) listeners.delete(key);
+    };
+    // opts is captured through `key`, which already encodes every option value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, active]);
+
+  return { buckets, loading: active && buckets === null };
+}

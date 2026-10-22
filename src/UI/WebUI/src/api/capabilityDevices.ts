@@ -3,6 +3,7 @@
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
 import apiClient from './client';
+import type { LoadSheddingProfile } from './loadManagement';
 
 export type CapabilityKind = 'Boolean' | 'Number' | 'Enum' | 'Color' | 'Text' | 'Action';
 
@@ -20,12 +21,35 @@ export interface Capability {
   values?: string[] | null;
   /** UI editor hint for a writable value: 'geo' (map picker) | 'time' (time input). */
   editor?: string | null;
+  /** True for a series the platform derives rather than the device reporting it (Epic 3C-D power/energy). */
+  synthetic?: boolean;
+}
+
+/** Per-device energy accounting (matches DbGateway EnergyProfile, Epic 3C-D). */
+export interface EnergyProfile {
+  /** Count this device toward kWh totals; null ⇒ default (metered devices count, others don't). */
+  track?: boolean | null;
+  /** 'mains' (aggregate meter, grand total only) | 'consumer' | null (a normal load). */
+  role?: string | null;
+  /** Draw at full load, W — the nameplate figure; required to estimate a device with no meter. */
+  maxPowerW?: number | null;
+  /** Draw at the regulator's minimum while on, W. */
+  minPowerW?: number | null;
+  /** Draw while off, W (standby). */
+  standbyPowerW?: number | null;
+  /** Numeric capability (0..100) that scales the draw; null ⇒ auto-detected regulator or full load. */
+  scaleCapabilityId?: string | null;
+  /** Circuit of the power topology this device hangs on (Epic 3C-D stage 2). */
+  circuitId?: string | null;
 }
 
 /** Capability device read-model (matches DbGateway CapabilityDeviceDocument). */
 export interface CapabilityDevice {
   id: string;
+  /** Raw name reported by the adapter (a Zigbee IEEE address for paired Zigbee devices). */
   name: string;
+  /** User-set friendly name (Epic 3G-alias); null/absent ⇒ UI falls back to a type label / the raw name. */
+  alias?: string | null;
   adapterSource: string;
   model?: string | null;
   zoneId: string;
@@ -36,14 +60,25 @@ export interface CapabilityDevice {
   autoArchetype?: string;
   /** Manual override; null/absent ⇒ use autoArchetype. */
   archetype?: string | null;
+  /** Energy accounting for this device (Epic 3C-D); null/absent ⇒ defaults. */
+  energyProfile?: EnergyProfile | null;
+  /** Load-shedding profile (Epic 3C-LM); null/absent ⇒ unmanaged by LoadManager. */
+  loadShedding?: LoadSheddingProfile | null;
   lastUpdated: string;
 }
 
-/** Well-known device archetypes (mirrors Domovoy.Contracts DeviceArchetypes, Epic 2D). */
-export const DEVICE_ARCHETYPES = [
+/**
+ * Запасной список архетипов — на случай, если словарь ещё не приехал с сервера.
+ *
+ * Раньше это была ЕДИНСТВЕННАЯ копия, и она успела отстать от `Domovoy.Contracts.DeviceArchetypes`
+ * на три значения (`tariff`, `person`, `presence`): выпадающий список не предлагал типов, которые
+ * система назначает сама. Авторитетный источник теперь один — `GET /api/capability-devices/archetypes`.
+ */
+export const DEVICE_ARCHETYPES_FALLBACK = [
   'light', 'switch', 'thermostat', 'climate_sensor', 'motion', 'contact',
-  'lock', 'valve', 'energy_meter', 'sensor', 'control_block', 'sun', 'clock', 'calendar', 'unknown',
-] as const;
+  'lock', 'valve', 'energy_meter', 'sensor', 'control_block', 'sun', 'clock', 'calendar',
+  'tariff', 'person', 'presence', 'unknown',
+];
 
 /** Effective archetype = manual override if set, else the auto-inferred value. */
 export const effectiveArchetype = (d: CapabilityDevice): string => d.archetype || d.autoArchetype || 'unknown';
@@ -52,6 +87,10 @@ export const capabilityDevicesApi = {
   /** List capability devices (Zigbee, native and emulator devices, normalized). */
   getDevices: (): Promise<CapabilityDevice[]> =>
     apiClient.get<CapabilityDevice[]>('/api/capability-devices').then((r) => r.data),
+
+  /** Известные архетипы прямо из контракта — чтобы интерфейс не хранил расходящуюся копию. */
+  getArchetypes: (): Promise<string[]> =>
+    apiClient.get<string[]>('/api/capability-devices/archetypes').then((r) => r.data),
 
   /**
    * Send a capability-addressed command, e.g. { on_off: true, brightness: 50 }.
@@ -73,7 +112,32 @@ export const capabilityDevicesApi = {
     apiClient
       .put(`/api/capability-devices/${encodeURIComponent(deviceId)}/archetype`, { archetype })
       .then(() => undefined),
+
+  /** Set the user-facing friendly name (Epic 3G-alias); pass null/'' to clear (revert to the type label). */
+  setAlias: (deviceId: string, alias: string | null): Promise<void> =>
+    apiClient
+      .put(`/api/capability-devices/${encodeURIComponent(deviceId)}/alias`, { alias })
+      .then(() => undefined),
+
+  /**
+   * Remove an offline device from the registry (409 while online). Reversible by design: if the
+   * device powers back up it re-announces and goes through discovery again as a fresh arrival.
+   */
+  deleteDevice: (deviceId: string): Promise<void> =>
+    apiClient
+      .delete(`/api/capability-devices/${encodeURIComponent(deviceId)}`)
+      .then(() => undefined),
 };
+
+/**
+ * Infrastructure devices: platform virtual sensors (sun/time/calendar/home) and control-block
+ * projections. They stay first-class everywhere a device can be referenced (rule editors,
+ * dashboard pickers, the registry's "service" toggle) but are kept off the home-screen tabs.
+ */
+export const SERVICE_ADAPTER_SOURCES = ['System', 'ControlBlock'] as const;
+
+export const isServiceDevice = (d: CapabilityDevice): boolean =>
+  (SERVICE_ADAPTER_SOURCES as readonly string[]).includes(d.adapterSource);
 
 /** Guid.Empty / blank zone ids both mean "unassigned". */
 export const isUnassignedZone = (zoneId?: string | null): boolean =>

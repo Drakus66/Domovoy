@@ -80,6 +80,33 @@ public class PluginSettingsServiceTests
         Assert.Equal("simulated", svc.Get("provider", "")); // unchanged
     }
 
+    /// <summary>
+    /// Дискриминатор коэрсии — <c>typeof(T)</c>, а не <c>default(T)</c>. Для строки <c>default(T)</c>
+    /// равен <c>null</c>, поэтому строковая ветка была недостижима: нестроковое значение, сохранённое для
+    /// строковой настройки, уходило в <c>Deserialize&lt;string&gt;()</c>, бросало и молча превращалось в
+    /// fallback вместо своего исходного текста.
+    /// </summary>
+    [Theory]
+    [InlineData("\"tomtom\"", "tomtom")]
+    [InlineData("42", "42")]
+    [InlineData("true", "true")]
+    [InlineData("{\"a\":1}", "{\"a\":1}")]
+    public void Coerce_to_string_keeps_the_raw_text_of_a_non_string_element(string json, string expected) =>
+        Assert.Equal(expected, PluginSettingsService.Coerce(JsonDocument.Parse(json).RootElement, "fallback"));
+
+    [Theory]
+    [InlineData("60", 60.0)]
+    [InlineData("\"60.5\"", 60.5)]
+    public void Coerce_to_number_reads_both_forms(string json, double expected) =>
+        Assert.Equal(expected, PluginSettingsService.Coerce(JsonDocument.Parse(json).RootElement, 0.0));
+
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    [InlineData("\"true\"", true)]
+    public void Coerce_to_bool_reads_both_forms(string json, bool expected) =>
+        Assert.Equal(expected, PluginSettingsService.Coerce(JsonDocument.Parse(json).RootElement, false));
+
     /// <summary>Minimal in-memory bus that captures the applied-subscription handler and records publishes.</summary>
     private sealed class FakeBus : IMessageBus
     {

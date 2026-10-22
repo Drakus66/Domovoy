@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-using MQTTnet.Client;
+using MQTTnet;
 
 namespace Domovoy.Connectivity.Adapters;
 
@@ -17,6 +17,14 @@ public interface IProtocolAdapter
 
     Task StartAsync(IMqttClient mqttClient, CancellationToken token);
     Task StopAsync(CancellationToken token);
+
+    /// <summary>
+    /// (Re)establish this adapter's MQTT topic subscriptions on the given client. Called once by
+    /// <see cref="StartAsync"/> and again after every MQTT reconnect — a clean-session client loses its
+    /// subscriptions when the connection drops, so the manager re-runs this to restore them. One-time setup
+    /// (bus subscriptions, background loops) belongs in <see cref="StartAsync"/>, not here. Default: nothing.
+    /// </summary>
+    Task SubscribeAsync(IMqttClient mqttClient, CancellationToken token) => Task.CompletedTask;
 
     /// <summary>True if this adapter owns the given MQTT topic.</summary>
     bool CanHandleTopic(string topic);

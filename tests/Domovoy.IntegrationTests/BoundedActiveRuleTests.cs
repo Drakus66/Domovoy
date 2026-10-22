@@ -65,9 +65,16 @@ public sealed class BoundedActiveRuleTests
     private static ActionExecutor Executor(IMessageBus bus, int cooldownSeconds)
     {
         var dispatcher = new NotificationDispatcher(
-            Array.Empty<INotificationChannel>(), NullLogger<NotificationDispatcher>.Instance);
+            Array.Empty<INotificationChannel>(), new NotificationRuntimeState(), NullLogger<NotificationDispatcher>.Instance);
         var options = Options.Create(new AutomationOptions { BoundedActiveCooldownSeconds = cooldownSeconds });
-        return new ActionExecutor(bus, dispatcher, options, NullLogger<ActionExecutor>.Instance);
+        // Empty scene store (never refreshed) — these tests use Command actions, not scenes.
+        var scenes = new SceneStore(
+            new DbGatewayClient(new HttpClient(), NullLogger<DbGatewayClient>.Instance),
+            NullLogger<SceneStore>.Instance);
+        // Epic 3E: ActionExecutor now also needs the registry (WaitForEvent already-matches check) and the
+        // in-process event broker (WaitForEvent waiters). These tests use Command actions, so both stay idle.
+        return new ActionExecutor(bus, dispatcher, scenes, new DeviceRegistry(), new DeviceEventBroker(),
+            options, NullLogger<ActionExecutor>.Instance);
     }
 
     private static AutomationRule CommandRule(RuleStatus status) => new()

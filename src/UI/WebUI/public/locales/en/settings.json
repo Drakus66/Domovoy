@@ -34,8 +34,46 @@
     "save": "Save calendar",
     "saved": "Calendar saved.",
     "days": {
-      "mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri", "sat": "Sat", "sun": "Sun"
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
     }
+  },
+  "backups": {
+    "title": "Backups",
+    "caption": "A full home backup in one archive: devices, rules, history, ML models, dashboards and plugin settings. Restoring returns the home to the bundle's state and restarts the services. The Zigbee radio network (coordinator) is backed up separately — see the documentation.",
+    "auto": "Automatic daily backup",
+    "time": "Time",
+    "keep": "Copies to keep",
+    "save": "Save schedule",
+    "saved": "Backup schedule saved.",
+    "lastRun": "Last backup: {{time}} — ok ({{file}}).",
+    "lastRunError": "Last backup at {{time}} failed: {{error}}",
+    "lastRunNever": "No backups yet.",
+    "runNow": "Back up now",
+    "ran": "Backup created: {{file}}",
+    "upload": "Upload a bundle",
+    "uploaded": "Bundle uploaded: {{file}}. You can now restore it from the list.",
+    "list": "Copies",
+    "empty": "No copies yet.",
+    "download": "Download",
+    "restore": "Restore",
+    "delete": "Delete",
+    "restoreConfirm": "Restore the home from {{file}}? Current data will be replaced and all services will restart.",
+    "restored": "Restored {{file}} ({{documents}} records). Services are restarting…",
+    "deleteConfirm": "Delete backup {{file}}?",
+    "invalid": "corrupt bundle",
+    "reason": {
+      "manual": "manual",
+      "scheduled": "scheduled",
+      "upload": "uploaded"
+    },
+    "busy": "A backup or restore is already running — try again shortly.",
+    "error": "The backup operation failed."
   },
   "appearance": {
     "title": "Appearance",
@@ -46,5 +84,125 @@
     "caption": "For the activity log: commands from this browser will be attributed to the selected resident. This is not a login — real authentication comes in Phase 3.",
     "label": "User",
     "anonymous": "Not set (anonymous)"
+  },
+  "updates": {
+    "title": "Updates",
+    "caption": "Update channel, component versions, and updating the system in one press."
+  },
+  "tariff": {
+    "title": "Electricity tariff",
+    "caption": "Static tariff zones (T1/T2/T3) — for money and the cheap-hours block. Works offline.",
+    "currency": "Currency",
+    "defaultPrice": "Default price",
+    "zones": "Tariff zones",
+    "zoneName": "Name",
+    "price": "Price",
+    "addZone": "Add zone",
+    "removeZone": "Remove zone",
+    "addInterval": "Add window",
+    "removeInterval": "Remove window",
+    "from": "From",
+    "to": "To",
+    "hint": "A zone with no windows is always active. If “To” ≤ “From”, the window wraps past midnight (e.g. 23:00→07:00).",
+    "noZones": "No zones — the default price applies (single-rate tariff).",
+    "save": "Save tariff",
+    "saved": "Tariff saved",
+    "kwh": "kWh"
+  },
+  "powerTopology": {
+    "title": "Electrical topology",
+    "caption": "Supplies, panels and breaker circuits with their phases — the tree behind the per-circuit and per-phase breakdown, the balance check against meters, and per-phase limits.",
+    "hint": "Build the tree: supply → panel → circuit. A device is attached to a circuit from its own card; the phase is inherited from the circuit.",
+    "name": "Name",
+    "kind": "Node kind",
+    "kinds": {
+      "supply": "Supply",
+      "panel": "Panel",
+      "circuit": "Circuit (breaker)"
+    },
+    "add": {
+      "supply": "Supply",
+      "panel": "Panel",
+      "circuit": "Circuit"
+    },
+    "newNames": {
+      "supply": "Supply",
+      "panel": "Panel",
+      "circuit": "Circuit"
+    },
+    "parent": "Fed from",
+    "noParent": "None (root)",
+    "phase": "Phase",
+    "phaseInherit": "Same as parent",
+    "phases": {
+      "l1": "L1",
+      "l2": "L2",
+      "l3": "L3",
+      "three": "Three-phase"
+    },
+    "breaker": "Breaker",
+    "meter": "Node meter",
+    "noMeter": "No meter",
+    "delete": "Delete node",
+    "loadError": "Could not load the electrical topology",
+    "saveError": "Could not save the change"
+  },
+  "loadManagement": {
+    "title": "Load management",
+    "caption": "Cap the house's total power draw by power source — sheds non-critical loads over budget. Off by default.",
+    "enabled": "Enable load management",
+    "hint": "An empty budget list is a no-op even when enabled. Priorities and protection are set per device in the device drawer.",
+    "phaseLimits": "Per-phase limits",
+    "phaseLimitsHint": "For a three-phase intake: empty ⇒ the limit comes from the intake breaker's rating in the electrical topology. A circuit's limit comes from its own breaker.",
+    "budgets": "Budgets by power source",
+    "noBudgets": "No budgets — nothing is limited.",
+    "powerSource": "Power source",
+    "powerSources": {
+      "grid": "Grid",
+      "grid_peak": "Grid (peak tariff)",
+      "battery": "Battery/UPS",
+      "solar": "Solar",
+      "off": "No power"
+    },
+    "limitWatts": "Limit",
+    "watts": "W",
+    "seconds": "s",
+    "addBudget": "Add budget",
+    "removeBudget": "Remove budget",
+    "restoreMargin": "Restore margin",
+    "minDwell": "Minimum dwell",
+    "save": "Save",
+    "saved": "Settings saved"
+  },
+  "intelligence": {
+    "title": "Intelligence layer",
+    "caption": "Control learning, model-driven governance and proactive suggestions.",
+    "enabled": "Intelligence layer",
+    "enabledHint": "Off pauses everything: training, model-driven control (governors fall back to Shadow) and all suggestions. Nothing is lost — turn it back on to resume.",
+    "proposals": "Proactive suggestions",
+    "proposalsHint": "Off keeps learning and control running but stops the system proposing new rules, scenes and models on its own. The manual scan buttons still work.",
+    "minHistoryDays": "History before suggesting, days",
+    "minHistoryDaysHint": "On a fresh install the suggesters stay quiet until this much history has accrued — the ML page shows the progress.",
+    "save": "Save",
+    "saved": "Settings saved"
+  },
+  "notifications": {
+    "title": "Notification discipline",
+    "caption": "Where and how often notifications arrive; safety always gets through.",
+    "hint": "By default every enabled channel gets everything. Uncheck to mute a category on a channel. Safety (critical) notifications ignore the mute and the rate-limit.",
+    "routing": "Per-type routing",
+    "category": "Category",
+    "categories": {
+      "reactive": "Reactive",
+      "proactive": "Proactive",
+      "optimization": "Optimization"
+    },
+    "noChannels": "No delivery channels registered.",
+    "rateLimit": "Rate-limit (min repeat interval, s)",
+    "rateLimitHint": "A repeat of the same notification within the window is dropped — against \"cry wolf\". Safety is never rate-limited.",
+    "safetyFloor": "Safety floor",
+    "safetyFloorHint": "A critical (safety) notification always reaches at least one prominent channel, even if it's muted.",
+    "save": "Save",
+    "saved": "Settings saved"
   }
 }

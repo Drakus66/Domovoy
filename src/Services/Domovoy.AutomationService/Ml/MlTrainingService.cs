@@ -25,8 +25,10 @@ public sealed class MlTrainingService : BackgroundService
 {
     private readonly DbGatewayClient _db;
     private readonly ModelTemplateRegistry _templates;
+    private readonly CapabilityKindResolver _kinds;
     private readonly MlModelService _models;
     private readonly ZoneCache _zones;
+    private readonly MlRuntimeState _runtime;
     private readonly AutomationOptions _options;
     private readonly ILogger<MlTrainingService> _logger;
 
@@ -35,14 +37,20 @@ public sealed class MlTrainingService : BackgroundService
     private const int PageSize = 5000;
     private const int MaxTrainSamples = 100_000;
 
+    // The scorecard series is thinned to this many points for charting (the window itself stays whole — see
+    // Downsample). Enough to read the shape of a month; small enough for the browser.
+    private const int MaxBacktestPoints = 2000;
+
     public MlTrainingService(
-        DbGatewayClient db, ModelTemplateRegistry templates, MlModelService models, ZoneCache zones,
-        IOptions<AutomationOptions> options, ILogger<MlTrainingService> logger)
+        DbGatewayClient db, ModelTemplateRegistry templates, CapabilityKindResolver kinds, MlModelService models,
+        ZoneCache zones, MlRuntimeState runtime, IOptions<AutomationOptions> options, ILogger<MlTrainingService> logger)
     {
         _db = db;
         _templates = templates;
+        _kinds = kinds;
         _models = models;
         _zones = zones;
+        _runtime = runtime;
         _options = options.Value;
         _logger = logger;
     }
@@ -88,10 +96,15 @@ public sealed class MlTrainingService : BackgroundService
         using var timer = new PeriodicTimer(refresh);
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await TrainDueTasksAsync(stoppingToken); }
-            catch (Exception ex) { _logger.LogError(ex, "Scheduled training cycle failed"); }
+            // Epic 3I: the master switch pauses training AND model (re)loading. Serving is already gated in
+            // MlModelService, so a disabled layer simply stops all ML work until re-enabled — no restart needed.
+            if (_runtime.LayerEnabled)
+            {
+                try { await TrainDueTasksAsync(stoppingToken); }
+                catch (Exception ex) { _logger.LogError(ex, "Scheduled training cycle failed"); }
 
-            await _models.RefreshAsync(stoppingToken);
+                await _models.RefreshAsync(stoppingToken);
+            }
             if (!await timer.WaitForNextTickAsync(stoppingToken)) break;
         }
     }
@@ -104,13 +117,32 @@ public sealed class MlTrainingService : BackgroundService
         if (tasks is null) return;
 
         var now = DateTime.UtcNow;
+        var trained = 0;
         foreach (var task in tasks.Where(t => t.Enabled))
         {
             var last = task.Status?.LastTrainAt ?? DateTime.MinValue;
             if ((now - last).TotalHours < task.TrainIntervalHours) continue;
 
-            try { await TrainTaskAsync(task, ct); }
+            try
+            {
+                var result = await TrainTaskAsync(task, ct);
+                if (result.Trained) trained++;
+            }
             catch (Exception ex) { _logger.LogError(ex, "Training task {Target} failed", task.TargetCapability); }
+        }
+
+        // Epic 3I: give the ML journal a "trainer ran" pulse — only on cycles that actually trained a due task,
+        // so the every-10-minutes tick that finds nothing due stays silent. Per-task detail lives on the task card.
+        if (trained > 0)
+        {
+            await _db.WriteMlActivityAsync(new MlActivityEntry
+            {
+                Source = MlActivitySources.Trainer,
+                Outcome = MlActivityOutcomes.Ok,
+                Reason = "trained",
+                Note = $"retrained {trained} task(s)",
+                Metrics = new Dictionary<string, double> { ["tasks"] = trained },
+            }, ct);
         }
     }
 
@@ -172,7 +204,7 @@ public sealed class MlTrainingService : BackgroundService
     {
         var from = DateTime.UtcNow.AddDays(-task.WindowDays);
 
-        var targetKind = CapabilityKindResolver.KindOf(task.TargetCapability);
+        var targetKind = _kinds.KindOf(task.TargetCapability);
         var candidates = _templates.ForTarget(targetKind);
         if (candidates.Count == 0)
             return (new TrainResult(false, $"no template for {task.TargetCapability}", null), 0, 0);
@@ -183,7 +215,7 @@ public sealed class MlTrainingService : BackgroundService
             ?? (IReadOnlyList<(DateTime At, string Mode)>)Array.Empty<(DateTime At, string Mode)>();
 
         // 1) Global model — always trained; its absence fails the whole run.
-        var global = await LoadSeriesAsync(task, targetKind, from, null, modeTimeline, ct);
+        var global = await LoadSeriesAsync(task, targetKind, from, ModelScope.Global, null, modeTimeline, ct);
         if (global is null)
             return (new TrainResult(false, "training data unavailable", null), 0, 0);
         if (global.Count < task.MinSamples)
@@ -203,32 +235,40 @@ public sealed class MlTrainingService : BackgroundService
             : 0;
 
         await _models.RefreshAsync(ct);
+        var score = selected.Value.Result.HoldoutScore;
         _logger.LogInformation(
-            "Trained {Name} on {Count} samples ({Metric} {Score:0.###}); +{Zones} zone model(s)",
+            "Trained {Name} on {Count} samples ({Metric} {Score}); +{Zones} zone model(s)",
             registeredGlobal.Name, selected.Value.Result.SampleCount, registeredGlobal.Metric,
-            registeredGlobal.HoldoutScore, zoneModels);
+            score?.ToString("0.###") ?? "not evaluated", zoneModels);
+
+        // The status message is the task card's "why" channel — say it plainly when the window was too thin to
+        // hold out a slice, because that model's quality is unknown rather than perfect (and no zone can be
+        // promoted against an unknown fallback).
         var message = zoneModels > 0 ? $"ok (+{zoneModels} zone models)" : "ok";
+        if (score is null) message += " — holdout not evaluated (too little history)";
         return (new TrainResult(true, message, registeredGlobal), global.Count, 1 + zoneModels);
     }
 
     // Fit shared zone-kind models (the fallbacks) and per-zone models that beat their fallback by the margin.
     private async Task<int> TrainZoneScopesAsync(
         MlTask task, IReadOnlyList<IModelTemplate> candidates, CapabilityKind targetKind, DateTime from,
-        IReadOnlyList<(DateTime At, string Mode)> modeTimeline, double globalScore, CancellationToken ct)
+        IReadOnlyList<(DateTime At, string Mode)> modeTimeline, double? globalScore, CancellationToken ct)
     {
         var registered = 0;
-        var kindFallbackScore = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        // Null = that fallback's holdout could not be evaluated; a zone is then not promoted against it.
+        var kindFallbackScore = new Dictionary<string, double?>(StringComparer.OrdinalIgnoreCase);
 
         // Shared per-zone-kind models (always registered when they train — they are the fallbacks).
         foreach (var kind in _zones.Kinds())
         {
-            var samples = await CollectZoneSeries(task, _zones.ZonesOfKind(kind), targetKind, from, modeTimeline, ct);
+            var scope = ModelScope.ZoneKind(kind);
+            var samples = await CollectZoneSeries(task, scope, _zones.ZonesOfKind(kind), targetKind, from, modeTimeline, ct);
             if (samples.Count < task.MinSamples) continue;
 
             var sel = SelectBest(candidates, samples, task.MinSamples);
             if (sel is null) continue;
 
-            if (await RegisterAsync(task, sel.Value, ModelScope.ZoneKind(kind), ct) is not null)
+            if (await RegisterAsync(task, sel.Value, scope, ct) is not null)
             {
                 kindFallbackScore[kind] = sel.Value.Result.HoldoutScore;
                 registered++;
@@ -238,7 +278,8 @@ public sealed class MlTrainingService : BackgroundService
         // Per-zone models — promoted only when they beat their fallback (zone_kind, else global).
         foreach (var zoneId in _zones.AllZoneIds())
         {
-            var samples = await CollectZoneSeries(task, new[] { zoneId }, targetKind, from, modeTimeline, ct);
+            var zoneScope = ModelScope.Zone(zoneId);
+            var samples = await CollectZoneSeries(task, zoneScope, new[] { zoneId }, targetKind, from, modeTimeline, ct);
             if (samples.Count < task.MinSamples) continue;
 
             var sel = SelectBest(candidates, samples, task.MinSamples);
@@ -249,7 +290,7 @@ public sealed class MlTrainingService : BackgroundService
             if (!ModelTemplateRegistry.ShouldPromote(sel.Value.Template, sel.Value.Result.HoldoutScore, fallback, task.ZonePromotionMargin))
                 continue;
 
-            if (await RegisterAsync(task, sel.Value, ModelScope.Zone(zoneId), ct) is not null)
+            if (await RegisterAsync(task, sel.Value, zoneScope, ct) is not null)
                 registered++;
         }
 
@@ -283,8 +324,10 @@ public sealed class MlTrainingService : BackgroundService
             Scope = scope,
             SampleCount = r.SampleCount,
             Rmse = r.InSampleError,
-            HoldoutMae = template.Metric == "MAE" ? r.HoldoutScore : 0, // back-compat (regression only)
-            HoldoutScore = r.HoldoutScore,
+            // An unevaluated holdout persists as 0 with HoldoutSampleCount 0 — the contract's documented way of
+            // saying "not evaluated". Selection/promotion never see this 0: they compare TemplateResult's nullable.
+            HoldoutMae = template.Metric == "MAE" ? r.HoldoutScore ?? 0 : 0, // back-compat (regression only)
+            HoldoutScore = r.HoldoutScore ?? 0,
             HoldoutSampleCount = r.HoldoutCount,
             Metric = template.Metric,
             Features = template.Features,
@@ -294,13 +337,13 @@ public sealed class MlTrainingService : BackgroundService
     }
 
     private async Task<List<LabeledSample>> CollectZoneSeries(
-        MlTask task, IReadOnlyList<string> zoneIds, CapabilityKind targetKind, DateTime from,
+        MlTask task, ModelScope scope, IReadOnlyList<string> zoneIds, CapabilityKind targetKind, DateTime from,
         IReadOnlyList<(DateTime At, string Mode)> modeTimeline, CancellationToken ct)
     {
         var all = new List<LabeledSample>();
         foreach (var zoneId in zoneIds)
         {
-            var s = await LoadSeriesAsync(task, targetKind, from, zoneId, modeTimeline, ct);
+            var s = await LoadSeriesAsync(task, targetKind, from, scope, zoneId, modeTimeline, ct);
             if (s is not null) all.AddRange(s);
         }
         return all;
@@ -309,10 +352,11 @@ public sealed class MlTrainingService : BackgroundService
     /// <summary>
     /// Load the labeled training series for the task's target (roadmap Epic 2I, Phase 1): numeric targets read
     /// telemetry (sensor_readings); boolean targets read state-change events and encode them 0/1. Optionally
-    /// zone-scoped. Null only when the source is unreachable.
+    /// zone-scoped. Null only when the source is unreachable. <paramref name="scope"/> is the scope the model
+    /// being trained will serve — it decides which input features may feed it (feature locality).
     /// </summary>
     private async Task<List<LabeledSample>?> LoadSeriesAsync(
-        MlTask task, CapabilityKind targetKind, DateTime from, string? zoneId,
+        MlTask task, CapabilityKind targetKind, DateTime from, ModelScope scope, string? zoneId,
         IReadOnlyList<(DateTime At, string Mode)> modeTimeline, CancellationToken ct)
     {
         if (targetKind == CapabilityKind.Number)
@@ -321,9 +365,11 @@ public sealed class MlTrainingService : BackgroundService
                 (hi, token) => _db.GetTelemetryAsync(task.TargetCapability, from, PageSize, token, zoneId, hi),
                 s => s.Timestamp, ct);
             if (telemetry is null) return null;
-            // Attach the home mode in effect at each sample (Epic 2B context-join) for the context template.
+            // Attach the home mode in effect at each sample (Epic 2B context-join) for the context template —
+            // through the spatial feature-locality policy (Epic 2I), which is what decides that an ambient
+            // signal like the mode may feed a model of this scope at all.
             var rows = telemetry.Select(s => new LabeledSample(s.Timestamp, s.Value)).ToList();
-            return ContextFeatureJoin.WithMode(rows, modeTimeline);
+            return ContextFeatureJoin.WithAdmissibleMode(rows, modeTimeline, scope, _zones.KindOf);
         }
 
         // Boolean/enum targets are labeled from the event-log: booleans encode to 0/1, enums keep the class.
@@ -391,7 +437,7 @@ public sealed class MlTrainingService : BackgroundService
     public async Task<DataCheck> CheckDataAsync(string target, int windowDays, int minSamples, bool zones, CancellationToken ct)
     {
         var from = DateTime.UtcNow.AddDays(-Math.Max(1, windowDays));
-        var kind = CapabilityKindResolver.KindOf(target);
+        var kind = _kinds.KindOf(target);
         var numeric = kind == CapabilityKind.Number;
         var templateAvailable = _templates.ForTarget(kind).Count > 0;
 
@@ -429,10 +475,6 @@ public sealed class MlTrainingService : BackgroundService
 
     // ===== Backtest (Epic 2B / 2P) =====
 
-    /// <summary>Backtest the options-default target's global model (back-compat overload).</summary>
-    public Task<Backtest> BacktestAsync(int days, CancellationToken ct) =>
-        BacktestAsync(_options.TrainCapability, null, null, days, ct);
-
     /// <summary>
     /// Score the serving model of (target, scope) against recent history (roadmap Epic 2B/2P) — "prediction vs
     /// fact". Numeric targets compare predicted vs measured values; boolean targets compare the predicted
@@ -447,7 +489,7 @@ public sealed class MlTrainingService : BackgroundService
         if (model is null) return new Backtest(null, Array.Empty<BacktestPoint>());
 
         var from = DateTime.UtcNow.AddDays(-Math.Max(1, days));
-        var targetKind = CapabilityKindResolver.KindOf(target);
+        var targetKind = _kinds.KindOf(target);
         var chain = new[] { scope }; // strictly this scope's model — the scorecard scores what it serves
 
         if (targetKind == CapabilityKind.Enum)
@@ -482,13 +524,45 @@ public sealed class MlTrainingService : BackgroundService
                 .ToList();
         }
 
-        var points = new List<BacktestPoint>(series.Count);
-        foreach (var (timestamp, actual) in series.OrderBy(s => s.Timestamp))
+        // A context model must be scored against the mode that was in effect at each point, not today's — see
+        // MlModelService.BuildPredictors. Fetched only for the kind that has mode features.
+        var modeTimeline = model.Kind == MlModelKinds.ScheduleRegressionContext
+            ? (await _db.GetModeTimelineAsync(from, PageSize, ct))?.OrderBy(x => x.At).ToList()
+            : null;
+
+        var ordered = Downsample(series.OrderBy(s => s.Timestamp).ToList());
+        var points = new List<BacktestPoint>(ordered.Count);
+        foreach (var (timestamp, actual) in ordered)
         {
-            if (_models.TryPredict(target, new DateTimeOffset(timestamp, TimeSpan.Zero), chain, 0, out var predicted))
+            var contextMode = modeTimeline is null
+                ? null
+                : ContextFeatureJoin.ModeAt(timestamp, modeTimeline) ?? ContextScheduleRegressionTemplate.NoMode;
+            if (_models.TryPredict(target, new DateTimeOffset(timestamp, TimeSpan.Zero), chain, 0, contextMode, out var predicted))
                 points.Add(new BacktestPoint(timestamp, Math.Round((double)predicted, 2), Math.Round(actual, 2)));
         }
         return new Backtest(model, points);
+    }
+
+    /// <summary>
+    /// Thin a fully-paged history down to a chart-sized series by even stride, keeping the first and last point
+    /// so the line still spans the whole requested window. The scorecard is a shape ("does the prediction
+    /// follow reality"), and a month of per-minute telemetry is tens of thousands of points nobody can read and
+    /// the browser renders badly — but thinning is not the same as cutting the window short, which is what the
+    /// unpaged version silently did.
+    /// </summary>
+    private List<(DateTime Timestamp, double Actual)> Downsample(List<(DateTime Timestamp, double Actual)> ordered)
+    {
+        if (ordered.Count <= MaxBacktestPoints) return ordered;
+
+        var stride = (int)Math.Ceiling(ordered.Count / (double)MaxBacktestPoints);
+        var thinned = new List<(DateTime, double)>(MaxBacktestPoints + 1);
+        for (var i = 0; i < ordered.Count; i += stride) thinned.Add(ordered[i]);
+        if (thinned[^1] != ordered[^1]) thinned.Add(ordered[^1]);
+
+        _logger.LogDebug(
+            "Backtest series thinned {From} → {To} points (every {Stride}th) for charting; the window is unchanged",
+            ordered.Count, thinned.Count, stride);
+        return thinned;
     }
 
     private static ModelScope ResolveScope(string? level, string? key) => level switch
@@ -499,13 +573,17 @@ public sealed class MlTrainingService : BackgroundService
     };
 
     // History for a scope: a zone reads its own series, a zone-kind unions its member zones, global reads all.
+    // Paged like training: the gateway caps a request at PageSize, so a single request over a week of dense
+    // telemetry returned only the newest slice — the chart then covered a fraction of the window it claimed to.
     private async Task<List<DbGatewayClient.TelemetrySample>> LoadScopedTelemetryAsync(
         string target, DateTime from, ModelScope scope, CancellationToken ct)
     {
         var all = new List<DbGatewayClient.TelemetrySample>();
         foreach (var zoneId in ScopeZoneFilters(scope))
         {
-            var page = await _db.GetTelemetryAsync(target, from, PageSize, ct, zoneId);
+            var page = await LoadPagedAsync(
+                (hi, token) => _db.GetTelemetryAsync(target, from, PageSize, token, zoneId, hi),
+                s => s.Timestamp, ct);
             if (page is not null) all.AddRange(page);
         }
         return all;
@@ -517,7 +595,9 @@ public sealed class MlTrainingService : BackgroundService
         var all = new List<DbGatewayClient.EventLogEntry>();
         foreach (var zoneId in ScopeZoneFilters(scope))
         {
-            var page = await _db.GetCapabilityEventsAsync(target, from, PageSize, ct, zoneId);
+            var page = await LoadPagedAsync(
+                (hi, token) => _db.GetCapabilityEventsAsync(target, from, PageSize, token, zoneId, hi),
+                e => e.Timestamp, ct);
             if (page is not null) all.AddRange(page);
         }
         return all;

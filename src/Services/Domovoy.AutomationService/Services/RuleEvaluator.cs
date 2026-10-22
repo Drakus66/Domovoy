@@ -47,7 +47,9 @@ public sealed class RuleEvaluator
         return true;
     }
 
-    private bool ConditionHolds(RuleCondition c, DateTimeOffset now, string? mode) => c.Type switch
+    /// <summary>Does a single condition hold right now? Public so <see cref="RequiredExpressionEvaluator"/>
+    /// (Epic 3E) can reuse the exact same predicate for the live "required expression" gate.</summary>
+    public bool ConditionHolds(RuleCondition c, DateTimeOffset now, string? mode) => c.Type switch
     {
         ConditionType.DeviceState => DeviceConditionHolds(c),
         ConditionType.TimeOfDay => TimeWindowHolds(c, now),

@@ -23,7 +23,7 @@ public sealed class BlockCatalog
 {
     private readonly Dictionary<string, IBlockType> _types;
 
-    public BlockCatalog(MlModelService models, SunCalculator sun, IOptions<AutomationOptions> options)
+    public BlockCatalog(MlModelService models, SunCalculator sun, TariffContext tariff, IOptions<AutomationOptions> options)
     {
         var o = options.Value;
         var types = new List<IBlockType>
@@ -67,6 +67,10 @@ public sealed class BlockCatalog
             // Epic 2Q Phase 3: control ramp + the custom expression (script) block.
             new RampType(),
             new ExpressionType(),
+
+            // Epic 3C: shift a deferrable load into the cheapest tariff hours (reads the forward price series
+            // from the injected TariffContext).
+            new CheapHoursType(tariff),
 
             // Presence → home mode as a user-owned block (replaces the hardcoded 1G PresenceMonitor):
             // household policy lives in the block layer, not in platform code.
@@ -139,11 +143,16 @@ public sealed class BlockCatalog
                 TypeId = "smart_thermostat",
                 Title = "Thermostat (from primitives)",
                 Description = "The classic thermostat rebuilt from primitives: EWMA smoothing → hysteresis relay. Bind heat to a boiler/valve.",
+                // Epic 2Q parameter passthrough: expose the two hysteresis thresholds and the smoothing time
+                // constant on the instance, so this ready-made thermostat is tunable without editing the recipe.
                 Dsl = """
                     in temperature
                     f = ewma_filter(tau=300) <- temperature
                     h = hysteresis(high=21.5, low=20.5) <- f.value
                     out heat = h.state
+                    param high = h.high default 21.5
+                    param low = h.low default 20.5
+                    param smoothing = f.tau default 300
                     """,
             },
         };

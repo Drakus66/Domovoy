@@ -53,12 +53,30 @@ internal static class Program
             builder.Services.AddSingleton<IMongoDatabase>(sp =>
                 sp.GetRequiredService<IMongoClient>().GetDatabase(mongoDbSettings.DatabaseName));
 
+            // Storage-abstraction seam (roadmap Epic 3H, Ф1 reference migration): the telemetry/event-log domain
+            // is reached only through ITelemetryStore. A second backend (PostgreSQL, Ф2) registers a sibling
+            // implementation here; HistoryEndpoints never sees MongoDB.Driver.
+            builder.Services.AddSingleton<Stores.ITelemetryStore, Stores.Mongo.MongoTelemetryStore>();
+
+            // Update settings (roadmap Epic 3K) go through the same seam — the channel this house is
+            // subscribed to is ordinary domain state, not a special case.
+            builder.Services.AddSingleton<Stores.IUpdateStore, Stores.Mongo.MongoUpdateStore>();
+
             // Telemetry data-platform options (retention; roadmap Epic 1B).
             builder.Services.Configure<Config.TelemetryOptions>(
                 builder.Configuration.GetSection(Config.TelemetryOptions.SectionName));
 
-            // Configure RabbitMQ
+            // Backup platform (roadmap Epic 3A): bundle service + daily scheduler.
+            builder.Services.Configure<Config.BackupOptions>(
+                builder.Configuration.GetSection(Config.BackupOptions.SectionName));
+            builder.Services.AddSingleton<Services.BackupService>();
+            builder.Services.AddHostedService<Services.BackupScheduler>();
+
+            // Configure RabbitMQ. Without the section binding the connection silently falls back to the
+            // user/user defaults — invisible in dev (whose .env uses exactly those), fatal on any real install.
+            builder.Services.Configure<RabbitMqConfig>(builder.Configuration.GetSection("RabbitMQ"));
             builder.Services.AddSingleton<IMessageBus, RabbitMqConnection>();
+            builder.Services.AddSystemControl("db-gateway"); // UI-issued restart (self-stop → restart policy)
 
             // Add EventInterceptor as a hosted service
             builder.Services.AddHostedService<Services.EventInterceptor>();
@@ -114,11 +132,22 @@ internal static class Program
             // Prometheus: collect per-request HTTP metrics and expose them on /metrics (port 8080).
             app.UseHttpMetrics();
 
+            // Fold the legacy Epic 3C energy role into the per-device energy profile (Epic 3C-D). Idempotent
+            // and best-effort, so it stays harmless on every later start.
+            Services.EnergyProfileMigration.RunAsync(
+                app.Services.GetRequiredService<IMongoDatabase>(),
+                app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("EnergyProfileMigration"))
+                .GetAwaiter().GetResult();
+
             // Map endpoints
             app.MapCapabilityDeviceEndpoints();
             app.MapZoneEndpoints();
             app.MapHistoryEndpoints();
+            app.MapEnergyEndpoints();
+            app.MapPowerTopologyEndpoints();
             app.MapAutomationEndpoints();
+            app.MapVariableEndpoints();
+            app.MapSceneEndpoints();
             app.MapModeEndpoints();
             app.MapBlockEndpoints();
             app.MapBlockStateEndpoints();
@@ -127,11 +156,16 @@ internal static class Program
             app.MapNarrativeEntityEndpoints();
             app.MapMlEndpoints();
             app.MapMlTaskEndpoints();
+            app.MapMlActivityEndpoints();
             app.MapProposalsEndpoints();
             app.MapRoleEndpoints();
             app.MapUserEndpoints();
+            app.MapResidentEndpoints();
+            app.MapAuthEndpoints();
             app.MapSettingsEndpoints();
             app.MapDashboardEndpoints();
+            app.MapBackupEndpoints();
+            app.MapUpdateSettingsEndpoints();
             app.MapMetrics();
 
             // Health check endpoint

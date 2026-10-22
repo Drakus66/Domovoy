@@ -17,6 +17,9 @@ public sealed class DayConsolidatorOptions
 
     /// <summary>The day is narrated only if the chosen scenes' total score reaches this — else silence.</summary>
     public double DayThreshold { get; set; } = 3.0;
+
+    /// <summary>Merge same-signature scenes of the day into one with a repeat count (kills «…×4» monotony).</summary>
+    public bool MergeRepeats { get; set; } = true;
 }
 
 /// <summary>
@@ -32,8 +35,10 @@ public static class DayConsolidator
     {
         options ??= new DayConsolidatorOptions();
 
-        var eligible = scoredScenes
-            .Where(s => s.Significance >= options.SceneFloor)
+        var aboveFloor = scoredScenes.Where(s => s.Significance >= options.SceneFloor);
+        var pool = options.MergeRepeats ? MergeRepeats(aboveFloor) : aboveFloor.ToList();
+
+        var eligible = pool
             .OrderByDescending(s => s.Significance)
             .ThenBy(s => s.StartedAt)
             .Take(options.MaxScenes)
@@ -51,5 +56,43 @@ public static class DayConsolidator
             Scenes = eligible.OrderBy(s => s.StartedAt).ToList(),
             DayScore = dayScore,
         };
+    }
+
+    /// <summary>
+    /// Collapse same-signature scenes (actor + causal root + transition set) into their earliest occurrence,
+    /// accumulating <see cref="Scene.RepeatCount"/> and keeping the group's best significance — the renderer
+    /// then narrates one sentence with an «— и так несколько раз за день» tail instead of N clones.
+    /// </summary>
+    private static List<Scene> MergeRepeats(IEnumerable<Scene> scenes)
+    {
+        var result = new List<Scene>();
+        var byKey = new Dictionary<string, Scene>(StringComparer.Ordinal);
+
+        foreach (var s in scenes.OrderBy(x => x.StartedAt))
+        {
+            var key = SignatureOf(s);
+            if (byKey.TryGetValue(key, out var rep))
+            {
+                rep.RepeatCount += Math.Max(1, s.RepeatCount);
+                if (s.EndedAt > rep.EndedAt) rep.EndedAt = s.EndedAt;
+                if (s.Significance > rep.Significance) rep.Significance = s.Significance;
+            }
+            else
+            {
+                byKey[key] = s;
+                result.Add(s);
+            }
+        }
+
+        return result;
+    }
+
+    private static string SignatureOf(Scene s)
+    {
+        var transitions = s.Beats
+            .Select(b => $"{b.ArchetypeKey}.{b.CapabilityId}.{b.Transition}")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase);
+        return $"{s.Actor}|{s.CausalRootKey}|{string.Join(",", transitions)}";
     }
 }

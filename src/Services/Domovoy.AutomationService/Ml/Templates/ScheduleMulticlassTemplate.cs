@@ -47,21 +47,22 @@ public sealed class ScheduleMulticlassTemplate : IModelTemplate
         return new TemplateResult(stream.ToArray(), inSample.LogLoss, rows.Count, macroAcc, holdoutCount);
     }
 
-    // Chronological holdout: fit on the older split, score macro accuracy on the most recent unseen split.
-    private static (double MacroAccuracy, int Count) Backtest(IReadOnlyList<MulticlassRow> rows, int minSamples)
+    // Chronological holdout: fit on the older split, score macro accuracy on the most recent unseen split. Null
+    // score = could not be evaluated (see TemplateResult.HoldoutScore) — never a placeholder number.
+    private static (double? MacroAccuracy, int Count) Backtest(IReadOnlyList<MulticlassRow> rows, int minSamples)
     {
         var ordered = rows.OrderBy(r => r.Timestamp).ToList();
         var holdout = (int)Math.Round(ordered.Count * 0.2);
         var trainCount = ordered.Count - holdout;
-        if (holdout == 0 || trainCount < minSamples) return (0, 0);
+        if (holdout == 0 || trainCount < minSamples) return (null, 0);
 
         var train = ordered.Take(trainCount).ToList();
         var test = ordered.Skip(trainCount).ToList();
         // Every holdout class must be seen in training, else the key-mapping can't score it.
         var trainClasses = train.Select(r => r.Label).ToHashSet(StringComparer.Ordinal);
-        if (train.Select(r => r.Label).Distinct(StringComparer.Ordinal).Count() < 2) return (0, 0);
+        if (train.Select(r => r.Label).Distinct(StringComparer.Ordinal).Count() < 2) return (null, 0);
         if (test.Any(r => !trainClasses.Contains(r.Label))) test = test.Where(r => trainClasses.Contains(r.Label)).ToList();
-        if (test.Count == 0) return (0, 0);
+        if (test.Count == 0) return (null, 0);
 
         var ml = new MLContext(seed: 0);
         var model = BuildPipeline(ml).Fit(ml.Data.LoadFromEnumerable(train));

@@ -2,45 +2,42 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import i18n from 'i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Container, Box, Typography, IconButton, LinearProgress, Alert, Tooltip, Stack,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CategoryRoundedIcon from '@mui/icons-material/CategoryRounded';
-import { HubConnection } from '@microsoft/signalr';
-import { capabilityDevicesApi, CapabilityDevice, isUnassignedZone } from '../api/capabilityDevices';
+import { isServiceDevice } from '../api/capabilityDevices';
 import { mlApi, ArchetypeDisagreement } from '../api/ml';
-import { zonesApi, Zone } from '../api/zones';
 import type { Dashboard } from '../api/dashboards';
-import { buildDeviceHubConnection, startDeviceHub } from '../api/deviceHub';
 import DeviceDetailDrawer from '../components/devices/DeviceDetailDrawer';
-import type { CommandFn } from '../components/devices/CapabilityControls';
 import { asBool, asNum } from '../components/devices/deviceVisuals';
-import DomovoyDigest from '../components/common/DomovoyDigest';
-import AllDevicesTab from '../components/dashboard/AllDevicesTab';
+import { useDeviceCollection } from '../components/devices/useDeviceCollection';
+import HomeStateBand from '../components/dashboard/HomeStateBand';
+import DomovoyRail from '../components/dashboard/DomovoyRail';
+import OverviewTab from '../components/dashboard/OverviewTab';
 import SphereTab from '../components/dashboard/SphereTab';
 import CustomDashboardTab from '../components/dashboard/CustomDashboardTab';
 import DashboardTabs from '../components/dashboard/DashboardTabs';
 import DashboardEditorDialog from '../components/dashboard/editor/DashboardEditorDialog';
 import { deriveSpheres, sphereCategoryFromTabId } from '../components/dashboard/spheres';
 import { useDashboardStore } from '../store/dashboardStore';
-import { useUIStore } from '../store/uiStore';
 
-const REFRESH_INTERVAL_MS = 20_000;
 
 export default function Devices() {
   const { t } = useTranslation('devices');
   const navigate = useNavigate();
   const { tabId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [devices, setDevices] = useState<CapabilityDevice[]>([]);
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Список, зоны, живое состояние и действия над устройством — общие с реестром (/devices):
+  // раньше обе страницы несли построчно одинаковые ~120 строк и ДВА разных списка одного дома.
+  const {
+    devices, zones, loading, error, setError, refresh,
+    zoneName, handleCommand, handleAssignZone, handleSetAlias, handleSetArchetype, renameDialog,
+  } = useDeviceCollection();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorTarget, setEditorTarget] = useState<Dashboard | null>(null);
@@ -48,7 +45,6 @@ export default function Devices() {
   const [classifying, setClassifying] = useState(false);
   const [classifyInfo, setClassifyInfo] = useState<string | null>(null);
   const [disagreements, setDisagreements] = useState<ArchetypeDisagreement[] | null>(null);
-  const hubRef = useRef<HubConnection | null>(null);
 
   // Deep-link from attribution chips (Epic 2G tail): /?device={id} opens the device drawer directly.
   useEffect(() => {
@@ -57,30 +53,6 @@ export default function Devices() {
     setSelectedId(focus);
     setSearchParams((p) => { p.delete('device'); return p; }, { replace: true });
   }, [searchParams, setSearchParams]);
-  // Device ids seen by the last successful fetch; null until the baseline load,
-  // so restarts don't announce the whole house as "new residents".
-  const knownIdsRef = useRef<Set<string> | null>(null);
-
-  const fetchDevices = useCallback(async () => {
-    setError(null);
-    try {
-      const list = await capabilityDevicesApi.getDevices();
-      const known = knownIdsRef.current;
-      if (known) {
-        for (const d of list) {
-          if (!known.has(d.id)) {
-            useUIStore.getState().showNotification('info', i18n.t('newResident', { name: d.name }));
-          }
-        }
-      }
-      knownIdsRef.current = new Set(list.map((d) => d.id));
-      setDevices(list);
-    } catch {
-      setError(t('errors.loadDevices'));
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
 
   const classify = useCallback(async () => {
     setClassifying(true); setClassifyInfo(null); setDisagreements(null);
@@ -99,72 +71,6 @@ export default function Devices() {
     }
   }, [t]);
 
-  const fetchZones = useCallback(async () => {
-    try {
-      setZones(await zonesApi.getZones());
-    } catch {
-      // Zones are optional grouping metadata; a failure just falls back to raw ids / Unassigned.
-    }
-  }, []);
-
-  // Initial load + periodic refresh (picks up newly discovered devices / capabilities).
-  useEffect(() => {
-    fetchDevices();
-    fetchZones();
-    const interval = setInterval(fetchDevices, REFRESH_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [fetchDevices, fetchZones]);
-
-  // Resolve a device's zone id to its display name; blank/unknown → "Unassigned".
-  const unassignedLabel = t('unassigned');
-  const zoneName = useCallback(
-    (zoneId?: string | null): string => {
-      if (isUnassignedZone(zoneId)) return unassignedLabel;
-      return zones.find((z) => z.id === zoneId)?.name ?? unassignedLabel;
-    },
-    [zones, unassignedLabel],
-  );
-
-  // Live state via SignalR (normalized capability state, keyed by device GUID).
-  useEffect(() => {
-    let cancelled = false;
-    const conn = buildDeviceHubConnection();
-
-    conn.on('DeviceStateUpdated', (deviceId: string, state: Record<string, unknown>) => {
-      setDevices((prev) =>
-        prev.map((d) =>
-          d.id === deviceId ? { ...d, state: { ...d.state, ...state }, isOnline: true } : d
-        )
-      );
-    });
-
-    conn.on('DeviceDiscovered', () => { fetchDevices(); });
-    conn.onclose(() => { if (!cancelled) startDeviceHub(conn, () => cancelled); });
-
-    startDeviceHub(conn, () => cancelled);
-    hubRef.current = conn;
-    return () => { cancelled = true; conn.stop(); };
-  }, [fetchDevices]);
-
-  const handleCommand = useCallback<CommandFn>((deviceId, set) => {
-    // Optimistic update so the control reflects intent immediately.
-    setDevices((prev) =>
-      prev.map((d) => (d.id === deviceId ? { ...d, state: { ...d.state, ...set } } : d))
-    );
-    capabilityDevicesApi.sendCommand(deviceId, set).catch(() => setError(t('errors.command')));
-  }, [t]);
-
-  const handleAssignZone = useCallback((deviceId: string, zoneId: string | null) => {
-    const normalized = zoneId ?? '';
-    setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, zoneId: normalized } : d)));
-    capabilityDevicesApi.assignZone(deviceId, zoneId).catch(() => setError(t('errors.assignZone')));
-  }, [t]);
-
-  const handleSetArchetype = useCallback((deviceId: string, archetype: string | null) => {
-    setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, archetype } : d)));
-    capabilityDevicesApi.setArchetype(deviceId, archetype).catch(() => setError(t('errors.setArchetype')));
-  }, [t]);
-
   // Custom dashboards + hidden-spheres preference (shared cache; also used by the editor).
   const {
     dashboards, hiddenSpheres, loaded: dashboardsLoaded,
@@ -172,11 +78,16 @@ export default function Devices() {
   } = useDashboardStore();
   useEffect(() => { loadDashboards(); }, [loadDashboards]);
 
-  const spheres = useMemo(() => deriveSpheres(devices, hiddenSpheres), [devices, hiddenSpheres]);
-  const allSpheres = useMemo(() => deriveSpheres(devices, []), [devices]);
+  // The home screen shows the lived-in house: service devices (System virtual sensors, block
+  // projections) are registry material (/devices) and stay off the tabs. Custom dashboards still
+  // receive the full list — anything can be pinned there, service devices included.
+  const homeDevices = useMemo(() => devices.filter((d) => !isServiceDevice(d)), [devices]);
 
-  // Active tab: "all" (bare /), "sphere:<category>" or a dashboard id (route /t/:tabId).
-  const activeTab = tabId ?? 'all';
+  const spheres = useMemo(() => deriveSpheres(homeDevices, hiddenSpheres), [homeDevices, hiddenSpheres]);
+  const allSpheres = useMemo(() => deriveSpheres(homeDevices, []), [homeDevices]);
+
+  // Active tab: "overview" (bare /), "sphere:<category>" or a dashboard id (route /t/:tabId).
+  const activeTab = tabId ?? 'overview';
   const sphereCategory = sphereCategoryFromTabId(activeTab);
   const activeSphere = sphereCategory !== null && spheres.some((s) => s.category === sphereCategory)
     ? sphereCategory
@@ -186,17 +97,17 @@ export default function Devices() {
     [dashboards, activeTab],
   );
 
-  // A deep link to a deleted dashboard / hidden or empty sphere falls back to All —
-  // but only once both devices and dashboards have actually loaded.
+  // A deep link to a deleted dashboard / hidden or empty sphere (or the retired "all" tab)
+  // falls back to Overview — but only once both devices and dashboards have actually loaded.
   useEffect(() => {
     if (loading || !dashboardsLoaded) return;
-    if (activeTab !== 'all' && !activeSphere && !activeDashboard) {
+    if (activeTab !== 'overview' && !activeSphere && !activeDashboard) {
       navigate('/', { replace: true });
     }
   }, [loading, dashboardsLoaded, activeTab, activeSphere, activeDashboard, navigate]);
 
   const selectTab = useCallback(
-    (id: string) => navigate(id === 'all' ? '/' : `/t/${id}`),
+    (id: string) => navigate(id === 'overview' ? '/' : `/t/${id}`),
     [navigate],
   );
 
@@ -205,10 +116,12 @@ export default function Devices() {
     setEditorOpen(true);
   }, []);
 
-  const onlineCount = devices.filter((d) => d.isOnline).length;
-  const lightsOn = devices.filter((d) => 'on_off' in (d.state ?? {}) && asBool(d.state.on_off)
+  // Header stats count the lived-in house only — service devices are always "online" and would
+  // just pad the numbers.
+  const onlineCount = homeDevices.filter((d) => d.isOnline).length;
+  const lightsOn = homeDevices.filter((d) => 'on_off' in (d.state ?? {}) && asBool(d.state.on_off)
     && d.capabilities.some((c) => c.id === 'brightness')).length;
-  const totalPower = devices.reduce((sum, d) => sum + ('power' in (d.state ?? {}) ? asNum(d.state.power) : 0), 0);
+  const totalPower = homeDevices.reduce((sum, d) => sum + ('power' in (d.state ?? {}) ? asNum(d.state.power) : 0), 0);
 
   const selected = useMemo(() => devices.find((d) => d.id === selectedId) ?? null, [devices, selectedId]);
 
@@ -218,7 +131,6 @@ export default function Devices() {
         <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={3} flexWrap="wrap" gap={2}>
           <Box>
             <Typography variant="h4" component="h1" fontWeight={700}>{t('title')}</Typography>
-            <DomovoyDigest />
             <Stack direction="row" spacing={1} mt={0.5} flexWrap="wrap" useFlexGap>
               <Stat label={t('stats.online')} value={`${onlineCount}/${devices.length}`} />
               {lightsOn > 0 && <Stat label={t('stats.lightsOn')} value={String(lightsOn)} />}
@@ -236,7 +148,7 @@ export default function Devices() {
             </Tooltip>
             <Tooltip title={t('actions.refresh')}>
               <span>
-                <IconButton onClick={fetchDevices} disabled={loading}><RefreshIcon /></IconButton>
+                <IconButton onClick={refresh} disabled={loading}><RefreshIcon /></IconButton>
               </span>
             </Tooltip>
           </Stack>
@@ -263,7 +175,7 @@ export default function Devices() {
           allSpheres={allSpheres}
           dashboards={dashboards}
           hiddenSpheres={hiddenSpheres}
-          activeId={activeDashboard ? activeDashboard.id : activeSphere ? `sphere:${activeSphere}` : 'all'}
+          activeId={activeDashboard ? activeDashboard.id : activeSphere ? `sphere:${activeSphere}` : 'overview'}
           onSelect={selectTab}
           onCreate={() => openEditor(null)}
           onEdit={openEditor}
@@ -277,31 +189,38 @@ export default function Devices() {
         {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
         {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
-        {activeDashboard ? (
-          <CustomDashboardTab
-            dashboard={activeDashboard}
-            devices={devices}
-            onOpen={(d) => setSelectedId(d.id)}
-            onCommand={handleCommand}
-            onEdit={() => openEditor(activeDashboard)}
-          />
-        ) : activeSphere ? (
-          <SphereTab
-            category={activeSphere}
-            devices={devices}
-            zoneName={zoneName}
-            onOpen={(d) => setSelectedId(d.id)}
-            onCommand={handleCommand}
-          />
-        ) : (
-          <AllDevicesTab
-            devices={devices}
-            zoneName={zoneName}
-            loading={loading}
-            onOpen={(d) => setSelectedId(d.id)}
-            onCommand={handleCommand}
-          />
-        )}
+        <HomeStateBand devices={devices} />
+
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3, alignItems: 'flex-start' }}>
+          <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
+            {activeDashboard ? (
+              <CustomDashboardTab
+                dashboard={activeDashboard}
+                devices={devices}
+                onOpen={(d) => setSelectedId(d.id)}
+                onCommand={handleCommand}
+                onEdit={() => openEditor(activeDashboard)}
+              />
+            ) : activeSphere ? (
+              <SphereTab
+                category={activeSphere}
+                devices={homeDevices}
+                zoneName={zoneName}
+                onOpen={(d) => setSelectedId(d.id)}
+                onCommand={handleCommand}
+              />
+            ) : (
+              <OverviewTab
+                devices={homeDevices}
+                zoneName={zoneName}
+                loading={loading}
+                onOpen={(d) => setSelectedId(d.id)}
+                onCommand={handleCommand}
+              />
+            )}
+          </Box>
+          <DomovoyRail devices={devices} />
+        </Box>
       </Box>
 
       <DashboardEditorDialog
@@ -310,7 +229,7 @@ export default function Devices() {
         devices={devices}
         onClose={() => setEditorOpen(false)}
         onSaved={(d) => selectTab(d.id)}
-        onDeleted={(id) => { if (activeTab === id) selectTab('all'); }}
+        onDeleted={(id) => { if (activeTab === id) selectTab('overview'); }}
       />
 
       <DeviceDetailDrawer
@@ -321,7 +240,10 @@ export default function Devices() {
         onCommand={handleCommand}
         onAssignZone={handleAssignZone}
         onSetArchetype={handleSetArchetype}
+        onSetAlias={handleSetAlias}
       />
+
+      {renameDialog}
     </Container>
   );
 }
