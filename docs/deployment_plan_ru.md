@@ -116,17 +116,17 @@
 
 Текущий `docker-compose.yml` — dev-ориентированный; перед боем нужны правки (влить в репозиторий):
 
-1. **MongoDB:** пин `image: mongo:7` (сейчас `mongo:latest`; драйвер 2.23.1 поддерживает сервер до 7.0) +
-   `--wiredTigerCacheSizeGB 1` + `mem_limit`.
+1. **MongoDB:** ✅ пин `mongo:8.0` (2026-10-22, топология v4; `latest` уехал на 9.0, драйвер 3.9 проверен с
+   8.0). Осталось: `--wiredTigerCacheSizeGB 1` + `mem_limit`.
 2. ✅ **RabbitMQ (сделано 2026-10-22, топология v4):** `bitnami/rabbitmq:latest` → официальный
    `rabbitmq:4.2-management`, плагины (`management`, `mqtt`, `prometheus`) — inline-config в compose, том
    `rabbitmq4_data` на `/var/lib/rabbitmq`, `hostname: rabbitmq` (имя узла = каталог данных). Порт 15675
    (web-mqtt) снят — не использовался. Причина не только в замороженном каталоге: bitnami по умолчанию
    ставил `loopback_users.<user> = true`, и на чистой установке шину не видел ни один сервис. Старый том
    `rabbitmq_data` после перехода удалить вручную.
-3. **Наблюдаемость → opt-in.** `prometheus` + `mongodb-exporter` вынести в compose-профиль **`monitoring`**
-   (по умолчанию выключен — Grafana/алертов нет, собранное сейчас никто не смотрит). `/metrics`-эндпоинты в
-   сервисах остаются; доустановка = `docker compose --profile monitoring up`.
+3. ✅ **Наблюдаемость → opt-in (2026-10-22, топология v4).** `prometheus` + `mongodb-exporter` в compose-профиле
+   **`monitoring`** (по умолчанию выключен — Grafana/алертов нет). `/metrics`-эндпоинты в сервисах остаются;
+   включение = `COMPOSE_PROFILES=monitoring` в `.env`.
 4. **Zigbee-стик:** заменить `privileged: true` у `zigbee2mqtt` на узкий проброс
    `devices: ["/dev/serial/by-id/...:/dev/ttyACM0"]` + `serial.port` в конфиге z2m.
 5. **Секреты** — вынести в `.env` (Mongo/RabbitMQ логины-пароли, ключи провайдеров), не хранить в compose.

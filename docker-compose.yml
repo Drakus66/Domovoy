@@ -346,7 +346,10 @@ services:
 
   mongodb:
     container_name: mongodb
-    image: mongo:latest
+    # Pinned (topology v4): `latest` moved to MongoDB 9.0, a major the driver was never tested against, and
+    # a data directory written by a newer major cannot be opened by an older one — so a floating tag is a
+    # one-way door. Moving the pin is a deliberate topology change.
+    image: mongo:8.0
     networks:
       - domovoy-network
     ports:
@@ -363,9 +366,11 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  # Opt-in with prometheus below: COMPOSE_PROFILES=monitoring in .env (or --profile monitoring).
   mongodb-exporter:
     image: percona/mongodb_exporter:0.40.0
     container_name: mongodb-exporter
+    profiles: ["monitoring"]
     networks:
       - domovoy-network
     ports:
@@ -411,10 +416,13 @@ services:
     restart: unless-stopped
 
   # ============ Monitoring (Prometheus-only) ============
+  # Opt-in (topology v4): nothing reads these metrics yet — no Grafana, no alerts — so on a small host they
+  # are pure cost. The /metrics endpoints in the services stay. Enable: COMPOSE_PROFILES=monitoring in .env.
 
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
+    profiles: ["monitoring"]
     networks:
       - domovoy-network
     ports:
