@@ -28,8 +28,13 @@ public class UpdateSettings
     [BsonId]
     public string Id { get; set; } = SingletonId;
 
-    /// <summary>Subscribed channel. Defaults to stable — a fresh install should not track development.</summary>
-    public string Channel { get; set; } = ChannelRelease;
+    /// <summary>
+    /// Channel the owner chose on <c>/settings</c>, or null when they never did. Null is meaningful: the
+    /// updater then follows <c>DOMOVOY_CHANNEL</c> from the install's <c>.env</c> — the channel its images were
+    /// actually pulled from — and only falls back to stable without it. A hard "release" default here made
+    /// that fallback dead: a house installed from <c>dev</c> polled <c>release</c> and silently saw no updates.
+    /// </summary>
+    public string? Channel { get; set; }
 
     /// <summary>Whether the delivery service polls the registry at all. Off = fully manual.</summary>
     public bool CheckEnabled { get; set; } = true;

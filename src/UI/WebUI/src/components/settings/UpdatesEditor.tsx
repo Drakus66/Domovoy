@@ -63,7 +63,9 @@ export default function UpdatesEditor() {
   }, []);
 
   useEffect(() => {
-    updatesApi.getSettings().then((s) => { setSettings(s); setChannel(s.channel); }).catch(() => setSettings(null));
+    // Канал не выбран (null) — действующий придёт вместе с компонентами от службы обновлений.
+    updatesApi.getSettings().then((s) => { setSettings(s); if (s.channel) setChannel(s.channel); })
+      .catch(() => setSettings(null));
     loadComponents();
     loadStatus();
     updatesApi.history().then(setHistory).catch(() => setHistory([]));

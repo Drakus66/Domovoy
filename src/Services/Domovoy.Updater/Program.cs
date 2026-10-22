@@ -33,6 +33,10 @@ internal static class Program
         if (selfReplaceIndex >= 0 && selfReplaceIndex + 1 < args.Length)
             return await SelfReplaceAgent.RunAsync(args[selfReplaceIndex + 1], options, CancellationToken.None);
 
+        // Режим первичной установки: разложить пустой каталог из бандла канала и поднять стек.
+        if (args.Contains(InstallAgent.Switch))
+            return await InstallAgent.RunAsync(args, options, CancellationToken.None);
+
         SerilogBootstrap.Initialize("Updater");
 
         try

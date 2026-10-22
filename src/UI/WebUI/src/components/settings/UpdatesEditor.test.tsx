@@ -67,6 +67,17 @@ describe('UpdatesEditor', () => {
     expect(screen.getByText(/актуально/i)).toBeInTheDocument();
   });
 
+  it('shows the effective channel when the owner never picked one', async () => {
+    // Канал в настройках не выбран — дом следует DOMOVOY_CHANNEL из .env, и это должно быть видно,
+    // а не подменяться «Стабильным» по умолчанию.
+    mocked.getSettings.mockResolvedValue({ ...settings, channel: null });
+    mocked.components.mockResolvedValue({ channel: 'dev', components });
+
+    render(<UpdatesEditor />);
+
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Разработка' })).toBeChecked());
+  });
+
   it('shows the pulled-in components and the reason before anything is applied', async () => {
     // Главная ценность диалога: «вместе с этим обновится вот это, потому что…» — до нажатия.
     mocked.plan.mockResolvedValue({

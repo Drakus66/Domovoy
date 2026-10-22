@@ -454,7 +454,7 @@ public sealed class UpdateExecutor
             "Запущен агент самообновления — этот контейнер сейчас будет заменён на {Version}", versionLabel);
     }
 
-    private static int ParseMajor(string version) =>
+    internal static int ParseMajor(string version) =>
         int.TryParse(version.Split('.', '-')[0], out var v) ? v : 1;
 
     private UpdateRunState Step(UpdateRunState run, string name, string status, string? detail = null)

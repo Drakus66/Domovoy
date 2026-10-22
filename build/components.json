@@ -72,7 +72,7 @@
       "runtime": "dotnet",
       "version": "1.2",
       "bus": { "speaks": 3, "understands": 3 },
-      "provides": { "db-api": { "version": 4, "minCompat": 1 } },
+      "provides": { "db-api": { "version": 5, "minCompat": 1 } },
       "requires": {},
       "paths": ["src/Gateway/Domovoy.DbGateway/**"]
     },

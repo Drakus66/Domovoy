@@ -13,8 +13,11 @@ import apiClient from './client';
 /** Which channel this house is subscribed to, and how it polls. */
 export interface UpdateSettings {
   id: string;
-  /** `release` — stable builds from master; `dev` — fresh builds from develop. */
-  channel: 'release' | 'dev';
+  /**
+   * `release` — stable builds from master; `dev` — fresh builds from develop. Null until the owner picks one:
+   * the house then follows DOMOVOY_CHANNEL from its .env, and the effective channel comes with the components.
+   */
+  channel: 'release' | 'dev' | null;
   checkEnabled: boolean;
   checkIntervalHours: number;
   /** Take a backup before applying. On by default. */

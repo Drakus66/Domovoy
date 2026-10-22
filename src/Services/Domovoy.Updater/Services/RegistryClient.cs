@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 Ilya Dryagin
 // This file is part of Domovoy, licensed under AGPL-3.0-or-later. See LICENSE.
 
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -52,7 +53,11 @@ public sealed class RegistryClient
 
     private readonly HttpClient _http;
     private readonly ILogger<RegistryClient> _logger;
-    private readonly Dictionary<string, (string Token, DateTimeOffset Expires)> _tokens = new();
+    // Каталог опрашивает компоненты параллельно, поэтому оба кэша — потокобезопасные.
+    private readonly ConcurrentDictionary<string, (string Token, DateTimeOffset Expires)> _tokens = new();
+
+    /// <summary>Labels by <c>repository@digest</c>. Static: the typed client is created per consumer.</summary>
+    private static readonly ConcurrentDictionary<string, IReadOnlyDictionary<string, string>> LabelsByDigest = new();
 
     public RegistryClient(HttpClient http, ILogger<RegistryClient> logger)
     {
@@ -126,10 +131,30 @@ public sealed class RegistryClient
     }
 
     /// <summary>
-    /// Image config labels for a manifest reference. Walks an index to the linux/amd64 manifest when
-    /// needed, then fetches the config blob — the small object the labels actually live in.
+    /// Image config labels for a manifest reference. A digest addresses immutable content, so the answer is
+    /// cached for the life of the process: without it every check, plan and apply re-walked index → manifest →
+    /// config blob for every offered version (~170 sequential requests, ~30 s per plan dialog).
     /// </summary>
     public async Task<IReadOnlyDictionary<string, string>> GetLabelsAsync(
+        string repository, string reference, CancellationToken ct)
+    {
+        var immutable = reference.StartsWith("sha256:", StringComparison.Ordinal);
+        var key = $"{repository}@{reference}";
+
+        if (immutable && LabelsByDigest.TryGetValue(key, out var cached)) return cached;
+
+        var labels = await FetchLabelsAsync(repository, reference, ct);
+
+        // Пустой ответ может быть сетевым сбоем, а не «меток нет» — его не запоминаем.
+        if (immutable && labels.Count > 0) LabelsByDigest[key] = labels;
+        return labels;
+    }
+
+    /// <summary>
+    /// Walks an index to the linux/amd64 manifest when needed, then fetches the config blob — the small
+    /// object the labels actually live in.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, string>> FetchLabelsAsync(
         string repository, string reference, CancellationToken ct)
     {
         var manifest = await GetJsonAsync(repository, $"manifests/{reference}", ct);
@@ -241,12 +266,17 @@ public sealed class RegistryClient
             return result;
         }
 
-        foreach (var tag in tags.Take(maxVersions))
+        // Теги независимы — опрашиваем разом; WhenAll сохраняет порядок «новые первыми».
+        var probed = await Task.WhenAll(tags.Take(maxVersions).Select(tag => ProbeAsync(tag)));
+        result.AddRange(probed.OfType<AvailableComponent>());
+        return result;
+
+        async Task<AvailableComponent?> ProbeAsync(string tag)
         {
             try
             {
                 var digest = await GetDigestAsync(repository, tag, ct);
-                if (digest is null) continue;
+                if (digest is null) return null;
 
                 var labels = await GetLabelsAsync(repository, digest, ct);
                 var deps = ComponentDeps.TryParse(labels.GetValueOrDefault("ru.domovoy.deps"));
@@ -255,24 +285,23 @@ public sealed class RegistryClient
                     // Образ без объявленной совместимости решателю бесполезен: предлагать его —
                     // значит обновлять вслепую. Пропускаем молча, это не ошибка установки.
                     _logger.LogDebug("У '{Repository}:{Tag}' нет метки ru.domovoy.deps — пропущен", repository, tag);
-                    continue;
+                    return null;
                 }
 
-                result.Add(new AvailableComponent(
+                return new AvailableComponent(
                     Name: component,
                     Repository: repository,
                     Tag: tag,
                     Digest: digest,
                     Version: deps.Version is { Length: > 0 } v ? v : tag,
-                    Deps: deps));
+                    Deps: deps);
             }
             catch (Exception ex)
             {
                 _logger.LogDebug(ex, "Пропущен тег '{Repository}:{Tag}'", repository, tag);
+                return null;
             }
         }
-
-        return result;
     }
 
     private async Task<JsonDocument?> GetJsonAsync(string repository, string path, CancellationToken ct)

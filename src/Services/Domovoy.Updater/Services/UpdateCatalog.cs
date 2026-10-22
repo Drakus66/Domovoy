@@ -162,11 +162,14 @@ public sealed class UpdateCatalog
             .Append(ReleaseSource.TopologyComponent)
             .ToList();
 
-        foreach (var component in names)
-        {
-            var versions = await _registry.ListAvailableAsync(
-                component, channel, _options.MaxVersionsPerComponent, ct);
+        // Компоненты независимы — опрашиваем реестр параллельно, а не восемь раз подряд.
+        var listed = await Task.WhenAll(names.Select(async component => (
+            Component: component,
+            Versions: await _registry.ListAvailableAsync(
+                component, channel, _options.MaxVersionsPerComponent, ct))));
 
+        foreach (var (component, versions) in listed)
+        {
             if (versions.Count > 0)
             {
                 available[component] = versions;
