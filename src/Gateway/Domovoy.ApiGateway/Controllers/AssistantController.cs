@@ -18,6 +18,8 @@ public class AssistantController : ProxyController
 {
     public AssistantController(IHttpClientFactory httpClientFactory) : base(httpClientFactory) { }
 
+    protected override string UpstreamClient => "automation-service";
+
     [HttpGet("status")]
     public Task<IActionResult> Status(CancellationToken ct)
         => Forward("api/assistant/status", ct);

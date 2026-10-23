@@ -22,6 +22,8 @@ public class PluginsController : ProxyController
 {
     public PluginsController(IHttpClientFactory httpClientFactory) : base(httpClientFactory) { }
 
+    protected override string UpstreamClient => "plugin-supervisor";
+
     [HttpGet]
     public Task<IActionResult> List(CancellationToken ct)
         => Forward("api/plugins", ct);
@@ -50,7 +52,7 @@ public class PluginsController : ProxyController
         if (package is null || package.Length == 0)
             return BadRequest(new { result = "no file field 'package' in the upload" });
 
-        var client = HttpClientFactory.CreateClient("plugin-supervisor");
+        var client = HttpClientFactory.CreateClient(UpstreamClient);
         await using var stream = package.OpenReadStream();
         using var request = new HttpRequestMessage(HttpMethod.Post, "api/plugins/install")
         {
