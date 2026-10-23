@@ -124,9 +124,9 @@
    (web-mqtt) снят — не использовался. Причина не только в замороженном каталоге: bitnami по умолчанию
    ставил `loopback_users.<user> = true`, и на чистой установке шину не видел ни один сервис. Старый том
    `rabbitmq_data` после перехода удалить вручную.
-3. ✅ **Наблюдаемость → opt-in (2026-10-22, топология v4).** `prometheus` + `mongodb-exporter` в compose-профиле
-   **`monitoring`** (по умолчанию выключен — Grafana/алертов нет). `/metrics`-эндпоинты в сервисах остаются;
-   включение = `COMPOSE_PROFILES=monitoring` в `.env`.
+3. **Наблюдаемость — в ядре.** В топологии v4 (2026-10-22) `prometheus` + `mongodb-exporter` вынесли в профиль
+   `monitoring`, в v5 (2026-10-23) вернули: страница «Состояние» и индикатор живости служб читают Prometheus
+   через `/api/metrics/*`, без него они пустые.
 4. **Zigbee-стик:** заменить `privileged: true` у `zigbee2mqtt` на узкий проброс
    `devices: ["/dev/serial/by-id/...:/dev/ttyACM0"]` + `serial.port` в конфиге z2m.
 5. **Секреты** — вынести в `.env` (Mongo/RabbitMQ логины-пароли, ключи провайдеров), не хранить в compose.

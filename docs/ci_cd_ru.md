@@ -301,8 +301,8 @@ git log --grep='^Compat: none'
 2. **В стеке появился `domovoy-updater`.** В `docker-compose.override.yml` ему выключена проверка
    обновлений: никто не хочет получать «доступна новая версия», пока сам эти версии и делает.
 3. **Версия локального образа — `0.0.0`** вместо прежнего `1.0.0`.
-4. **Мониторинг — по профилю** (топология v4): `prometheus` и `mongodb-exporter` поднимаются только с
-   `COMPOSE_PROFILES=monitoring` в `.env` или `docker compose --profile monitoring up -d`.
+4. **Мониторинг — снова в ядре** (топология v5): в v4 `prometheus` и `mongodb-exporter` уходили в профиль
+   `monitoring`, но от них зависит страница «Состояние»; теперь они поднимаются всегда.
 
 ---
 

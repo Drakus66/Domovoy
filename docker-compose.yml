@@ -366,11 +366,10 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  # Opt-in with prometheus below: COMPOSE_PROFILES=monitoring in .env (or --profile monitoring).
+  # Feeds the MongoDB tile on the system-status page (job `mongodb-exporter` in prometheus.yaml).
   mongodb-exporter:
     image: percona/mongodb_exporter:0.40.0
     container_name: mongodb-exporter
-    profiles: ["monitoring"]
     networks:
       - domovoy-network
     ports:
@@ -416,13 +415,12 @@ services:
     restart: unless-stopped
 
   # ============ Monitoring (Prometheus-only) ============
-  # Opt-in (topology v4): nothing reads these metrics yet — no Grafana, no alerts — so on a small host they
-  # are pure cost. The /metrics endpoints in the services stay. Enable: COMPOSE_PROFILES=monitoring in .env.
+  # Core, not opt-in (topology v5): ApiGateway's /api/metrics/* — the system-status page and the service
+  # liveness indicator — query Prometheus directly. v4 had moved it behind a profile and left the page dark.
 
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
-    profiles: ["monitoring"]
     networks:
       - domovoy-network
     ports:

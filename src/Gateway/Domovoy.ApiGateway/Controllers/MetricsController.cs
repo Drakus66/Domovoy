@@ -39,8 +39,10 @@ public class MetricsController : ControllerBase
 
             return Ok(services);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ex is HttpRequestException
+                                   || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
         {
+            // An absent host times out rather than refusing, so the client timeout is "unreachable" too.
             _logger.LogWarning(ex, "Failed to reach Prometheus");
             return StatusCode(503, new { error = "Prometheus unreachable" });
         }
@@ -91,8 +93,10 @@ public class MetricsController : ControllerBase
                 collectedAt    = DateTime.UtcNow,
             });
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ex is HttpRequestException
+                                   || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
         {
+            // An absent host times out rather than refusing, so the client timeout is "unreachable" too.
             _logger.LogWarning(ex, "Failed to reach Prometheus");
             return StatusCode(503, new { error = "Prometheus unreachable" });
         }

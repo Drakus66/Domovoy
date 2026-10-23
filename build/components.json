@@ -46,7 +46,7 @@
   "topology": {
     "image": "topology",
     "_comment": "Держать в согласии с build/topology/manifest.json — там же и обоснование версии.",
-    "version": 4,
+    "version": 5,
     "minCompat": 1,
     "_pathsComment": [
       "Инструменты сборки бандла входят сюда наравне с его содержимым: они определяют не только",
